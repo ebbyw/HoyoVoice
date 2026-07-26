@@ -406,6 +406,12 @@ class Speech:
         self.t_play = None
 
     def synth(self, text, voice, base_speed=1.0):
+        # spoken-form substitutions (settings.pronunciations) — logs and
+        # dedupe keep the real spelling; only the TTS hears these
+        for word, spoken in VOICES.get("settings", {}).get(
+                "pronunciations", {}).items():
+            text = re.sub(rf"\b{re.escape(word)}\b", spoken, text,
+                          flags=re.IGNORECASE)
         speed = round(base_speed * self.sentiment_speed(text), 3)
         t0 = time.time()
         segs = [self.np.array(r.audio) for r in
