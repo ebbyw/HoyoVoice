@@ -90,6 +90,12 @@ VAD_WEAK_THRESHOLD = 0.25
 VAD_WEAK_HITS = 8             # ~256ms of moderately speech-like audio
 
 vad_history = deque(maxlen=400)
+# per-block stereo energy: (t, mid_dB, side_dB). Game VO is center-panned
+# (mid), music/ambience is wide (side) — a mid-only burst at line start is
+# voiceover even when the VAD can't recognize the voice as speech.
+energy_history = deque(maxlen=400)
+ENERGY_MID_BURST = 7.0        # dB over pre-line baseline
+ENERGY_MID_OVER_SIDE = 4.0    # mid must rise this much more than side
 
 # --- shared state for the dashboard ---
 events = deque(maxlen=200)
@@ -200,7 +206,14 @@ def audio_thread():
         buf = fh.read(BLOCK)
         pos += len(buf)
         stereo = np.frombuffer(buf, dtype=np.int16).astype(np.float32)
-        mono48 = stereo.reshape(-1, 2).mean(axis=1)
+        lr = stereo.reshape(-1, 2)
+        mono48 = lr.mean(axis=1)
+        mid_rms = float(np.sqrt(np.mean(mono48 ** 2))) + 1e-3
+        side = (lr[:, 0] - lr[:, 1]) / 2
+        side_rms = float(np.sqrt(np.mean(side ** 2))) + 1e-3
+        energy_history.append((time.monotonic(),
+                               20 * np.log10(mid_rms),
+                               20 * np.log10(side_rms)))
         chunk = mono48.reshape(-1, 3).mean(axis=1) / 32768.0   # → 16k
         p = vad.prob(chunk.astype(np.float32))
         if warmup > 0:
@@ -245,6 +258,26 @@ def fix_ocr_text(s):
     for wrong, right in VOICES.get("settings", {}).get("text_fixes", {}).items():
         s = re.sub(rf"\b{re.escape(wrong)}\b", right, s, flags=re.IGNORECASE)
     return s
+
+
+def center_burst(t_line):
+    """(mid_delta_dB, side_delta_dB): energy rise after the line appeared vs
+    the pre-line baseline. VO shows as mid rising with side staying flat."""
+    base_m = [m for t, m, s in energy_history if t_line - 9 <= t < t_line - 1.5]
+    base_s = [s for t, m, s in energy_history if t_line - 9 <= t < t_line - 1.5]
+    cur = [(m, s) for t, m, s in energy_history if t >= t_line - 1.2]
+    if len(base_m) < 30 or len(cur) < 8:
+        return 0.0, 0.0
+    base_m.sort()
+    base_s.sort()
+    bm, bs = base_m[len(base_m) // 2], base_s[len(base_s) // 2]
+    mids = [m for m, s in cur]
+    sides = [s for m, s in cur]
+
+    def smooth_max(xs):
+        return max(sum(xs[i:i + 5]) / 5 for i in range(max(1, len(xs) - 4)))
+
+    return smooth_max(mids) - bm, smooth_max(sides) - bs
 
 
 def normalize_text(s):
@@ -896,6 +929,14 @@ def main():
                         voiced = True
                         break
                     time.sleep(0.1)
+            # center-energy layer: catches VO the VAD can't recognize as
+            # speech (vocoder/robot voices) — mid-channel burst, flat side
+            mid_up, side_up = center_burst(t_stable)
+            if (not voiced and mid_up >= ENERGY_MID_BURST
+                    and mid_up - side_up >= ENERGY_MID_OVER_SIDE):
+                voiced = True
+                print(f"[voiced — center energy] mid+{mid_up:.1f}dB "
+                      f"side+{side_up:.1f}dB", flush=True)
             synth_thread.join()
             if ext_base and not voiced:
                 # the remainder continues a line we're still speaking —
@@ -908,7 +949,8 @@ def main():
                 stats["skipped_voiced"] += 1
                 add_event("skipped (voiced)", "skip", state["speaker"],
                           state["dialogue"], shot=True)
-                print(f"[voiced — skipping] {state['dialogue'][:60]}", flush=True)
+                print(f"[voiced — skipping mid+{mid_up:.1f} side+{side_up:.1f}] "
+                      f"{state['dialogue'][:60]}", flush=True)
                 continue
 
             speech.play(spec.get("segs"))
@@ -920,7 +962,8 @@ def main():
             gate_max = max((p for t, p in vad_history
                             if t >= t_stable - VAD_LOOKBACK), default=-1.0)
             print(f"[{state['speaker'] or 'Narrator'} → {voice} ×{speed} "
-                  f"gate={gate_max:.2f}] {speak_text}", flush=True)
+                  f"gate={gate_max:.2f} mid+{mid_up:.1f} side+{side_up:.1f}] "
+                  f"{speak_text}", flush=True)
     finally:
         speech.stop()
         for p in (ffmpeg, sox, ocrd):
