@@ -1,0 +1,51 @@
+# Changelog
+
+All notable changes to HoyoVoice are documented here.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
+Add entries under **Unreleased** as you work; move them into a dated version section when you tag a release.
+
+## [Unreleased]
+
+## [0.2.0] - 2026-07-25
+
+### Added
+- Web dashboard at http://127.0.0.1:8470 — live log (voice used, per-event 📷 screenshot previews, replay, Hide/Clear), casting table (assign with instant re-read, mute checkboxes, delete), pause/resume, test-speech box
+- Live video preview with paused placeholder; video/audio **device pickers** with hot-swap, persisted in settings
+- In-app **recording**: game video + game audio + TTS clips muxed at exact wall-clock offsets (+8dB TTS boost, yield-trimmed clips), crash-safe MKV raw, configurable save folder
+- Performance analytics: VAD health, OCR/synth timings, spoken/skipped/yielded counts, lines per minute
+- Sentiment-aware delivery: line sentiment nudges speech pace (excited faster, somber slower)
+- New screen types: Quick Read books (incremental scroll reading), info screens (Participant Details), loading-screen lore, floating host bubbles (`settings.overlay_speaker`), system screens silenced
+- Menu/board rejection: dialogue must be centered; unknown speakers and narration require the ✕ Continue hint
+- Speaker hygiene: quoted names are distinct characters, org/location names route to narrator, sentence fragments can never register
+- App starts paused; resume from the dashboard
+
+### Changed
+- Dedupe is a sliding 3-message window (fuzzy-matched) instead of permanent — replayed quests re-voice
+- Latency reduced to ~0.5–0.7s (6 fps sampling, speculative synthesis during the VAD gate, 0.2s wait)
+- Capture devices selected by name, not index
+
+### Fixed
+- Recording audio ran ~12% fast with crackling: ffmpeg's AVFoundation audio input silently drops ~12% of capture-device samples. Audio moved to sox/CoreAudio (bit-perfect); ffmpeg is video-only; recordings slice the continuous sox stream — no resampling anywhere
+- Two-tier VAD gate catches short/soft VO that never crosses the strong threshold; VAD pipeline made non-blocking and lag-free
+- OCR "l"/"I" confusion repaired before synthesis
+- Capture auto-recovers from device resolution changes, unplug/replug, and OCR daemon crashes
+
+## [0.1.0] - 2026-07-25
+
+### Added
+- Live capture pipeline: PS5 → Genki ShadowCast 3 → ffmpeg (4 fps frame sampling + 16 kHz audio tap)
+- On-device OCR via Apple Vision (`tools/ocrd` daemon, compiled Swift)
+- Dialogue classification for Honkai: Star Rail standard layout (speaker / dialogue / choices)
+- Full-screen black narration layout detection
+- Kokoro-82M local TTS via mlx-audio with per-character voice registry (`voices.json`)
+- Voiced-line gate: Silero VAD (onnx, no torch) skips lines the game already voices
+- Late-VO yield: our playback cuts instantly if game VO starts mid-line
+- `always_voiced` registry list for characters whose VO evades speech detection
+- Fuzzy line dedupe (normalized text + similarity match) persisted across restarts
+- Startup audio warmup to ignore capture-stream transients
+- `hoyovoice.sh` control script (start / stop / status / log / restart)
+
+### Known issues
+- `af_nicole` voice is broken in the prince-canuma/Kokoro-82M package
+- Genshin Impact layout profile not yet implemented
+- Choice options are detected but not spoken

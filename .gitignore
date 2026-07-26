@@ -1,0 +1,20 @@
+# personal casting/config (created from voices.example.json)
+voices.json
+
+# environments & caches
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# runtime artifacts (frames, audio, session state, logs)
+captures/
+tts_out/
+recordings/
+*.log
+unknown_speakers.log
+nohup.out
+
+# built by setup.sh
+tools/ocrd
+tools/silero_vad.onnx

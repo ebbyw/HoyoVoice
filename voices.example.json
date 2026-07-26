@@ -1,0 +1,18 @@
+{
+  "characters": {},
+  "always_voiced": [],
+  "settings": {
+    "recordings_dir": "~/Videos",
+    "overlay_speaker": null,
+    "video_device": "ShadowCast 3",
+    "audio_device": "ShadowCast 3"
+  },
+  "defaults": {
+    "female": "af_nova",
+    "male": "am_michael",
+    "narrator": "bm_george"
+  },
+  "notes": {
+    "af_nicole": "broken in prince-canuma/Kokoro-82M package — do not use"
+  }
+}
