@@ -4,10 +4,24 @@ Log (with voice used + screenshot hover-previews), casting with instant
 re-read and per-character mute, pause/resume, test speech, analytics.
 """
 import logging
+import re
+import subprocess
 import threading
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
+
+
+def _tailscale_ip():
+    """Mac's Tailscale address (CGNAT 100.64/10), if the tailnet is up."""
+    try:
+        out = subprocess.run(["ifconfig"], capture_output=True, text=True,
+                             timeout=3).stdout
+        m = re.search(
+            r"inet (100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+)", out)
+        return m.group(1) if m else None
+    except Exception:
+        return None
 
 VOICE_CATALOG = [
     "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore",
@@ -295,8 +309,15 @@ def start_webui(shared, port=8470):
         shared["commands"].put(("observe", bool(request.get_json().get("on"))))
         return jsonify(ok=True)
 
-    threading.Thread(
-        target=lambda: app.run(host="127.0.0.1", port=port, debug=False,
-                               use_reloader=False),
-        daemon=True).start()
+    def serve(host):
+        threading.Thread(
+            target=lambda: app.run(host=host, port=port, debug=False,
+                                   use_reloader=False),
+            daemon=True).start()
+
+    serve("127.0.0.1")
+    ts = _tailscale_ip()
+    if ts:
+        serve(ts)          # tailnet devices only — never the plain LAN
+        print(f"dashboard (tailscale): http://{ts}:{port}", flush=True)
     return port
