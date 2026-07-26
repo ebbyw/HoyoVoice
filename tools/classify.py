@@ -194,6 +194,14 @@ def classify_infoscreen(blocks):
     return [b["text"] for b in body]
 
 
+def narration_self_certain(text):
+    """Bright cutscene narration (no black bg, no Continue hint) can still
+    self-certify: a real prose sentence, no menu-banner symbols."""
+    return (len(text.split()) >= 8
+            and text.rstrip().endswith((".", "!", "?", "…"))
+            and not any(c in text for c in "©•®™|"))
+
+
 def classify_narration(blocks):
     """Detect the full-screen narration layout: confident text only in the
     center band of an otherwise empty (black) screen. Returns joined text

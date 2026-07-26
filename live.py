@@ -20,7 +20,8 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "tools"))
 from classify import (classify, classify_infoscreen, classify_loading,  # noqa: E402
                       classify_narration, classify_overlay,
-                      classify_quickread, has_continue_hint)
+                      classify_quickread, has_continue_hint,
+                      narration_self_certain)
 from vad import CHUNK, SileroVAD  # noqa: E402
 from webui import start_webui  # noqa: E402
 
@@ -802,7 +803,8 @@ def main():
                                  "overlay_speaker"),
                              "dialogue": overlay, "choices": []}
                 elif narration and (has_continue_hint(blocks)
-                                    or frame_is_dark()):
+                                    or frame_is_dark()
+                                    or narration_self_certain(narration)):
                     # narration requires the Continue hint — menu banners
                     # and event-hub screens must not be narrated
                     state = {"speaker": None, "dialogue": narration, "choices": []}
@@ -934,12 +936,17 @@ def main():
             # center-energy layer: catches VO the VAD can't recognize as
             # speech (vocoder/robot voices) — mid-channel burst, flat side
             mid_up, side_up = center_burst(t_stable)
+            # center SFX (explosions, magic flashes) are mid-panned like VO —
+            # demand at least faint speechiness so booms don't count
+            vad_peak = max((p for t, p in vad_history if t >= t_stable - 1.2),
+                           default=0.0)
             if (not voiced and mid_up >= ENERGY_MID_BURST
                     and side_up <= ENERGY_SIDE_FLAT
-                    and mid_up - side_up >= ENERGY_MID_OVER_SIDE):
+                    and mid_up - side_up >= ENERGY_MID_OVER_SIDE
+                    and vad_peak >= 0.15):
                 voiced = True
                 print(f"[voiced — center energy] mid+{mid_up:.1f}dB "
-                      f"side+{side_up:.1f}dB", flush=True)
+                      f"side+{side_up:.1f}dB peak={vad_peak:.2f}", flush=True)
             synth_thread.join()
             if ext_base and not voiced:
                 # the remainder continues a line we're still speaking —
