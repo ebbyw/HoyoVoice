@@ -81,7 +81,9 @@ SHORT_LINE = 15               # short lines (normalized chars) may echo across s
 VAD_THRESHOLD = 0.5
 VAD_LOOKBACK = 2.0
 VAD_WAIT = 0.2                # late VO beyond this is caught by the mid-play yield
-VAD_MIN_HITS = 3
+VAD_MIN_HITS = 2
+VAD_PEAK = 0.85               # a single decisive spike counts (robot voices
+                              # register as brief spikes over a low floor)
 # short/soft VO ("Which king?") peaks ~0.3 and never crosses 0.5 —
 # sustained moderate probability also counts as voiced
 VAD_WEAK_THRESHOLD = 0.25
@@ -214,13 +216,16 @@ def speech_hits(since, threshold=None):
 
 def is_voiced(since):
     strong = weak = 0
+    peak = 0.0
     for t, p in vad_history:
         if t >= since:
             if p >= VAD_THRESHOLD:
                 strong += 1
             if p >= VAD_WEAK_THRESHOLD:
                 weak += 1
-    return strong >= VAD_MIN_HITS or weak >= VAD_WEAK_HITS
+            peak = max(peak, p)
+    return (strong >= VAD_MIN_HITS or peak >= VAD_PEAK
+            or weak >= VAD_WEAK_HITS)
 
 
 # Vision misreads capital I as lowercase l in the game font. Standalone "l"
