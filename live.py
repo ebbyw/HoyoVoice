@@ -263,6 +263,33 @@ def normalize_speaker(speaker):
     return m[0] if m else speaker
 
 
+# Auto-casting pools: each newly met character claims the next voice not
+# already in use, so scenes with several new speakers stay distinguishable.
+VOICE_POOLS = {
+    "female": ["af_nova", "af_bella", "af_sarah", "af_sky", "bf_emma",
+               "af_jessica", "af_kore", "af_aoede", "bf_alice", "bf_lily",
+               "af_alloy"],
+    "male": ["am_michael", "am_liam", "am_eric", "am_onyx", "am_puck",
+             "bm_daniel", "bm_fable", "bm_lewis", "am_fenrir", "am_santa",
+             "am_adam"],
+}
+
+
+def auto_cast(speaker, gender):
+    used = {c["voice"] for c in VOICES["characters"].values()}
+    used.update(VOICES["defaults"].values())
+    pool = VOICE_POOLS[gender]
+    voice = next((v for v in pool if v not in used), None)
+    if voice is None:   # pool exhausted: reuse the least-assigned voice
+        counts = {v: sum(1 for c in VOICES["characters"].values()
+                         if c["voice"] == v) for v in pool}
+        voice = min(pool, key=counts.get)
+    VOICES["characters"][speaker] = {"voice": voice, "speed": 1.0, "auto": True}
+    VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+    print(f"[auto-cast] {speaker} → {voice} ({gender} guess)", flush=True)
+    return voice
+
+
 def pick_voice(speaker):
     # No nameplate, the game's own unquoted narrator label, or an
     # organization/location "speaker" ("The Xianzhou Alliance") → narrator.
@@ -275,13 +302,13 @@ def pick_voice(speaker):
     c = VOICES["characters"].get(speaker)
     if c:
         return c["voice"], c.get("speed", 1.0)
-    unknown_speakers.add(speaker)
     with open(UNKNOWN_LOG, "a") as f:
         f.write(speaker + "\n")
-    # best-effort gender guess from name shape; override in Casting anytime
+    # best-effort gender guess from name shape, then claim a distinct voice;
+    # shows as "(auto)" in Casting — override anytime
     n = speaker.rstrip('"”').strip().lower()
     fem = n.endswith(("a", "ia", "ie", "elle", "ette", "ina", "yn", "i"))
-    return VOICES["defaults"]["female" if fem else "male"], 1.0
+    return auto_cast(speaker, "female" if fem else "male"), 1.0
 
 
 class Speech:
@@ -419,6 +446,7 @@ def handle_commands(speech):
             _, char, voice = cmd
             VOICES["characters"].setdefault(char, {})["voice"] = voice
             VOICES["characters"][char].setdefault("speed", 1.0)
+            VOICES["characters"][char].pop("auto", None)   # now user-chosen
             VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
             print(f"[cast] {char} → {voice}", flush=True)
             for e in reversed(events):

@@ -160,9 +160,9 @@ async function tick(){
     const vname=x=>{const i=x.indexOf('_');
       return x.charAt(i+1).toUpperCase()+x.slice(i+2)+' ('+x.slice(0,i).toUpperCase()+')';};
     const opts=v=>s.voices.map(x=>'<option value="'+x+'"'+(x===v?' selected':'')+'>'+vname(x)+'</option>').join('');
-    const row=(ch,voice,assigned)=>{
+    const row=(ch,voice,assigned,auto)=>{
       const enc=encodeURIComponent(ch), muted=s.always_voiced.includes(ch);
-      return '<tr><td>'+esc(ch)+(assigned?'':' <span class="muted">(unassigned)</span>')+'</td>'+
+      return '<tr><td>'+esc(ch)+(assigned?(auto?' <span class="muted">(auto)</span>':''):' <span class="muted">(unassigned)</span>')+'</td>'+
         '<td><select data-role="cast" data-ch="'+enc+'">'+(assigned?'':'<option></option>')+opts(voice)+'</select></td>'+
         '<td><input type="checkbox" data-role="mute" data-ch="'+enc+'"'+(muted?' checked':'')+'></td>'+
         '<td><button data-role="del" data-ch="'+enc+'" title="delete">✕</button></td></tr>';};
@@ -170,10 +170,10 @@ async function tick(){
     if(castFp!==lastCastFp&&!interacting('casting')){
       lastCastFp=castFp;
       let rows='';
-      for(const [ch,c] of Object.entries(s.characters)) rows+=row(ch,c.voice,true);
-      for(const ch of s.unknown) if(!(ch in s.characters)) rows+=row(ch,'',false);
+      for(const [ch,c] of Object.entries(s.characters)) rows+=row(ch,c.voice,true,c.auto);
+      for(const ch of s.unknown) if(!(ch in s.characters)) rows+=row(ch,'',false,false);
       for(const ch of s.always_voiced)
-        if(!(ch in s.characters)&&!s.unknown.includes(ch)) rows+=row(ch,'',false);
+        if(!(ch in s.characters)&&!s.unknown.includes(ch)) rows+=row(ch,'',false,false);
       document.querySelector('#casting tbody').innerHTML=rows;
     }
     for(const id of ['sayVoice','newVoice']){
