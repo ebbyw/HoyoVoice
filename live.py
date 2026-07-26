@@ -817,6 +817,13 @@ def main():
                         break
                     time.sleep(0.1)
             synth_thread.join()
+            if ext_base and not voiced:
+                # the remainder continues a line we're still speaking —
+                # let the prefix finish instead of cutting it off
+                wait_until = time.monotonic() + 15
+                while (speech.player and speech.player.poll() is None
+                       and time.monotonic() < wait_until):
+                    time.sleep(0.05)
             if voiced:
                 stats["skipped_voiced"] += 1
                 add_event("skipped (voiced)", "skip", state["speaker"],
