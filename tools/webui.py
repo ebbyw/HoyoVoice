@@ -35,6 +35,8 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
 .cols>div:last-child{flex:0 1 480px;min-width:300px}
 .castwrap{max-height:280px;overflow-y:auto;border:1px solid #26272e;border-radius:8px}
 .castwrap table{margin:0}
+#recordings{max-height:110px;overflow-y:auto;border:1px solid #26272e;border-radius:8px;padding:6px}
+#recordings .pill{display:block;margin:2px 0;width:fit-content}
 .shot{position:relative;text-decoration:none}
 .shot img{display:none;position:absolute;right:0;bottom:22px;width:340px;border:1px solid #444;border-radius:6px;z-index:10}
 .shot:hover img{display:block}
