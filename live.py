@@ -738,21 +738,45 @@ def main():
 
             new_norm = key[1]
 
-            def is_dup(entry):
-                similar = (difflib.SequenceMatcher(
-                               None, new_norm, entry["norm"]).ratio() >= 0.90
-                           or new_norm.startswith(entry["norm"])
-                           or entry["norm"].startswith(new_norm))
-                if not similar:
-                    return False
-                if entry["speaker"] == state["speaker"]:
-                    return True
-                # different speaker: long identical text is OCR ghosting,
-                # but short echo lines ("What?!") are legitimate
-                return len(new_norm) >= SHORT_LINE
-
-            if any(is_dup(e) for e in recent_lines):
+            # Compare against the recent window. Three outcomes:
+            #   dup       — jitter variant / repeat → skip
+            #   extension — line grew after we spoke a stable prefix
+            #               (typewriter race) → speak only the remainder
+            #   new       — speak in full
+            dup, ext_base = False, None
+            for e in recent_lines:
+                o = e["norm"]
+                same_spk = e["speaker"] == state["speaker"]
+                if not (same_spk or len(new_norm) >= SHORT_LINE):
+                    continue
+                if (difflib.SequenceMatcher(None, new_norm, o).ratio() >= 0.90
+                        or o.startswith(new_norm)):
+                    dup = True
+                    break
+                if new_norm.startswith(o):
+                    if len(new_norm) - len(o) < 8:   # trivial tail = jitter
+                        dup = True
+                        break
+                    if ext_base is None or len(o) > len(ext_base):
+                        ext_base = o
+            if dup:
                 continue
+
+            speak_text = state["dialogue"]
+            if ext_base:
+                # map the normalized prefix length back to a raw split point
+                cnt, idx = 0, len(speak_text)
+                for i, ch in enumerate(speak_text):
+                    if ch.isalnum():
+                        cnt += 1
+                    if cnt == len(ext_base):
+                        idx = i + 1
+                        break
+                speak_text = speak_text[idx:].lstrip(" .,!?…—-")
+                if len(normalize_text(speak_text)) < 3:
+                    continue
+                print(f"[extension — speaking remainder] {speak_text[:60]}",
+                      flush=True)
             recent_lines.append({"speaker": state["speaker"], "norm": new_norm})
             SPOKEN_CACHE.write_text(json.dumps(
                 {"window": [[e["speaker"], e["norm"]] for e in recent_lines]}))
@@ -770,7 +794,7 @@ def main():
             synth_thread = threading.Thread(
                 target=lambda: spec.update(zip(
                     ("segs", "speed", "ms"),
-                    speech.synth(state["dialogue"], voice, base_speed))))
+                    speech.synth(speak_text, voice, base_speed))))
             synth_thread.start()
 
             # --- VAD gate ---
@@ -804,12 +828,12 @@ def main():
             speed = spec.get("speed")
             stats["spoken"] += 1
             yield_event_id = add_event(
-                "spoken", "spoken", state["speaker"], state["dialogue"],
+                "spoken", "spoken", state["speaker"], speak_text,
                 voice, speed, can_replay=True, shot=True)
             gate_max = max((p for t, p in vad_history
                             if t >= t_stable - VAD_LOOKBACK), default=-1.0)
             print(f"[{state['speaker'] or 'Narrator'} → {voice} ×{speed} "
-                  f"gate={gate_max:.2f}] {state['dialogue']}", flush=True)
+                  f"gate={gate_max:.2f}] {speak_text}", flush=True)
     finally:
         speech.stop()
         for p in (ffmpeg, sox, ocrd):
