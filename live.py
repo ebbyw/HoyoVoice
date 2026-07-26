@@ -318,7 +318,12 @@ class Speech:
             return
         self.stop()
         self.qr_playing = qr
-        self.sf.write(WAV, self.np.concatenate(segs), 24000)
+        audio = self.np.concatenate(segs)
+        # trim Kokoro's silence padding: snappier starts, tight handoffs
+        loud = self.np.where(self.np.abs(audio) > 0.012)[0]
+        if len(loud):
+            audio = audio[max(loud[0] - 800, 0):loud[-1] + 1600]
+        self.sf.write(WAV, audio, 24000)
         self.player = subprocess.Popen(["afplay", str(WAV)])
         self.t_play = time.monotonic()
         if recording["on"]:
@@ -733,7 +738,12 @@ def main():
                 candidate_count += 1
             else:
                 candidate, candidate_count = key, 1
-            if candidate_count != STABLE_READS:
+            # a line ending mid-sentence is probably still typing its next
+            # visual row — hold a few extra reads so we speak it whole
+            complete = state["dialogue"].rstrip().endswith(
+                (".", "!", "?", "…", '"', "”", "’", ")"))
+            required = STABLE_READS if complete else STABLE_READS + 4
+            if candidate_count != required:
                 continue
 
             new_norm = key[1]
