@@ -891,6 +891,10 @@ def main():
                         or new_norm in o):   # substring too: VFX flicker can
                     dup = True               # drop a row, leaving just a tail
                     break
+                if (len(o) >= 30 and o in new_norm
+                        and len(new_norm) - len(o) <= 25):
+                    dup = True   # long recent line wrapped in OCR ghost-junk
+                    break
                 if new_norm.startswith(o):
                     if len(new_norm) - len(o) < 8:   # trivial tail = jitter
                         dup = True

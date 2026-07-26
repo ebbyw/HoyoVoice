@@ -79,6 +79,25 @@ def classify(blocks):
               and b["h"] >= CHOICE_MIN_HEIGHT):
             state["choices"].append(b)
 
+    # Drop ghost duplicates: the text fade-in makes Vision sometimes return
+    # BOTH a stale partial and the full line as overlapping boxes on one row —
+    # keep only the widest box where horizontal spans overlap
+    rows = {}
+    for b in state["dialogue"]:
+        rows.setdefault(round((b["y"] + b["h"] / 2) / 0.022), []).append(b)
+    kept = []
+    for row in rows.values():
+        row.sort(key=lambda b: -b["w"])
+        chosen = []
+        for b in row:
+            x0, x1 = b["x"], b["x"] + b["w"]
+            if any(max(0.0, min(x1, c["x"] + c["w"]) - max(x0, c["x"]))
+                   > 0.6 * b["w"] for c in chosen):
+                continue
+            chosen.append(b)
+        kept.extend(chosen)
+    state["dialogue"] = kept
+
     # Merge: rows top-to-bottom, fragments left-to-right within a row
     state["dialogue"].sort(
         key=lambda b: (round((1 - (b["y"] + b["h"] / 2)) / 0.022), b["x"]))
