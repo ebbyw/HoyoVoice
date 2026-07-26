@@ -9,6 +9,8 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
+VERSION = "0.2.0"
+
 VOICE_CATALOG = [
     "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore",
     "af_nova", "af_river", "af_sarah", "af_sky",
@@ -41,7 +43,7 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
 .shot img{display:none;position:absolute;right:0;bottom:22px;width:340px;border:1px solid #444;border-radius:6px;z-index:10}
 .shot:hover img{display:block}
 </style></head><body>
-<h1>HoyoVoice
+<h1>HoyoVoice <span class="muted" style="font-size:12px;font-weight:normal">v__VERSION__</span>
 <button id="observeBtn" onclick="toggleObserve()">Pause</button>
 <button id="recordBtn" onclick="toggleRecord()">⏺ Record</button></h1>
 
@@ -186,7 +188,7 @@ def start_webui(shared, port=8470):
 
     @app.get("/")
     def index():
-        return PAGE
+        return PAGE.replace("__VERSION__", VERSION)
 
     @app.get("/shots/<path:name>")
     def shot(name):
