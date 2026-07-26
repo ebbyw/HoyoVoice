@@ -72,11 +72,13 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 
 ## How it stays out of the way
 
-- **Text stabilization** — a line must OCR identically on consecutive frames (typewriter effect).
+- **Text stabilization** — a line must OCR identically on consecutive frames, with extra patience while text is still growing (the typewriter pauses at sentence ends).
 - **Two-tier VAD gate** — a strong speech spike *or* ~¼s of sustained moderate speech marks a line as voiced; short soft lines ("Which king?") are caught.
+- **Center-energy detector** — game VO is mixed to the stereo center; a mid-channel burst with flat sides (plus a minimum speechiness) catches robot/vocoder voices the speech model can't recognize.
 - **Late-VO yield** — if voiceover starts while HoyoVoice is talking, it shuts up instantly.
 - **Sliding dedupe window** — a line only counts as a repeat if it's within the last 3 messages (fuzzy-matched, so OCR jitter like "l"/"I" can't re-trigger it); replaying a quest re-voices everything.
-- **OCR repair** — the game font's I/l confusion is fixed before synthesis.
+- **OCR repair** — the game font's I/l confusion, dropped apostrophes ("youre" → "you're"), decorative glyphs, and spelled-out interjections ("shh" → "shush") are all fixed before synthesis; Apple Vision is fed a custom vocabulary built from your casting and `settings.custom_words`.
+- **Pronunciations** — `settings.pronunciations` substitutes spoken forms at synthesis only ("Wishpower" → "Wish power"); logs keep the real spelling.
 - **Sentiment pacing** — positive/exclamatory lines read slightly faster, somber ones slower (±~10%).
 
 ## Casting — `voices.json`
@@ -92,6 +94,8 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
     "video_device": "ShadowCast 3",
     "audio_device": "ShadowCast 3",
     "text_fixes": {"lason": "Iason"},       // proper nouns OCR keeps mangling
+    "pronunciations": {"Wishpower": "Wish power"},  // spoken form only
+    "custom_words": ["Wishpower", "Planarcadia"],   // OCR vocabulary hints
     "dashboard_bind": "127.0.0.1"           // "0.0.0.0" to reach the dashboard
   }                                         // from other machines you trust —
                                             // it has no authentication

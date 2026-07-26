@@ -6,6 +6,24 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-26
+
+### Added
+- **Center-energy VO detector**: mid/side stereo analysis with a speechiness floor catches robot and vocoder voices the speech model can't recognize — music swells (both channels) and center-panned SFX (no speechiness) are rejected
+- `settings.pronunciations`: spoken-form substitutions applied at synthesis only ("Wishpower" → "Wish power")
+- `settings.custom_words` + casting names fed to Apple Vision as a recognition vocabulary
+- Reading repairs: OCR-dropped apostrophes restored via a safe contraction dictionary ("youre" → "you're"), decorative glyphs stripped ("~"), interjections voiced as words ("shh" → "shush"), expanded I/l fixes incl. capitals and stutters
+- Bright cutscene narration reads via prose self-certification (previously only black screens)
+
+### Fixed
+- Ghost-box double reads (text fade-in makes Vision return overlapping stale + full boxes)
+- Tail-fragment re-reads when VFX briefly hide a text row (substring/containment dedupe)
+- Dialogue split across OCR fragments rejoins its visual row
+- Log text selection is no longer interrupted by the refresh; recordings list is a fixed scrollable panel
+
+### Removed
+- Legacy `tools/ocr.swift` one-shot (superseded by the `ocrd` daemon)
+
 ## [0.4.0] - 2026-07-26
 
 ### Added
