@@ -56,6 +56,12 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
     <table id="casting"><thead><tr><th>character</th><th>voice</th><th>muted</th><th></th></tr></thead><tbody></tbody></table>
     </div>
     <div style="margin-top:8px">
+      <span class="muted">Add cast</span>
+      <input id="newChar" placeholder="exact nameplate name…" size="16" autocomplete="off">
+      <select id="newVoice"></select>
+      <button onclick="addChar()">Add</button>
+    </div>
+    <div style="margin-top:8px">
       <span class="muted">Test TTS</span>
       <input id="sayText" placeholder="type any line to hear it spoken…" size="28" autocomplete="off">
       <select id="sayVoice"></select>
@@ -106,6 +112,11 @@ function toggleLog(){hidden=!hidden;document.getElementById('log').classList.tog
   document.getElementById('toggleLog').textContent=hidden?'Show':'Hide';}
 function say(){post('/api/say',{text:document.getElementById('sayText').value,
   voice:document.getElementById('sayVoice').value});}
+function addChar(){const n=document.getElementById('newChar').value.trim();
+  if(!n) return;
+  post('/api/assign',{character:n,voice:document.getElementById('newVoice').value});
+  document.getElementById('newChar').value='';
+  lastCastFp='';}
 function replay(id){post('/api/replay',{id:id});}
 function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML;}
 document.addEventListener('change',e=>{
@@ -165,8 +176,10 @@ async function tick(){
         if(!(ch in s.characters)&&!s.unknown.includes(ch)) rows+=row(ch,'',false);
       document.querySelector('#casting tbody').innerHTML=rows;
     }
-    const sv=document.getElementById('sayVoice');
-    if(!sv.options.length) sv.innerHTML=opts('af_heart');
+    for(const id of ['sayVoice','newVoice']){
+      const el=document.getElementById(id);
+      if(!el.options.length) el.innerHTML=opts('af_heart');
+    }
     // log refreshes every poll; only held while a screenshot preview is open
     if(!document.querySelector('#log .shot:hover')){
       document.querySelector('#log tbody').innerHTML=s.events.slice().reverse().map(e=>
