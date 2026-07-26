@@ -59,20 +59,29 @@ def classify(blocks):
     else:
         dlg_bot, dlg_top = PROFILE["dialogue_fallback_y"]
 
+    # seed rows with centered blocks, then pull in row-mates: Vision often
+    # splits one visual line into several blocks whose fragments sit
+    # off-center ('Error: Term' + '"Berserker" not found…')
+    band = [b for b in conf if b is not plate
+            and dlg_bot <= b["y"] + b["h"] / 2 <= dlg_top
+            and 0.08 <= b["x"] + b["w"] / 2 <= 0.92]
+    seed_rows = {round((b["y"] + b["h"] / 2) / 0.022) for b in band
+                 if PROFILE["dialogue_x"][0] <= b["x"] + b["w"] / 2
+                 <= PROFILE["dialogue_x"][1]}
     for b in conf:
         if b is plate:
             continue
-        cx, cy = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
-        if (dlg_bot <= cy <= dlg_top
-                and PROFILE["dialogue_x"][0] <= cx <= PROFILE["dialogue_x"][1]):
+        cy = b["y"] + b["h"] / 2
+        if b in band and round(cy / 0.022) in seed_rows:
             state["dialogue"].append(b)
         elif (in_region(b, PROFILE["choices"])
               and CHOICE_LEFT_EDGE[0] <= b["x"] <= CHOICE_LEFT_EDGE[1]
               and b["h"] >= CHOICE_MIN_HEIGHT):
             state["choices"].append(b)
 
-    # Merge multi-line blocks: sort top-to-bottom (Vision y is bottom-left, so descending)
-    state["dialogue"].sort(key=lambda b: -b["y"])
+    # Merge: rows top-to-bottom, fragments left-to-right within a row
+    state["dialogue"].sort(
+        key=lambda b: (round((1 - (b["y"] + b["h"] / 2)) / 0.022), b["x"]))
     dialogue_text = " ".join(b["text"] for b in state["dialogue"])
 
     # Group choice lines into options: lines belong to the same option if their

@@ -106,6 +106,19 @@ stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
          "started": time.time()}
 
 
+def frame_is_dark():
+    """True black narration screens sometimes show only a ▼ glyph and no
+    Continue text — accept them by checking the frame is nearly all black."""
+    try:
+        from PIL import Image
+        img = Image.open(FRAME).convert("L")
+        img.thumbnail((48, 48))
+        px = list(img.getdata())
+        return sum(px) / len(px) < 28
+    except Exception:
+        return False
+
+
 def save_shot(eid):
     """Downscaled screenshot of the current frame for the dashboard log."""
     try:
@@ -223,6 +236,9 @@ _OCR_FIXES = [
 def fix_ocr_text(s):
     for pat, rep in _OCR_FIXES:
         s = pat.sub(rep, s)
+    # user lexicon for proper nouns OCR keeps mangling ("lason" → "Iason")
+    for wrong, right in VOICES.get("settings", {}).get("text_fixes", {}).items():
+        s = re.sub(rf"\b{re.escape(wrong)}\b", right, s, flags=re.IGNORECASE)
     return s
 
 
@@ -262,7 +278,10 @@ def pick_voice(speaker):
     unknown_speakers.add(speaker)
     with open(UNKNOWN_LOG, "a") as f:
         f.write(speaker + "\n")
-    return VOICES["defaults"]["female"], 1.0
+    # best-effort gender guess from name shape; override in Casting anytime
+    n = speaker.rstrip('"”').strip().lower()
+    fem = n.endswith(("a", "ia", "ie", "elle", "ette", "ina", "yn", "i"))
+    return VOICES["defaults"]["female" if fem else "male"], 1.0
 
 
 class Speech:
@@ -530,6 +549,7 @@ def main():
     ocrd = spawn_ocrd()
 
     candidate, candidate_count = None, 0
+    candidate_growing = False
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
@@ -713,7 +733,8 @@ def main():
                     state = {"speaker": VOICES.get("settings", {}).get(
                                  "overlay_speaker"),
                              "dialogue": overlay, "choices": []}
-                elif narration and has_continue_hint(blocks):
+                elif narration and (has_continue_hint(blocks)
+                                    or frame_is_dark()):
                     # narration requires the Continue hint — menu banners
                     # and event-hub screens must not be narrated
                     state = {"speaker": None, "dialogue": narration, "choices": []}
@@ -737,14 +758,21 @@ def main():
             if key == candidate:
                 candidate_count += 1
             else:
+                # if the text GREW from the previous candidate, the typewriter
+                # is mid-render (it pauses at sentence ends!) — stay patient
+                candidate_growing = (candidate is not None
+                                     and candidate[0] == key[0]
+                                     and key[1].startswith(candidate[1]))
                 candidate, candidate_count = key, 1
             # a line ending mid-sentence is probably still typing its next
             # visual row — hold a few extra reads so we speak it whole
             complete = state["dialogue"].rstrip().endswith(
                 (".", "!", "?", "…", '"', "”", "’", ")"))
-            required = STABLE_READS if complete else STABLE_READS + 4
+            required = (STABLE_READS if complete and not candidate_growing
+                        else STABLE_READS + 4)
             if candidate_count != required:
                 continue
+            candidate_growing = False
 
             new_norm = key[1]
 
@@ -787,7 +815,16 @@ def main():
                     continue
                 print(f"[extension — speaking remainder] {speak_text[:60]}",
                       flush=True)
-            recent_lines.append({"speaker": state["speaker"], "norm": new_norm})
+            if ext_base:
+                # update the window entry in place so later growth diffs
+                # against the LONGEST text we've handled, never re-reads
+                for e in recent_lines:
+                    if e["norm"] == ext_base:
+                        e["norm"] = new_norm
+                        break
+            else:
+                recent_lines.append(
+                    {"speaker": state["speaker"], "norm": new_norm})
             SPOKEN_CACHE.write_text(json.dumps(
                 {"window": [[e["speaker"], e["norm"]] for e in recent_lines]}))
 
