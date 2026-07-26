@@ -95,7 +95,9 @@ vad_history = deque(maxlen=400)
 # voiceover even when the VAD can't recognize the voice as speech.
 energy_history = deque(maxlen=400)
 ENERGY_MID_BURST = 7.0        # dB over pre-line baseline
-ENERGY_MID_OVER_SIDE = 4.0    # mid must rise this much more than side
+ENERGY_MID_OVER_SIDE = 5.0    # mid must rise this much more than side
+ENERGY_SIDE_FLAT = 2.5        # AND side must stay flat — music swells raise
+                              # both channels; VO raises only the center
 
 # --- shared state for the dashboard ---
 events = deque(maxlen=200)
@@ -933,6 +935,7 @@ def main():
             # speech (vocoder/robot voices) — mid-channel burst, flat side
             mid_up, side_up = center_burst(t_stable)
             if (not voiced and mid_up >= ENERGY_MID_BURST
+                    and side_up <= ENERGY_SIDE_FLAT
                     and mid_up - side_up >= ENERGY_MID_OVER_SIDE):
                 voiced = True
                 print(f"[voiced — center energy] mid+{mid_up:.1f}dB "
