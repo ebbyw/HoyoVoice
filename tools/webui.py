@@ -180,8 +180,11 @@ async function tick(){
       const el=document.getElementById(id);
       if(!el.options.length) el.innerHTML=opts('af_heart');
     }
-    // log refreshes every poll; only held while a screenshot preview is open
-    if(!document.querySelector('#log .shot:hover')){
+    // log refreshes every poll; held while a screenshot preview is open
+    // or while the user is selecting text to copy
+    const sel=window.getSelection();
+    const selInLog=sel&&!sel.isCollapsed&&document.getElementById('log').contains(sel.anchorNode);
+    if(!document.querySelector('#log .shot:hover')&&!selInLog){
       document.querySelector('#log tbody').innerHTML=s.events.slice().reverse().map(e=>
       '<tr><td class="muted">'+e.t+'</td><td>'+esc(e.speaker||'—')+'</td><td>'+esc(e.text)+'</td>'+
       '<td class="voice">'+(e.voice||'')+(e.speed&&e.speed!==1?' ×'+e.speed:'')+'</td>'+

@@ -254,6 +254,23 @@ _OCR_FIXES = [
 ]
 # decorative glyphs TTS would read aloud ("tilde") or spell out
 _STRIP_GLYPHS = re.compile(r"[~*＊♪♡♥★☆]+")
+# Vision drops apostrophes in this font ("youre" → Kokoro says "yo-ray").
+# Restore only bare forms that aren't real English words — can't misfire.
+_CONTRACTIONS = {
+    "youre": "you're", "youll": "you'll", "youve": "you've", "youd": "you'd",
+    "theyre": "they're", "theyve": "they've", "theyll": "they'll",
+    "werent": "weren't", "wasnt": "wasn't", "isnt": "isn't",
+    "arent": "aren't", "dont": "don't", "doesnt": "doesn't",
+    "didnt": "didn't", "wont": "won't", "cant": "can't",
+    "couldnt": "couldn't", "wouldnt": "wouldn't", "shouldnt": "shouldn't",
+    "mustnt": "mustn't", "havent": "haven't", "hasnt": "hasn't",
+    "hadnt": "hadn't", "im": "I'm", "ive": "I've", "hes": "he's",
+    "shes": "she's", "whats": "what's", "thats": "that's",
+    "theres": "there's", "heres": "here's", "whos": "who's",
+    "wheres": "where's", "hows": "how's", "aint": "ain't",
+}
+_CONTRACTION_RE = re.compile(
+    r"\b(" + "|".join(_CONTRACTIONS) + r")\b", re.IGNORECASE)
 # interjections that get spelled letter-by-letter → nearest real word
 _INTERJECTIONS = [
     (re.compile(r"\bshh+\b", re.IGNORECASE), "shush"),
@@ -268,9 +285,14 @@ def _keep_case(rep):
 
 
 def fix_ocr_text(s):
+    s = re.sub(r"[’‘`´ʼ]", "'", s)      # normalize apostrophe glyph variants
     for pat, rep in _OCR_FIXES:
         s = pat.sub(rep, s)
     s = _STRIP_GLYPHS.sub("", s)
+    s = _CONTRACTION_RE.sub(
+        lambda m: (_CONTRACTIONS[m.group(0).lower()].capitalize()
+                   if m.group(0)[0].isupper()
+                   else _CONTRACTIONS[m.group(0).lower()]), s)
     for pat, rep in _INTERJECTIONS:
         s = pat.sub(_keep_case(rep), s)
     # user lexicon for proper nouns OCR keeps mangling ("lason" → "Iason")
