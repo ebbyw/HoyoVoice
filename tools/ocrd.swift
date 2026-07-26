@@ -8,6 +8,17 @@ import AppKit
 
 setbuf(stdout, nil)
 
+// optional custom-words file (one word per line): character names and game
+// vocabulary greatly improve recognition of stylized text
+var customWords: [String] = []
+if CommandLine.arguments.count > 1,
+   let content = try? String(contentsOfFile: CommandLine.arguments[1],
+                             encoding: .utf8) {
+    customWords = content.split(separator: "\n").map {
+        String($0).trimmingCharacters(in: .whitespaces)
+    }.filter { !$0.isEmpty }
+}
+
 while let line = readLine(strippingNewline: true) {
     let url = URL(fileURLWithPath: line)
     guard let img = NSImage(contentsOf: url),
@@ -19,6 +30,9 @@ while let line = readLine(strippingNewline: true) {
     req.recognitionLevel = .accurate
     req.usesLanguageCorrection = true
     req.recognitionLanguages = ["en-US"]
+    if !customWords.isEmpty {
+        req.customWords = customWords
+    }
     let handler = VNImageRequestHandler(cgImage: cg, options: [:])
     do { try handler.perform([req]) } catch {
         print("[]")

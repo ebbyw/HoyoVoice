@@ -244,23 +244,39 @@ def is_voiced(since):
             or weak >= VAD_WEAK_HITS)
 
 
-# Vision misreads capital I as lowercase l in the game font. Standalone "l"
-# (and "lt"/"lts"/"lm"…) are never real words, so these repairs are safe.
+# HSR renders capital I without serifs, so Vision reads it as l/L constantly.
+# Standalone l/L (incl. l've, L-L'm stutters) and lt/lts are never real words.
 _OCR_FIXES = [
-    (re.compile(r"\bl\b"), "I"),          # also covers l'm / l've / l'll / l'd
-    (re.compile(r"\blt\b"), "It"),
-    (re.compile(r"\blts\b"), "Its"),
+    (re.compile(r"\b[lL]\b"), "I"),   # I / I've / I'm / I-I'm stutters
+    (re.compile(r"\b[lL]t\b"), "It"),
+    (re.compile(r"\b[lL]ts\b"), "Its"),
     (re.compile(r"\bi\b"), "I"),
 ]
+# decorative glyphs TTS would read aloud ("tilde") or spell out
+_STRIP_GLYPHS = re.compile(r"[~*＊♪♡♥★☆]+")
+# interjections that get spelled letter-by-letter → nearest real word
+_INTERJECTIONS = [
+    (re.compile(r"\bshh+\b", re.IGNORECASE), "shush"),
+    (re.compile(r"\bhmph+\b", re.IGNORECASE), "humph"),
+    (re.compile(r"\btsk\b", re.IGNORECASE), "tisk"),
+    (re.compile(r"\bpff+t?\b", re.IGNORECASE), "pfff"),
+]
+
+
+def _keep_case(rep):
+    return lambda m: rep.capitalize() if m.group(0)[0].isupper() else rep
 
 
 def fix_ocr_text(s):
     for pat, rep in _OCR_FIXES:
         s = pat.sub(rep, s)
+    s = _STRIP_GLYPHS.sub("", s)
+    for pat, rep in _INTERJECTIONS:
+        s = pat.sub(_keep_case(rep), s)
     # user lexicon for proper nouns OCR keeps mangling ("lason" → "Iason")
     for wrong, right in VOICES.get("settings", {}).get("text_fixes", {}).items():
         s = re.sub(rf"\b{re.escape(wrong)}\b", right, s, flags=re.IGNORECASE)
-    return s
+    return re.sub(r"  +", " ", s).strip()
 
 
 def center_burst(t_line):
@@ -611,8 +627,16 @@ def main():
     sox = spawn_sox()
 
     def spawn_ocrd():
+        words = set()
+        for name in VOICES["characters"]:
+            words.update(name.strip('"“”').split())
+        words.update(VOICES.get("settings", {}).get("text_fixes", {}).values())
+        words.update(VOICES.get("settings", {}).get("custom_words", []))
+        cw = ROOT / "captures" / "custom_words.txt"
+        cw.parent.mkdir(exist_ok=True)
+        cw.write_text("\n".join(sorted(w for w in words if w)))
         return subprocess.Popen(
-            [str(ROOT / "tools" / "ocrd")],
+            [str(ROOT / "tools" / "ocrd"), str(cw)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
 
     ocrd = spawn_ocrd()
@@ -858,8 +882,8 @@ def main():
                 if not (same_spk or len(new_norm) >= SHORT_LINE):
                     continue
                 if (difflib.SequenceMatcher(None, new_norm, o).ratio() >= 0.90
-                        or o.startswith(new_norm)):
-                    dup = True
+                        or new_norm in o):   # substring too: VFX flicker can
+                    dup = True               # drop a row, leaving just a tail
                     break
                 if new_norm.startswith(o):
                     if len(new_norm) - len(o) < 8:   # trivial tail = jitter
