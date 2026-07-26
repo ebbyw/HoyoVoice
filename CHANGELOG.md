@@ -6,6 +6,22 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-26
+
+### Added
+- Pre-cast characters from the dashboard (**Add cast** form) before they appear in-game
+- `settings.text_fixes` lexicon for proper nouns OCR mangles ("lason" → "Iason")
+- Gender guess from name shape for unknown speakers (casting table remains authoritative)
+- `settings.dashboard_bind` — open the dashboard to other machines you trust
+- Dashboard: version in header, friendly voice labels ("Heart (AF)"), scrollable recordings panel, paused-feed placeholder
+
+### Changed
+- Dialogue detection is anchored to the nameplate — overworld and cinematic layouts both parse, wherever the box sits
+- Split OCR fragments rejoin their visual row ('Error: Term' + '"Berserker"…')
+- Typewriter-aware pacing: lines still growing (or ending mid-sentence) wait to be spoken whole; when a split does happen, the remainder is spoken after the prefix finishes instead of being skipped or interrupting it
+- Kokoro clip silence trimmed: snappier line starts, tight extension handoffs
+- Black narration screens with only the ▼ glyph (no "Continue" text) are read, gated by a dark-frame check
+
 ## [0.2.0] - 2026-07-25
 
 ### Added
