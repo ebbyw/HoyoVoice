@@ -3,6 +3,7 @@
   "always_voiced": [],
   "settings": {
     "recordings_dir": "~/Videos",
+    "dashboard_bind": "127.0.0.1",
     "overlay_speaker": null,
     "video_device": "ShadowCast 3",
     "audio_device": "ShadowCast 3"

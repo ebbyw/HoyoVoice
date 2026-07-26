@@ -90,8 +90,10 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
     "recordings_dir": "~/Videos",
     "overlay_speaker": "Rin Tohsaka",       // voice for floating host bubbles
     "video_device": "ShadowCast 3",
-    "audio_device": "ShadowCast 3"
-  }
+    "audio_device": "ShadowCast 3",
+    "dashboard_bind": "127.0.0.1"           // "0.0.0.0" to reach the dashboard
+  }                                         // from other machines you trust —
+                                            // it has no authentication
 }
 ```
 
