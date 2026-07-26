@@ -146,7 +146,9 @@ async function tick(){
       ['vad '+m.vad,'spoken '+m.spoken,'skipped(voiced) '+m.skipped_voiced,'yielded '+m.yielded,
        'synth avg '+m.synth_avg_ms+'ms','ocr avg '+m.ocr_avg_ms+'ms',
        'lines/min '+m.lines_per_min].map(x=>'<span class="pill">'+x+'</span>').join('');
-    const opts=v=>s.voices.map(x=>'<option'+(x===v?' selected':'')+'>'+x+'</option>').join('');
+    const vname=x=>{const i=x.indexOf('_');
+      return x.charAt(i+1).toUpperCase()+x.slice(i+2)+' ('+x.slice(0,i).toUpperCase()+')';};
+    const opts=v=>s.voices.map(x=>'<option value="'+x+'"'+(x===v?' selected':'')+'>'+vname(x)+'</option>').join('');
     const row=(ch,voice,assigned)=>{
       const enc=encodeURIComponent(ch), muted=s.always_voiced.includes(ch);
       return '<tr><td>'+esc(ch)+(assigned?'':' <span class="muted">(unassigned)</span>')+'</td>'+
