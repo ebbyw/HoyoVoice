@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 VOICE_CATALOG = [
     "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore",

@@ -6,6 +6,11 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-26
+
+### Added
+- **Auto-casting**: every newly met character claims a distinct voice from a gender-guessed pool instead of sharing one default — scenes full of new NPCs sound like an ensemble. Auto-cast entries show as "(auto)" in Casting and persist; a manual assignment clears the tag. Pools reuse the least-assigned voice only when exhausted.
+
 ## [0.3.0] - 2026-07-26
 
 ### Added

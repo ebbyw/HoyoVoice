@@ -51,7 +51,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 
 - **Status & controls** — Pause/Resume observation (feed preview blanks while paused), live analytics (VAD health, spoken/skipped/yielded counts, synth/OCR timings, lines per minute).
 - **Device pickers** — choose any connected video/audio device; Apply hot-swaps capture and persists the choice.
-- **Casting** — every speaker the OCR meets appears here. Assign a voice (instantly re-reads their last line so you can audition), tick **muted** for characters whose real VO the detector can't hear (creature voices), ✕ deletes bogus entries. **Add cast** pre-assigns a voice to a character before they first appear.
+- **Casting** — every speaker the OCR meets appears here, and each new character is **auto-cast** with a distinct voice from a gender-guessed pool (marked "(auto)" until you choose). Assign a voice (instantly re-reads their last line so you can audition), tick **muted** for characters whose real VO the detector can't hear (creature voices), ✕ deletes bogus entries. **Add cast** pre-assigns a voice to a character before they first appear.
 - **Test box** — type anything, pick a voice, hear it.
 - **Recording** — ⏺ captures game video + game audio, tracks every TTS clip with wall-clock timestamps, and on ⏹ muxes everything into one MP4 (TTS boosted +8dB over the game bed, clips trimmed where real VO interrupted them). Files land in the configurable save folder; raw capture is crash-safe MKV until the mux succeeds.
 - **Log** — every decision with the voice used, a 📷 screenshot hover-preview per event for diagnostics, replay buttons, Hide/Clear controls.
