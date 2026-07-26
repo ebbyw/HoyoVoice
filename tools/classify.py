@@ -9,10 +9,16 @@ Usage: python3 classify.py <ocr.json>
 import json
 import sys
 
-# HSR standard dialogue layout (normalized, bottom-left origin)
+# HSR dialogue layout (normalized, bottom-left origin). The box sits at
+# slightly different heights in cinematic vs overworld conversations, so
+# dialogue is ANCHORED to the nameplate rather than a fixed band.
 PROFILE = {
-    "speaker":  {"x": (0.30, 0.70), "y": (0.19, 0.26)},
-    "dialogue": {"x": (0.40, 0.60), "y": (0.08, 0.19)},  # real lines are centered
+    "plate_y":  (0.18, 0.31),          # nameplate can appear anywhere here
+    "plate_x":  (0.35, 0.65),
+    "plate_max_w": 0.30,               # names are short; dialogue lines are wide
+    "dialogue_x": (0.40, 0.60),        # real lines are centered
+    "dialogue_span": 0.15,             # lines live this far below the nameplate
+    "dialogue_fallback_y": (0.08, 0.19),
     "choices":  {"x": (0.66, 1.00), "y": (0.22, 0.62)},
 }
 # Choice option text is left-aligned just right of the "→" marker
@@ -37,12 +43,28 @@ def in_region(block, region):
 
 def classify(blocks):
     state = {"speaker": None, "dialogue": [], "choices": []}
-    for b in blocks:
-        if b["confidence"] < MIN_CONF or b["text"].strip() in IGNORE:
+    conf = [b for b in blocks
+            if b["confidence"] >= MIN_CONF and b["text"].strip() not in IGNORE]
+
+    # find the nameplate: a short, centered block in the plate band
+    plates = [b for b in conf
+              if PROFILE["plate_y"][0] <= b["y"] + b["h"] / 2 <= PROFILE["plate_y"][1]
+              and PROFILE["plate_x"][0] <= b["x"] + b["w"] / 2 <= PROFILE["plate_x"][1]
+              and b["w"] <= PROFILE["plate_max_w"]]
+    plate = max(plates, key=lambda b: b["h"]) if plates else None
+    if plate is not None:
+        state["speaker"] = plate["text"]
+        dlg_top = plate["y"] - 0.004            # just below the nameplate
+        dlg_bot = plate["y"] - PROFILE["dialogue_span"]
+    else:
+        dlg_bot, dlg_top = PROFILE["dialogue_fallback_y"]
+
+    for b in conf:
+        if b is plate:
             continue
-        if in_region(b, PROFILE["speaker"]):
-            state["speaker"] = b["text"]
-        elif in_region(b, PROFILE["dialogue"]):
+        cx, cy = b["x"] + b["w"] / 2, b["y"] + b["h"] / 2
+        if (dlg_bot <= cy <= dlg_top
+                and PROFILE["dialogue_x"][0] <= cx <= PROFILE["dialogue_x"][1]):
             state["dialogue"].append(b)
         elif (in_region(b, PROFILE["choices"])
               and CHOICE_LEFT_EDGE[0] <= b["x"] <= CHOICE_LEFT_EDGE[1]
