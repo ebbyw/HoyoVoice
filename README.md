@@ -4,29 +4,39 @@
 
 *Runs on macOS (Apple Silicon) and, experimentally, Windows — see [Requirements](#requirements).*
 
-Genshin Impact and Honkai: Star Rail voice some quest dialogue but leave many lines — and sometimes entire quests — silent. HoyoVoice watches your game feed, notices when a line has no voiceover, and reads it aloud in a per-character artificial voice within about a second. Lines the game *does* voice are left untouched. Everything runs locally on your Mac: no cloud, no API keys, no game modification.
+Genshin Impact and Honkai: Star Rail voice some quest dialogue but leave many lines — and sometimes entire quests — silent. HoyoVoice watches your game feed, notices when a line has no voiceover, and reads it aloud in a per-character artificial voice within about a second. Lines the game *does* voice are left untouched. Everything runs locally on your own machine: no cloud, no API keys, no game modification.
 
 ```
-console ──HDMI──► capture card ──USB──► Mac
+console ──HDMI──► capture card ──USB──► your computer
                                          │
-              ┌───── ffmpeg (video) ─────┤───── sox (audio) ─────┐
+              ┌───────── video ──────────┤────────── audio ──────┐
               ▼                                                  ▼
        rolling frame (6 fps)                          48 kHz PCM stream
               │                                                  │
-       Apple Vision OCR                                   Silero VAD
+            OCR                                          Silero VAD
        (screen classification)                     (is the game talking?)
               │                                                  │
               └──────────────► orchestrator ◄────────────────────┘
                                     │  new line + no game VO
                                     ▼
-                     Kokoro-82M TTS (local, MLX) ──► speakers
+                         Kokoro-82M TTS (local) ──► speakers
                                     │
                      web dashboard · http://127.0.0.1:8470
 ```
 
+Every stage above is platform-native, selected at startup by `hv_platform/`:
+
+| Stage | macOS | Windows |
+|---|---|---|
+| Video | ffmpeg + AVFoundation | ffmpeg + DirectShow |
+| Audio | sox + CoreAudio | in-process WASAPI (`sounddevice`) |
+| OCR | Apple Vision (`tools/ocrd`) | RapidOCR on DirectML, or built-in Windows OCR (`tools/ocrd_win.py`) |
+| TTS | Kokoro-82M on MLX (GPU) | Kokoro-82M on ONNX Runtime |
+| Playback | `afplay` | `sounddevice` |
+
 ## Requirements
 
-**Platform: macOS on Apple Silicon (M1+, macOS 14+ recommended), or Windows 10/11 (experimental).** Each platform gets a native pipeline behind the same app (`hv_platform/`): on macOS, TTS runs on MLX (Apple Silicon GPU), OCR uses Apple Vision, capture uses AVFoundation/CoreAudio; on Windows, TTS runs Kokoro via ONNX on any CPU, OCR uses RapidOCR or the built-in Windows OCR, capture uses DirectShow/WASAPI. Intel Macs and Linux are not supported. The Windows backend is new and not yet hardware-validated — see `plans/WINDOWS-TESTING.md`.
+**Platform: macOS on Apple Silicon (M1+, macOS 14+ recommended), or Windows 10/11 (experimental).** Intel Macs and Linux are not supported: the macOS TTS path needs Apple Silicon for MLX. The Windows backend works end to end but is newer and less battle-tested — see `plans/WINDOWS-TESTING.md` for its first-run checklist and known platform quirks.
 
 You'll also need:
 
@@ -56,7 +66,7 @@ python hoyovoice.py start
 
 Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video and audio devices from the dropdowns above the preview if they aren't auto-selected, then hit **Resume** and play. Unvoiced lines are spoken about half a second after their text settles.
 
-> **Important:** audio must be captured with sox (the app does this itself). ffmpeg's AVFoundation audio input silently drops ~12% of samples on macOS — if you ever refactor capture, don't route audio through ffmpeg.
+> **Important (macOS):** audio must be captured with sox (the app does this itself). ffmpeg's AVFoundation audio input silently drops ~12% of samples — if you ever refactor capture, don't route audio through ffmpeg. On Windows, audio is captured in-process via WASAPI; both paths write the same 48 kHz stereo PCM stream that the VAD and the recorder depend on.
 
 ## The dashboard
 
@@ -75,6 +85,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 | Choice options | Detected, not spoken |
 | Full-screen black narration | Narrator voice (requires the ✕ Continue hint) |
 | Loading screens (version string + UID) | Lore blurb read by narrator |
+| Lore cards (centered title + prose, no UI chrome) | Title + blurb read by narrator |
 | System screens (version string, no UID — e.g. epilepsy warning) | Silent |
 | Quick Read book screens | Read incrementally as you scroll; Back stops mid-sentence |
 | Info screens (Participant Details…) | Read top-to-bottom via the same reader |
@@ -136,8 +147,10 @@ Everything above is editable live from the dashboard. Kokoro ships ~50 voices (`
 - **Recording sounds fast or crackly:** you've rerouted audio through ffmpeg — don't; sox only (see warning above).
 - **A character talks over their own VO:** tick their **muted** box; some processed voices are invisible to speech detection.
 - **You hear VO but the VAD never sees speech (max stays 0.00 at a healthy dB):** your console negotiated surround over the passthrough chain, and game dialogue lives in the center channel — the card's 2-channel USB audio only gets front L/R. Set the console's audio output to stereo (PS5: Settings → Sound → Audio Output → Linear PCM, Number of Channels 2.0).
-- **A menu/board screen gets narrated:** file an issue with the log tail and a screenshot — screen detectors are cheap to add.
+- **A menu/board screen gets narrated:** file an issue with the log tail and a screenshot — screen detectors are cheap to add. Every logged event also saves the raw OCR blocks to `captures/shots/<id>.json`, which is what a fix needs.
 - **Capture device busy:** close OBS/QuickTime; the card allows one client.
+- **Windows: lines are slow to appear or misread.** Check the startup log for the OCR engine: `engine: rapid (directml, …)` is the good path (~150 ms/frame). If it says `windows`, DirectML didn't install — rerun `setup.ps1`, or `.venv\Scripts\pip install onnxruntime-directml`. The built-in Windows engine is only a fallback and misreads small game fonts. Force a choice with the `HOYOVOICE_OCR_ENGINE` environment variable (`auto`, `rapid`, `windows`).
+- **Windows: dashboard won't load / app won't start.** An orphaned instance is holding port 8470 — `python hoyovoice.py stop`, then check Task Manager for stray `python.exe` / `ffmpeg.exe`.
 
 ## Contributing / releases
 

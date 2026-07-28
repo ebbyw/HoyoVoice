@@ -1,12 +1,13 @@
 """Windows backend: DirectShow video (ffmpeg), WASAPI audio (sounddevice,
 in-process), Windows OCR daemon (tools/ocrd_win.py), Kokoro via ONNX
-Runtime (CPU), sounddevice playback.
+Runtime, sounddevice playback.
 
 Honors the same data contracts as the macOS backend (see base.py):
 frame JPEG, 48 kHz stereo s16le PCM append-file, Vision-style normalized
 bottom-left OCR coordinates, 24 kHz float32 TTS audio.
 
-UNTESTED ON REAL HARDWARE YET — see plans/WINDOWS-TESTING.md.
+Verified end to end on real hardware; see plans/WINDOWS-TESTING.md for
+the checklist and the platform quirks this backend works around.
 """
 import json
 import re

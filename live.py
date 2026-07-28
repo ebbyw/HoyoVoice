@@ -736,6 +736,7 @@ def main():
     last_dup_logged = None
     last_unknown_logged = None
     last_spoken_norm = None     # suppresses repeat-logs for the live line
+    fired_norm = None           # line already pushed through the gate once
     unstable_count = 0
     last_mtime = 0.0
     last_frame_change = time.monotonic()
@@ -1032,8 +1033,15 @@ def main():
                 (".", "!", "?", "…", '"', "”", "’", ")"))
             required = (STABLE_READS if complete and not candidate_growing
                         else STABLE_READS + 4)
-            if candidate_count != required:
+            # `>=`, not `==`: `required` can DROP mid-count (a jittered read
+            # adds the closing period, so `complete` flips and the patient
+            # +4 allowance disappears). With exact equality the count sails
+            # past the new threshold and the line is never spoken at all.
+            # fired_norm then stops a re-fire — punctuation jitter normalizes
+            # to the same string, while a genuine extension differs.
+            if candidate_count < required or key[1] == fired_norm:
                 continue
+            fired_norm = key[1]
             candidate_growing = False
 
             new_norm = key[1]
