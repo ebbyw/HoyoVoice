@@ -135,6 +135,7 @@ Everything above is editable live from the dashboard. Kokoro ships ~50 voices (`
 - **Your capture card isn't in the dropdowns:** it's off the USB bus — replug it; capture auto-recovers within ~10s.
 - **Recording sounds fast or crackly:** you've rerouted audio through ffmpeg — don't; sox only (see warning above).
 - **A character talks over their own VO:** tick their **muted** box; some processed voices are invisible to speech detection.
+- **You hear VO but the VAD never sees speech (max stays 0.00 at a healthy dB):** your console negotiated surround over the passthrough chain, and game dialogue lives in the center channel — the card's 2-channel USB audio only gets front L/R. Set the console's audio output to stereo (PS5: Settings → Sound → Audio Output → Linear PCM, Number of Channels 2.0).
 - **A menu/board screen gets narrated:** file an issue with the log tail and a screenshot — screen detectors are cheap to add.
 - **Capture device busy:** close OBS/QuickTime; the card allows one client.
 
