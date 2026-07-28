@@ -75,8 +75,9 @@ def start():
         print(f"venv python not found: {VENV_PY}\n"
               f"run {'setup.ps1' if WIN else './setup.sh'} first")
         sys.exit(1)
-    log = open(LOG, "w")
-    kw = {}
+    log = open(LOG, "w", encoding="utf-8")
+    env = dict(os.environ, PYTHONUTF8="1")   # cp1252 stdout chokes on '→'
+    kw = {"env": env}
     if WIN:
         # CREATE_NO_WINDOW (hidden console, inherited by ffmpeg/ocr children)
         # — do NOT combine with DETACHED_PROCESS: they're mutually exclusive,
@@ -126,7 +127,8 @@ def status():
     if pid_alive(pid):
         print(f"running (pid {pid})")
         try:
-            spoken = sum(1 for ln in LOG.read_text(errors="ignore").splitlines()
+            spoken = sum(1 for ln in LOG.read_text(
+                             encoding="utf-8", errors="ignore").splitlines()
                          if "→" in ln)
             print(f"lines spoken this session: {spoken}")
         except FileNotFoundError:
@@ -137,7 +139,8 @@ def status():
 
 def log():
     try:
-        lines = [ln for ln in LOG.read_text(errors="ignore").splitlines()
+        lines = [ln for ln in LOG.read_text(
+                     encoding="utf-8", errors="ignore").splitlines()
                  if not LOG_NOISE.search(ln)]
     except FileNotFoundError:
         print("no log yet")

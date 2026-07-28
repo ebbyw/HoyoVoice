@@ -16,6 +16,13 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
+# Windows redirects stdout/stderr through cp1252 by default, and our log
+# lines are full of '→' — reconfigure before anything prints or the first
+# spoken line kills the process with UnicodeEncodeError
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "tools"))
 from classify import (classify, classify_chat, classify_infoscreen,  # noqa: E402
@@ -638,6 +645,11 @@ def main():
         cw.write_text("\n".join(sorted(w for w in words if w)))
         return cw
 
+    # settings.ocr_engine (Windows): auto | rapid | windows — the native
+    # Windows engine is much faster on weak CPUs; rapid scores better
+    import os
+    os.environ.setdefault("HOYOVOICE_OCR_ENGINE",
+                          VOICES.get("settings", {}).get("ocr_engine", "auto"))
     ocr = backend.create_ocr(ROOT, custom_words_file())
 
     candidate, candidate_count = None, 0
@@ -726,6 +738,9 @@ def main():
 
             if not observing["on"]:
                 candidate, candidate_count = None, 0
+                # keep the stall timer fresh while paused, or resuming
+                # instantly trips the "capture stalled" watchdog
+                last_frame_change = now
                 continue
 
             # Watchdog: capture keeps writing frames even on static screens,
