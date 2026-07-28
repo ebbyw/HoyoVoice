@@ -159,8 +159,12 @@ def metrics():
     mins = max(up / 60, 1e-6)
     now = time.monotonic()
     recent = [p for t, p in vad_history if t >= now - 3.0]
+    # signal level (mid-channel dB) separates "no speech" from true
+    # silence: ~-60dB = digital silence (wrong input?), higher = audio
+    recent_db = [m for t, m, s in energy_history if t >= now - 3.0]
+    lvl = f" {max(recent_db):.0f}dB" if recent_db else ""
     return {
-        "vad": (f"{len(recent)}ch max={max(recent):.2f}" if recent
+        "vad": (f"{len(recent)}ch max={max(recent):.2f}{lvl}" if recent
                 else "NO AUDIO"),
         "uptime": f"{up // 3600}h{(up % 3600) // 60:02d}m",
         "spoken": stats["spoken"],
