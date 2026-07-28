@@ -89,6 +89,14 @@ VAD_PEAK = 0.85               # a single decisive spike counts (robot voices
 # sustained moderate probability also counts as voiced
 VAD_WEAK_THRESHOLD = 0.25
 VAD_WEAK_HITS = 8             # ~256ms of moderately speech-like audio
+# the gate's lookback must never reach back before the line appeared on
+# screen — otherwise the PREVIOUS speaker's VO tail counts as evidence that
+# THIS line is voiced (false skip on fast auto-advance transitions, where
+# the next subtitle lands <0.5s after the old VO ends). No backward margin:
+# real VO keeps playing well past the OCR sighting, so post-appearance hits
+# are always enough; only a sub-half-second grunt that ends before OCR sees
+# the text would slip through, and the mid-play yield covers late starts.
+VAD_LINE_MARGIN = 0.0
 
 vad_history = deque(maxlen=400)
 # per-block stereo energy: (t, mid_dB, side_dB). Game VO is center-panned
@@ -671,6 +679,7 @@ def main():
 
     candidate, candidate_count = None, 0
     candidate_growing = False
+    candidate_t0 = 0.0          # when the current line was FIRST seen on screen
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
@@ -885,6 +894,10 @@ def main():
                 candidate_growing = (candidate is not None
                                      and candidate[0] == key[0]
                                      and key[1].startswith(candidate[1]))
+                if not candidate_growing:
+                    # genuinely new line (not the typewriter extending the
+                    # current one) — anchor the VAD gate window here
+                    candidate_t0 = time.monotonic()
                 candidate, candidate_count = key, 1
             # a line ending mid-sentence is probably still typing its next
             # visual row — hold a few extra reads so we speak it whole
@@ -975,17 +988,21 @@ def main():
                    or time.monotonic() - vad_history[0][0] < VAD_LOOKBACK):
                 time.sleep(0.1)
             t_stable = time.monotonic()
-            voiced = is_voiced(t_stable - VAD_LOOKBACK)
+            # never look back past the line's on-screen appearance: audio
+            # before that belongs to the PREVIOUS line's VO, not this one
+            gate_since = max(t_stable - VAD_LOOKBACK,
+                             candidate_t0 - VAD_LINE_MARGIN)
+            voiced = is_voiced(gate_since)
             deadline = t_stable + VAD_WAIT
             while not voiced and time.monotonic() < deadline:
                 time.sleep(0.05)
-                voiced = is_voiced(t_stable - VAD_LOOKBACK)
+                voiced = is_voiced(gate_since)
             if not voiced:
                 quiet_deadline = time.monotonic() + 2.5
                 while time.monotonic() < quiet_deadline:
                     if speech_hits(time.monotonic() - 0.4, threshold=0.25) == 0:
                         break
-                    if is_voiced(t_stable - VAD_LOOKBACK):
+                    if is_voiced(gate_since):
                         voiced = True
                         break
                     time.sleep(0.1)
@@ -994,7 +1011,8 @@ def main():
             mid_up, side_up = center_burst(t_stable)
             # center SFX (explosions, magic flashes) are mid-panned like VO —
             # demand at least faint speechiness so booms don't count
-            vad_peak = max((p for t, p in vad_history if t >= t_stable - 1.2),
+            vad_peak = max((p for t, p in vad_history
+                            if t >= max(t_stable - 1.2, gate_since)),
                            default=0.0)
             if (not voiced and mid_up >= ENERGY_MID_BURST
                     and side_up <= ENERGY_SIDE_FLAT
@@ -1026,7 +1044,7 @@ def main():
                 "spoken", "spoken", state["speaker"], speak_text,
                 voice, speed, can_replay=True, shot=True)
             gate_max = max((p for t, p in vad_history
-                            if t >= t_stable - VAD_LOOKBACK), default=-1.0)
+                            if t >= gate_since), default=-1.0)
             print(f"[{state['speaker'] or 'Narrator'} → {voice} ×{speed} "
                   f"gate={gate_max:.2f} mid+{mid_up:.1f} side+{side_up:.1f}] "
                   f"{speak_text}", flush=True)
