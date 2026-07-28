@@ -17,6 +17,9 @@ from pathlib import Path
 
 SAMPLE_RATE = 48000
 CHANNELS = 2
+# hide child console windows (ffmpeg, OCR daemon) — without this, every
+# subprocess of a windowless parent pops its own console
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def _sd():
@@ -29,7 +32,7 @@ def _list_dshow_video():
     p = subprocess.run(
         ["ffmpeg", "-hide_banner", "-f", "dshow",
          "-list_devices", "true", "-i", "dummy"],
-        capture_output=True, text=True)
+        capture_output=True, text=True, creationflags=NO_WINDOW)
     vid = []
     section = None
     for line in p.stderr.splitlines():
@@ -101,7 +104,8 @@ class VideoCapture:
                     "-y", str(record_path)]
         # stdin pipe: 'q' is the only clean-shutdown channel on Windows
         self.proc = subprocess.Popen(
-            cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL)
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+            creationflags=NO_WINDOW)
 
     def finalize(self, timeout=8.0):
         """No SIGINT on Windows — 'q' on stdin asks ffmpeg to finalize."""
@@ -242,7 +246,7 @@ class OcrDaemon:
             [sys.executable, str(self.root / "tools" / "ocrd_win.py"),
              str(self.custom_words)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            text=True, bufsize=1)
+            text=True, bufsize=1, creationflags=NO_WINDOW)
 
     def recognize(self, image_path):
         try:

@@ -63,9 +63,11 @@ def start():
     log = open(LOG, "w")
     kw = {}
     if WIN:
+        # CREATE_NO_WINDOW (hidden console, inherited by ffmpeg/ocr children)
+        # — do NOT combine with DETACHED_PROCESS: they're mutually exclusive,
+        # and a detached parent makes each console child pop its own window
         kw["creationflags"] = (subprocess.CREATE_NEW_PROCESS_GROUP
-                               | subprocess.CREATE_NO_WINDOW
-                               | subprocess.DETACHED_PROCESS)
+                               | subprocess.CREATE_NO_WINDOW)
     else:
         kw["start_new_session"] = True   # group leader → killpg reaches children
     p = subprocess.Popen([str(VENV_PY), str(ROOT / "live.py")],
