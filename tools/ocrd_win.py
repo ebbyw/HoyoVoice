@@ -60,11 +60,11 @@ class WindowsEngine:
     def __init__(self):
         import asyncio
         from winsdk.windows.globalization import Language
-        from winsdk.windows.graphics.imaging import BitmapDecoder
+        from winsdk.windows.graphics import imaging
         from winsdk.windows.media.ocr import OcrEngine
         from winsdk.windows.storage import FileAccessMode, StorageFile
         self.asyncio = asyncio
-        self.BitmapDecoder = BitmapDecoder
+        self.imaging = imaging
         self.StorageFile = StorageFile
         self.FileAccessMode = FileAccessMode
         self.engine = (OcrEngine.try_create_from_language(Language("en-US"))
@@ -72,13 +72,34 @@ class WindowsEngine:
         if self.engine is None:
             raise RuntimeError("no OCR language pack available "
                                "(install English in Windows language settings)")
+        try:
+            self.max_dim = int(OcrEngine.max_image_dimension)
+        except Exception:
+            self.max_dim = 2600
         self.loop = asyncio.new_event_loop()
 
     async def _run(self, path):
+        img = self.imaging
         f = await self.StorageFile.get_file_from_path_async(os.path.abspath(path))
         stream = await f.open_async(self.FileAccessMode.READ)
-        decoder = await self.BitmapDecoder.create_async(stream)
-        bmp = await decoder.get_software_bitmap_async()
+        decoder = await img.BitmapDecoder.create_async(stream)
+        w0, h0 = decoder.pixel_width, decoder.pixel_height
+        # upscale toward the engine's size limit: Windows OCR is markedly
+        # more accurate on small game fonts when the text is larger
+        scale = min(2.0, (self.max_dim - 4) / max(w0, h0, 1))
+        if scale > 1.05:
+            transform = img.BitmapTransform()
+            transform.scaled_width = int(w0 * scale)
+            transform.scaled_height = int(h0 * scale)
+            transform.interpolation_mode = img.BitmapInterpolationMode.CUBIC
+            bmp = await decoder.get_software_bitmap_async(
+                img.BitmapPixelFormat.BGRA8,
+                img.BitmapAlphaMode.PREMULTIPLIED,
+                transform,
+                img.ExifOrientationMode.IGNORE_EXIF_ORIENTATION,
+                img.ColorManagementMode.DO_NOT_COLOR_MANAGE)
+        else:
+            bmp = await decoder.get_software_bitmap_async()
         W, H = bmp.pixel_width, bmp.pixel_height
         result = await self.engine.recognize_async(bmp)
         blocks = []

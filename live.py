@@ -130,14 +130,22 @@ def frame_is_dark():
         return False
 
 
+latest_ocr = {"blocks": None}     # raw blocks of the current frame (debug)
+
+
 def save_shot(eid):
-    """Downscaled screenshot of the current frame for the dashboard log."""
+    """Downscaled screenshot of the current frame for the dashboard log,
+    plus the raw OCR blocks (shots/<id>.json) for layout debugging —
+    open /shots/<id>.json in the browser to see what the engine saw."""
     try:
         from PIL import Image
         img = Image.open(FRAME)
         img.thumbnail((854, 854))       # ~480p, legible and small (~60 KB)
         SHOTS.mkdir(parents=True, exist_ok=True)
         img.save(SHOTS / f"{eid}.jpg", quality=68)
+        if latest_ocr["blocks"] is not None:
+            (SHOTS / f"{eid}.json").write_text(json.dumps(
+                latest_ocr["blocks"], indent=1), encoding="utf-8")
         for p in sorted(SHOTS.glob("*.jpg"),
                         key=lambda p: p.stat().st_mtime)[:-SHOTS_KEEP]:
             p.unlink()
@@ -656,6 +664,8 @@ def main():
     candidate_growing = False
     candidate_t0 = 0.0          # when the current line was FIRST seen on screen
     last_dup_logged = None
+    last_unknown_logged = None
+    unstable_count = 0
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
@@ -778,6 +788,7 @@ def main():
             if blocks is None:          # daemon died; it respawned itself
                 continue
             stats["ocr_ms"].append(int((time.time() - t0) * 1000))
+            latest_ocr["blocks"] = blocks
 
             # --- Reading-mode screens (Quick Read books, info/profile
             # screens, message/group-chat panels): incremental reading ---
@@ -868,6 +879,13 @@ def main():
                          or (spk or "").lower() == "narrator"
                          or spk in VOICES.get("always_voiced", []))
                 if not known and not has_continue_hint(blocks):
+                    # visible in the log (once per line): silent drops here
+                    # made missing-speaker/missing-hint issues undiagnosable
+                    ukey = (spk, normalize_text(state["dialogue"]))
+                    if last_unknown_logged != ukey and state["dialogue"]:
+                        last_unknown_logged = ukey
+                        add_event("skipped (unknown speaker, no Continue hint)",
+                                  "skip", spk, state["dialogue"], shot=True)
                     candidate, candidate_count = None, 0
                     continue
 
@@ -886,6 +904,22 @@ def main():
                     # genuinely new line (not the typewriter extending the
                     # current one) — anchor the VAD gate window here
                     candidate_t0 = time.monotonic()
+                # OCR-jitter detector: the same on-screen line reading
+                # differently on consecutive frames resets stabilization
+                # forever and NOTHING gets spoken or logged. Flag it.
+                if (candidate is not None and candidate[0] == key[0]
+                        and not candidate_growing and candidate[1]
+                        and key[1]
+                        and difflib.SequenceMatcher(
+                            None, key[1], candidate[1]).ratio() >= 0.85):
+                    unstable_count += 1
+                    if unstable_count == 6:
+                        add_event("OCR unstable — text won't stabilize",
+                                  "yield", state["speaker"],
+                                  state["dialogue"], shot=True)
+                        unstable_count = 0
+                else:
+                    unstable_count = 0
                 candidate, candidate_count = key, 1
             # a line ending mid-sentence is probably still typing its next
             # visual row — hold a few extra reads so we speak it whole
@@ -924,14 +958,29 @@ def main():
                         break
                     if ext_base is None or len(o) > len(ext_base):
                         ext_base = o
+                    continue
+                # fuzzy tail: OCR jitter re-reads the last visual row with a
+                # near-miss ("thereetoo" vs "thereatoo") that exact substring
+                # checks can't catch
+                if len(o) > len(new_norm) >= 12:
+                    tail = o[-(len(new_norm) + 6):]
+                    if difflib.SequenceMatcher(
+                            None, new_norm, tail).ratio() >= 0.85:
+                        dup = True
+                        break
             if dup:
-                # surface dedupe skips (once per line) — invisible skips made
-                # "why didn't it speak?" undiagnosable from the dashboard.
-                # The window persists across restarts via spoken_cache.json.
-                if last_dup_logged != key:
-                    last_dup_logged = key
+                # surface dedupe skips — invisible skips made "why didn't it
+                # speak?" undiagnosable. Collapse OCR-jitter variants of the
+                # same line (each stabilizes as a slightly different read)
+                # into ONE log entry. Window persists via spoken_cache.json.
+                similar = (last_dup_logged is not None
+                           and last_dup_logged[0] == key[0]
+                           and difflib.SequenceMatcher(
+                               None, key[1], last_dup_logged[1]).ratio() >= 0.9)
+                if not similar:
                     add_event("repeat (deduped)", "skip", state["speaker"],
                               state["dialogue"])
+                last_dup_logged = key
                 continue
 
             speak_text = state["dialogue"]
