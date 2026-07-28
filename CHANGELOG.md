@@ -15,6 +15,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 - Chat sender labels are OCR-jittered ("Ashveil"/"Ashvell"/"Ashval"), which auto-cast one character three ways and re-queued every message per variant (repeats while scrolling or idling, interleaved out-of-order reads). Senders now canonicalize per chat session, messages dedupe on text alone (fuzzy), and only short echoes keep the sender in the key.
+- Loading-screen and system-screen detection no longer depends on how an OCR engine chunks the bottom-left build string: the marker is matched on the joined strip and tolerates dropped underscores, so loading-screen lore is read (and epilepsy-style system screens stay silent) on both engines.
+- VAD tail-reader can no longer trail the live audio edge under load — stale audio stamped with fresh timestamps made the gate judge "now" against minutes-old sound, so real voiceover was spoken over. Backlogs >1s are dropped and the dashboard shows `LAG Xs`.
 
 ## [0.5.1] - 2026-07-27
 

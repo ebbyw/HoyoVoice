@@ -7,6 +7,7 @@ Layout profile: Honkai Star Rail, standard dialogue screen.
 Usage: python3 classify.py <ocr.json>
 """
 import json
+import re
 import sys
 
 # HSR dialogue layout (normalized, bottom-left origin). The box sits at
@@ -138,15 +139,30 @@ def classify_quickread(blocks):
     return [b["text"] for b in body]
 
 
+def _bottom_left_strip(blocks):
+    """Joined text of the bottom-left build/UID strip. Engines disagree on
+    how they chunk it — Apple Vision returns one block, Windows OCR splits
+    it and often drops the underscores — so match on the JOINED text."""
+    strip = [b for b in blocks
+             if b["y"] < 0.08 and b["x"] + b["w"] / 2 < 0.45]
+    strip.sort(key=lambda b: b["x"])
+    return " ".join(b["text"] for b in strip)
+
+
 def classify_loading(blocks):
     """Detect loading screens via the long version string bottom-left
     (e.g. 'OSPRODNAPS54.4.1_D…_A…_L… UID:…'). Their title + lore text sit in
     the dialogue bands and would otherwise misparse as a speaker + line.
     Returns the lore text or None."""
     conf = [b for b in blocks if b["confidence"] >= MIN_CONF]
-    marker = any(b["y"] < 0.06 and b["x"] < 0.35
-                 and "UID:" in b["text"] and b["text"].count("_") >= 2
-                 for b in conf)
+    strip = _bottom_left_strip(conf)
+    up = strip.upper()
+    # UID is what separates loading screens from other system screens; the
+    # build-string evidence is tolerant because engines mangle it
+    # differently (underscores dropped, split across blocks)
+    marker = "UID" in up and (strip.count("_") >= 2
+                              or re.search(r"\d\.\d", strip) is not None
+                              or len(strip) >= 40)
     if not marker:
         return None
     center = [b for b in conf
@@ -167,9 +183,11 @@ def has_continue_hint(blocks):
 
 def _version_marker(blocks):
     """Bottom-left build string ('OSPRODNAPS…_D…_A…') marks system screens:
-    loading screens, epilepsy warnings, etc."""
-    return any(b["y"] < 0.06 and b["x"] < 0.35 and b["text"].count("_") >= 2
-               for b in blocks)
+    loading screens, epilepsy warnings, etc. Matched on the joined strip —
+    OCR engines chunk it differently and may drop the underscores."""
+    strip = _bottom_left_strip(blocks)
+    return (strip.count("_") >= 2
+            or (re.search(r"\d\.\d", strip) is not None and len(strip) >= 30))
 
 
 # Floating overlay dialog (event-hub host bubble): portrait + speech box in
