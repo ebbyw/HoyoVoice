@@ -22,6 +22,58 @@ CHANNELS = 2
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+def _refresh_path_from_registry():
+    """Rebuild PATH the way a fresh shell would (machine + user registry
+    values). The launching shell often predates installer PATH edits —
+    e.g. winget's ffmpeg — and stale PATHs otherwise follow us into every
+    subprocess (WinError 2)."""
+    import os
+    import winreg
+    parts = []
+    for hive, key in (
+            (winreg.HKEY_LOCAL_MACHINE,
+             r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+            (winreg.HKEY_CURRENT_USER, r"Environment")):
+        try:
+            with winreg.OpenKey(hive, key) as k:
+                val, _ = winreg.QueryValueEx(k, "Path")
+                parts.append(os.path.expandvars(val))
+        except OSError:
+            pass
+    merged = ";".join(p for p in parts if p)
+    if merged:
+        os.environ["PATH"] = os.environ.get("PATH", "") + ";" + merged
+
+
+def _ensure_ffmpeg():
+    """Make sure 'ffmpeg' resolves in this process; returns its path."""
+    import os
+    import shutil
+    from glob import glob
+    ff = shutil.which("ffmpeg")
+    if ff:
+        return ff
+    _refresh_path_from_registry()
+    ff = shutil.which("ffmpeg")
+    if ff:
+        return ff
+    local = os.environ.get("LOCALAPPDATA", "")
+    for pat in (rf"{local}\Microsoft\WinGet\Links\ffmpeg.exe",
+                rf"{local}\Microsoft\WinGet\Packages\Gyan.FFmpeg*\**\bin\ffmpeg.exe"):
+        hits = glob(pat, recursive=True)
+        if hits:
+            os.environ["PATH"] = (os.path.dirname(hits[0]) + ";"
+                                  + os.environ.get("PATH", ""))
+            return hits[0]
+    raise RuntimeError(
+        "ffmpeg not found — run setup.ps1, or open a new terminal so PATH "
+        "updates take effect")
+
+
+if sys.platform == "win32":            # no-op when imported for tests elsewhere
+    _ensure_ffmpeg()
+
+
 def _sd():
     import sounddevice
     return sounddevice
