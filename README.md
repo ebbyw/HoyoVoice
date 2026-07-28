@@ -33,7 +33,7 @@ You'll also need:
 - A UVC HDMI capture card (built with a Genki ShadowCast 3; any UVC device should work — even a webcam pointed at a screen, selectable in the dashboard)
 - A console or device running the game (on PS5, **disable HDCP** in Settings → System → HDMI or you'll capture black)
 - macOS: Homebrew, Xcode Command Line Tools (`xcode-select --install`), Python 3.13 (`brew install python@3.13`)
-- Windows: winget (ships with Windows) — `setup.ps1` installs ffmpeg and Python itself
+- Windows: winget (ships with Windows) — `setup.ps1` installs ffmpeg and Python itself. Any GPU is strongly recommended: `setup.ps1` installs DirectML, which runs the accurate OCR engine at ~150ms/frame instead of ~4s on CPU (without it the app falls back to the built-in Windows OCR, which misreads small game fonts).
 - ~2 GB of disk for models and the Python environment; the game feed itself never leaves your machine
 
 ## Quick start
