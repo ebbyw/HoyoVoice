@@ -952,8 +952,16 @@ def main():
             synth_thread.start()
 
             # --- VAD gate ---
+            # if the audio stream is dead we can't gate — after a grace
+            # period speak anyway rather than deadlocking the whole loop
+            # (commands, record stop, pause all run on this thread)
+            gate_deadline = time.monotonic() + 5.0
             while (not vad_history
                    or time.monotonic() - vad_history[0][0] < VAD_LOOKBACK):
+                if time.monotonic() > gate_deadline:
+                    print("[VAD gate: no audio stream — speaking ungated]",
+                          flush=True)
+                    break
                 time.sleep(0.1)
             t_stable = time.monotonic()
             # never look back past the line's on-screen appearance: audio

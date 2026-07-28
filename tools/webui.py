@@ -319,10 +319,29 @@ def start_webui(shared, port=8470):
     # "0.0.0.0" to reach the dashboard from other machines you trust
     bind = shared["voices"].get("settings", {}).get(
         "dashboard_bind", "127.0.0.1")
-    threading.Thread(
-        target=lambda: app.run(host=bind, port=port, debug=False,
-                               use_reloader=False),
-        daemon=True).start()
+
+    # fail LOUDLY if the port is taken (usually an orphaned instance) —
+    # otherwise the serving thread dies silently and the app runs headless
+    import socket
+    import sys
+    probe = socket.socket()
+    try:
+        probe.bind((bind if bind != "0.0.0.0" else "", port))
+        probe.close()
+    except OSError:
+        print(f"FATAL: dashboard port {port} is already in use — another "
+              "HoyoVoice instance is still running (check Task Manager / "
+              "Activity Monitor for stray python or ffmpeg, or run the "
+              "launcher's stop command), then start again", flush=True)
+        sys.exit(1)
+
+    def serve():
+        try:
+            app.run(host=bind, port=port, debug=False, use_reloader=False)
+        except Exception as e:
+            print(f"FATAL: dashboard server died: {e}", flush=True)
+
+    threading.Thread(target=serve, daemon=True).start()
     if bind != "127.0.0.1":
         print(f"dashboard reachable on all interfaces (bind {bind})",
               flush=True)

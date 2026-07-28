@@ -52,10 +52,25 @@ def pid_alive(pid):
         return False
 
 
+def port_busy(port=8470):
+    import socket
+    s = socket.socket()
+    s.settimeout(0.5)
+    try:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+    finally:
+        s.close()
+
+
 def start():
     if pid_alive(read_pid()):
         print("already running")
         return
+    if port_busy():
+        print("dashboard port 8470 is in use — an orphaned instance is still "
+              "running.\nWindows: taskkill /F /IM ffmpeg.exe & check Task "
+              "Manager for python.exe\nmacOS: ./hoyovoice.sh stop")
+        sys.exit(1)
     if not VENV_PY.exists():
         print(f"venv python not found: {VENV_PY}\n"
               f"run {'setup.ps1' if WIN else './setup.sh'} first")

@@ -194,6 +194,8 @@ class AudioCapture:
     WASAPI auto_convert handles devices whose native rate isn't 48 kHz.
     """
 
+    RETRY_COOLDOWN = 5.0        # the watchdog polls every 30 ms — don't spam
+
     def __init__(self, devices, pcm_path):
         self.devices = devices
         self.pcm = pcm_path
@@ -201,30 +203,51 @@ class AudioCapture:
         self.fh = None
         self.lock = threading.Lock()
         self._dead = False
+        self._next_retry = 0.0
+        self._last_want = None
 
     def _find_device(self):
+        """Match by name, preferring WASAPI entries: sounddevice lists each
+        physical device once per host API, and MME truncates names to ~31
+        chars ('Digital Audio Interface (Shado…'), which breaks matching."""
+        import time
         sd = _sd()
-        want = (self.devices["audio"] or "").lower()
-        best = None
-        for idx, dev in enumerate(sd.query_devices()):
-            if dev["max_input_channels"] < 1:
-                continue
-            if dev["name"].lower() == want:
+        want = (self.devices["audio"] or "").strip().lower()
+        try:
+            wasapi = next((i for i, h in enumerate(sd.query_hostapis())
+                           if "wasapi" in h["name"].lower()), None)
+        except Exception:
+            wasapi = None
+        inputs = [(i, d) for i, d in enumerate(sd.query_devices())
+                  if d["max_input_channels"] >= 1]
+        ranked = ([(i, d) for i, d in inputs if d["hostapi"] == wasapi]
+                  + [(i, d) for i, d in inputs if d["hostapi"] != wasapi])
+        for idx, dev in ranked:
+            if dev["name"].strip().lower() == want:
                 return idx, dev
-            if best is None and want and want in dev["name"].lower():
-                best = (idx, dev)
-        if best:
-            return best
+        for idx, dev in ranked:
+            if want and want in dev["name"].strip().lower():
+                return idx, dev
+        print(f"[audio] no input matches {self.devices['audio']!r}. "
+              "Available inputs:", flush=True)
+        for idx, dev in ranked:
+            print(f"[audio]   {dev['name']!r}", flush=True)
         return None, None
 
     def restart(self):
+        import time
+        want = self.devices["audio"]
+        if want != self._last_want:      # dashboard hot-swap: never defer
+            self._next_retry = 0.0
+        self._last_want = want
+        if time.time() < self._next_retry:
+            return
         self.kill()
         sd = _sd()
         idx, dev = self._find_device()
         if idx is None:
-            print(f"[audio] input device not found: "
-                  f"{self.devices['audio']!r}", flush=True)
             self._dead = True
+            self._next_retry = time.time() + self.RETRY_COOLDOWN
             return
         in_ch = min(CHANNELS, dev["max_input_channels"])
         self.fh = open(self.pcm, "wb", buffering=0)   # truncate, unbuffered
@@ -258,6 +281,11 @@ class AudioCapture:
             self._close_fh()
             self.stream = None
             self._dead = True
+            self._next_retry = time.time() + self.RETRY_COOLDOWN
+            return
+        self._next_retry = 0.0
+        print(f"[audio] capturing from {dev['name']!r} "
+              f"({in_ch}ch @ {SAMPLE_RATE})", flush=True)
 
     def _close_fh(self):
         with self.lock:
