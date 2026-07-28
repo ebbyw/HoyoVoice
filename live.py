@@ -91,6 +91,7 @@ VAD_WEAK_HITS = 8             # ~256ms of moderately speech-like audio
 VAD_LINE_MARGIN = 0.0
 
 vad_history = deque(maxlen=400)
+vad_lag = {"s": 0.0}          # how far the VAD tail-reader trails the live edge
 # per-block stereo energy: (t, mid_dB, side_dB). Game VO is center-panned
 # (mid), music/ambience is wide (side) — a mid-only burst at line start is
 # voiceover even when the VAD can't recognize the voice as speech.
@@ -178,8 +179,9 @@ def metrics():
     # silence: ~-60dB = digital silence (wrong input?), higher = audio
     recent_db = [m for t, m, s in energy_history if t >= now - 3.0]
     lvl = f" {max(recent_db):.0f}dB" if recent_db else ""
+    lag = f" LAG {vad_lag['s']:.1f}s" if vad_lag["s"] > 0.5 else ""
     return {
-        "vad": (f"{len(recent)}ch max={max(recent):.2f}{lvl}" if recent
+        "vad": (f"{len(recent)}ch max={max(recent):.2f}{lvl}{lag}" if recent
                 else "NO AUDIO"),
         "uptime": f"{up // 3600}h{(up % 3600) // 60:02d}m",
         "spoken": stats["spoken"],
@@ -216,7 +218,20 @@ def audio_thread():
             fh.close()
             fh, pos = None, 0
             continue
-        if size - pos < BLOCK:
+        backlog = size - pos
+        vad_lag["s"] = backlog / AUDIO_BYTES_PER_SEC
+        if backlog > AUDIO_BYTES_PER_SEC:      # reader fell >1s behind
+            # stale audio with fresh timestamps poisons the gate: it judges
+            # "now" using minutes-old sound. Drop the backlog, rejoin near
+            # the live edge, re-prime the VAD.
+            print(f"[vad: reader lagged {vad_lag['s']:.1f}s — "
+                  "skipping to live]", flush=True)
+            pos = size - AUDIO_BYTES_PER_SEC // 2
+            pos -= pos % 4                     # stereo s16 frame alignment
+            fh.seek(pos)
+            warmup = 8
+            continue
+        if backlog < BLOCK:
             time.sleep(0.02)
             continue
         buf = fh.read(BLOCK)
