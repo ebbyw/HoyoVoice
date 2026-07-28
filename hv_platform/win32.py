@@ -62,7 +62,7 @@ def _refresh_path_from_registry():
     os.environ["PATH"] = _dedupe_path(os.pathsep.join(p for p in parts if p))
 
 
-_ffmpeg_checked = {"ok": False}
+_ffmpeg_path = {"p": None}
 
 
 def ensure_ffmpeg():
@@ -70,9 +70,11 @@ def ensure_ffmpeg():
 
     Called lazily (not at import) so a missing ffmpeg surfaces as a clear
     message from the capture backend rather than an import-time traceback.
+    The result is cached: capture restarts run on the watchdog path, and
+    shutil.which() stats every PATH entry.
     """
-    if _ffmpeg_checked["ok"]:
-        return shutil.which("ffmpeg")
+    if _ffmpeg_path["p"]:
+        return _ffmpeg_path["p"]
     ff = shutil.which("ffmpeg")
     if not ff:
         _refresh_path_from_registry()
@@ -93,7 +95,7 @@ def ensure_ffmpeg():
         raise RuntimeError(
             "ffmpeg not found — run setup.ps1, or open a new terminal so "
             "PATH updates take effect")
-    _ffmpeg_checked["ok"] = True
+    _ffmpeg_path["p"] = ff
     return ff
 
 
@@ -139,7 +141,7 @@ def _list_wasapi_inputs():
                        if "wasapi" in h["name"].lower()), None)
     except Exception:
         wasapi = None
-    for idx, dev in enumerate(sd.query_devices()):
+    for dev in sd.query_devices():
         if dev["max_input_channels"] < 1:
             continue
         if wasapi is not None and dev["hostapi"] != wasapi:
@@ -235,7 +237,6 @@ class AudioCapture:
         """Match by name, preferring WASAPI entries: sounddevice lists each
         physical device once per host API, and MME truncates names to ~31
         chars ('Digital Audio Interface (Shado…'), which breaks matching."""
-        import time
         sd = _sd()
         want = (self.devices["audio"] or "").strip().lower()
         try:
@@ -260,7 +261,6 @@ class AudioCapture:
         return None, None
 
     def restart(self):
-        import time
         want = self.devices["audio"]
         if want != self._last_want:      # dashboard hot-swap: never defer
             self._next_retry = 0.0
