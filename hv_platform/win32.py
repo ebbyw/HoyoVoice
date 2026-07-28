@@ -252,40 +252,83 @@ class AudioCapture:
         in_ch = min(CHANNELS, dev["max_input_channels"])
         self.fh = open(self.pcm, "wb", buffering=0)   # truncate, unbuffered
         self._dead = False
+        self._rs_next = 0.0               # resampler phase (fallback mode)
 
-        def callback(indata, frames, t, status):
-            # indata: int16 (frames, in_ch). Upmix mono; never block long.
-            buf = indata
-            if in_ch == 1:
-                buf = indata.repeat(2, axis=1)
-            with self.lock:
-                if self.fh is not None:
-                    try:
-                        self.fh.write(buf.tobytes())
-                    except OSError:
-                        self._dead = True
+        def make_callback(sr_in):
+            import numpy as np
+            step = sr_in / SAMPLE_RATE    # input samples per output sample
 
+            def callback(indata, frames, t, status):
+                # indata: int16 (frames, in_ch). Upmix mono, resample if the
+                # device couldn't open at 48k; never block long.
+                buf = indata
+                if in_ch == 1:
+                    buf = buf.repeat(2, axis=1)
+                if sr_in != SAMPLE_RATE:
+                    n = len(buf)
+                    pos = np.arange(self._rs_next, n, step)
+                    if len(pos):
+                        src = np.arange(n)
+                        buf = np.stack(
+                            [np.interp(pos, src, buf[:, c]) for c in (0, 1)],
+                            axis=1).astype(np.int16)
+                        self._rs_next = pos[-1] + step - n
+                    else:
+                        self._rs_next -= n
+                        return
+                with self.lock:
+                    if self.fh is not None:
+                        try:
+                            self.fh.write(np.ascontiguousarray(buf).tobytes())
+                        except OSError:
+                            self._dead = True
+            return callback
+
+        # WASAPI extra settings are REJECTED by other host APIs (-9984), so
+        # only attach them when this device entry actually belongs to WASAPI.
+        # Ladder: 48k (+wasapi auto-convert if applicable) → 48k plain →
+        # device-native rate with software resampling to keep the 48k
+        # stereo s16 PCM contract intact.
+        is_wasapi = False
+        try:
+            hostapi = sd.query_hostapis(dev["hostapi"])
+            is_wasapi = "wasapi" in hostapi["name"].lower()
+        except Exception:
+            pass
         extra = None
-        try:
-            extra = sd.WasapiSettings(auto_convert=True)
-        except (AttributeError, TypeError):
-            pass                          # older sounddevice: try without
-        try:
-            self.stream = sd.InputStream(
-                device=idx, samplerate=SAMPLE_RATE, channels=in_ch,
-                dtype="int16", blocksize=1024, callback=callback,
-                extra_settings=extra)
-            self.stream.start()
-        except Exception as e:
-            print(f"[audio] failed to open {dev['name']!r}: {e}", flush=True)
-            self._close_fh()
-            self.stream = None
-            self._dead = True
-            self._next_retry = time.time() + self.RETRY_COOLDOWN
-            return
-        self._next_retry = 0.0
-        print(f"[audio] capturing from {dev['name']!r} "
-              f"({in_ch}ch @ {SAMPLE_RATE})", flush=True)
+        if is_wasapi:
+            try:
+                extra = sd.WasapiSettings(auto_convert=True)
+            except (AttributeError, TypeError):
+                pass
+        native = int(dev.get("default_samplerate") or SAMPLE_RATE)
+        attempts = [(SAMPLE_RATE, extra)] if extra is not None else []
+        attempts += [(SAMPLE_RATE, None)]
+        if native != SAMPLE_RATE:
+            attempts += [(native, None)]
+        err = None
+        for sr_in, ex in attempts:
+            try:
+                self.stream = sd.InputStream(
+                    device=idx, samplerate=sr_in, channels=in_ch,
+                    dtype="int16", blocksize=1024,
+                    callback=make_callback(sr_in), extra_settings=ex)
+                self.stream.start()
+                self._next_retry = 0.0
+                mode = ("wasapi-convert" if ex is not None else
+                        "native" if sr_in == SAMPLE_RATE else
+                        f"resampled from {sr_in}")
+                print(f"[audio] capturing from {dev['name']!r} "
+                      f"({in_ch}ch @ {SAMPLE_RATE}, {mode})", flush=True)
+                return
+            except Exception as e:
+                err = e
+                self.stream = None
+        print(f"[audio] failed to open {dev['name']!r} "
+              f"(tried {[a[0] for a in attempts]}): {err}", flush=True)
+        self._close_fh()
+        self._dead = True
+        self._next_retry = time.time() + self.RETRY_COOLDOWN
 
     def _close_fh(self):
         with self.lock:
