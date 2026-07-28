@@ -655,6 +655,7 @@ def main():
     candidate, candidate_count = None, 0
     candidate_growing = False
     candidate_t0 = 0.0          # when the current line was FIRST seen on screen
+    last_dup_logged = None
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
@@ -924,6 +925,13 @@ def main():
                     if ext_base is None or len(o) > len(ext_base):
                         ext_base = o
             if dup:
+                # surface dedupe skips (once per line) — invisible skips made
+                # "why didn't it speak?" undiagnosable from the dashboard.
+                # The window persists across restarts via spoken_cache.json.
+                if last_dup_logged != key:
+                    last_dup_logged = key
+                    add_event("repeat (deduped)", "skip", state["speaker"],
+                              state["dialogue"])
                 continue
 
             speak_text = state["dialogue"]
