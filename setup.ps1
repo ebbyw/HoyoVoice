@@ -83,7 +83,10 @@ New-Item -ItemType Directory -Force -Path "captures", "tts_out" | Out-Null
 if (-not (Test-Path "voices.json")) { Copy-Item "voices.example.json" "voices.json" }
 
 Write-Host "== verifying capture device"
-$devs = (ffmpeg -hide_banner -f dshow -list_devices true -i dummy 2>&1) | Out-String
+# ffmpeg prints the device list to stderr; with ErrorActionPreference=Stop,
+# PS 5.1 turns redirected native stderr into a terminating NativeCommandError.
+# Route through cmd so the 2>&1 merge happens outside PowerShell.
+$devs = (cmd /c "ffmpeg -hide_banner -f dshow -list_devices true -i dummy 2>&1") | Out-String
 if ($devs -match "(?i)shadowcast") {
     Write-Host "capture card found"
 } else {
