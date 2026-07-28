@@ -24,10 +24,14 @@ from classify import (classify, classify_chat, classify_infoscreen,  # noqa: E40
                       has_continue_hint, narration_self_certain)
 from vad import CHUNK, SileroVAD  # noqa: E402
 from webui import start_webui  # noqa: E402
+from hv_platform import get_backend  # noqa: E402
+
+backend = get_backend()
 
 FRAME = ROOT / "captures" / "live_frame.jpg"
-# Continuous 48k stereo s16le stream captured by sox via CoreAudio.
-# ffmpeg's AVFoundation audio input drops ~12% of samples; sox is bit-perfect.
+# Continuous 48k stereo s16le stream (sox/CoreAudio on macOS, in-process
+# WASAPI on Windows). Never route audio through ffmpeg on macOS — its
+# AVFoundation input drops ~12% of samples.
 AUDIO_PCM = ROOT / "captures" / "game_audio_48k.pcm"
 AUDIO_BYTES_PER_SEC = 48000 * 2 * 2   # 48k, stereo, s16
 GAME_SLICE = ROOT / "captures" / "game_slice.pcm"
@@ -54,26 +58,7 @@ DEVICES = {
 }
 
 
-def list_devices():
-    """Enumerate AVFoundation video + audio device names."""
-    p = subprocess.run(
-        ["ffmpeg", "-hide_banner", "-f", "avfoundation",
-         "-list_devices", "true", "-i", ""],
-        capture_output=True, text=True)
-    vid, aud, section = [], [], None
-    for line in p.stderr.splitlines():
-        if "video devices" in line:
-            section = "v"
-            continue
-        if "audio devices" in line:
-            section = "a"
-            continue
-        m = re.search(r"\[\d+\] (.+)$", line)
-        if m and section == "v":
-            vid.append(m.group(1))
-        elif m and section == "a":
-            aud.append(m.group(1))
-    return vid, aud
+list_devices = backend.list_devices
 SAMPLE_FPS = 6
 STABLE_READS = 2
 DEDUP_WINDOW = 3              # a line repeats only if it's within the last N messages
@@ -188,9 +173,10 @@ def metrics():
 
 
 def audio_thread():
-    """Tail the 48k stereo PCM that sox appends to; downmix + decimate to
-    16k mono chunks for the VAD. File writes never block on a consumer, so
-    nothing here can cause capture drops. Handles truncation on respawn."""
+    """Tail the 48k stereo PCM the audio backend appends to; downmix +
+    decimate to 16k mono chunks for the VAD. File writes never block on a
+    consumer, so nothing here can cause capture drops. Handles truncation
+    on respawn."""
     vad = SileroVAD(ROOT / "tools" / "silero_vad.onnx")
     import numpy as np
     BLOCK = CHUNK * 3 * 2 * 2   # 512@16k = 1536 stereo frames @48k = 6144 B
@@ -207,7 +193,7 @@ def audio_thread():
             pos = size          # join at the live edge
             fh.seek(pos)
             warmup = 32
-        if size < pos:          # sox respawned and truncated the file
+        if size < pos:          # capture respawned and truncated the file
             fh.close()
             fh, pos = None, 0
             continue
@@ -399,19 +385,22 @@ def pick_voice(speaker):
 
 
 class Speech:
-    """Owns the TTS model, sentiment analyzer, and playback process."""
+    """Owns the TTS engine, sentiment analyzer, and playback."""
 
     def __init__(self):
-        from mlx_audio.tts.generate import load_model
         from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
         import numpy as np
         import soundfile as sf
         self.np, self.sf = np, sf
-        self.model = load_model("prince-canuma/Kokoro-82M")
+        self.tts = backend.create_tts()
+        self.player = backend.create_player()
         self.sia = SentimentIntensityAnalyzer()
-        self.player = None
         self.t_play = None
         self.qr_playing = False
+
+    @property
+    def playing(self):
+        return self.player.playing
 
     def sentiment_speed(self, text):
         """Map sentiment to delivery pace: excited slightly faster, somber slower."""
@@ -424,9 +413,7 @@ class Speech:
         return max(0.9, min(1.12, mult))
 
     def stop(self):
-        interrupted = self.player and self.player.poll() is None
-        if interrupted:
-            self.player.kill()
+        interrupted = self.player.stop()
         self.qr_playing = False
         # if a recorded clip was cut short (yield/interrupt), trim it in the mix
         if interrupted and recording["on"] and recording["clips"]:
@@ -444,26 +431,23 @@ class Speech:
                           flags=re.IGNORECASE)
         speed = round(base_speed * self.sentiment_speed(text), 3)
         t0 = time.time()
-        segs = [self.np.array(r.audio) for r in
-                self.model.generate(text, voice=voice, speed=speed,
-                                    lang_code="a")]
+        audio = self.tts.synth(text, voice, speed)
         synth_ms = int((time.time() - t0) * 1000)
-        if segs:
+        if audio is not None:
             stats["synth_ms"].append(synth_ms)
-        return segs, speed, synth_ms
+        return audio, speed, synth_ms
 
-    def play(self, segs, qr=False):
-        if not segs:
+    def play(self, audio, qr=False):
+        if audio is None or not len(audio):
             return
         self.stop()
         self.qr_playing = qr
-        audio = self.np.concatenate(segs)
         # trim Kokoro's silence padding: snappier starts, tight handoffs
         loud = self.np.where(self.np.abs(audio) > 0.012)[0]
         if len(loud):
             audio = audio[max(loud[0] - 800, 0):loud[-1] + 1600]
         self.sf.write(WAV, audio, 24000)
-        self.player = subprocess.Popen(["afplay", str(WAV)])
+        self.player.play(WAV, audio, 24000)
         self.t_play = time.monotonic()
         if recording["on"]:
             CLIPS.mkdir(parents=True, exist_ok=True)
@@ -475,14 +459,14 @@ class Speech:
                 {"file": str(clip), "start": offset, "end": None})
 
     def say(self, text, voice, base_speed=1.0):
-        segs, speed, synth_ms = self.synth(text, voice, base_speed)
-        self.play(segs)
+        audio, speed, synth_ms = self.synth(text, voice, base_speed)
+        self.play(audio)
         return synth_ms, speed
 
 
 def mux_recording(raw, clips, out, s0, s1):
-    """Combine: video (ffmpeg mkv) + game audio (exact byte-slice of the sox
-    stream between recording start/stop) + TTS clips at wall offsets."""
+    """Combine: video (ffmpeg mkv) + game audio (exact byte-slice of the
+    PCM stream between recording start/stop) + TTS clips at wall offsets."""
     # extract the game-audio slice
     n = 0
     with open(AUDIO_PCM, "rb") as src, open(GAME_SLICE, "wb") as dst:
@@ -633,36 +617,13 @@ def main():
                         "devices": DEVICES, "list_devices_fn": list_devices})
     print(f"dashboard: http://127.0.0.1:{port}", flush=True)
 
-    def spawn_capture(record_path=None):
-        """Start ffmpeg VIDEO capture (audio is sox's job); re-negotiates
-        device resolution each spawn. With record_path, adds a 1080p30
-        hardware-encoded video-only mkv output."""
-        cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error",
-               "-f", "avfoundation", "-framerate", "30",
-               "-video_size", "1920x1080",   # native mode: no 4K scaling load
-               "-i", DEVICES["video"],
-               "-map", "0:v", "-vf", f"fps={SAMPLE_FPS},scale=1920:-2",
-               "-update", "1", "-atomic_writing", "1", "-y", str(FRAME)]
-        if record_path:
-            cmd += ["-map", "0:v", "-s", "1920x1080", "-r", "30",
-                    "-c:v", "h264_videotoolbox", "-b:v", "6M",
-                    "-y", str(record_path)]
-        return subprocess.Popen(cmd, stdout=subprocess.DEVNULL)
-
-    def spawn_sox():
-        """Bit-perfect continuous audio capture via CoreAudio (truncates)."""
-        return subprocess.Popen(
-            ["sox", "-q", "--buffer", "4096",
-             "-t", "coreaudio", DEVICES["audio"],
-             "-t", "raw", "-b", "16", "-e", "signed", "-c", "2",
-             "-r", "48000", str(AUDIO_PCM)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
     threading.Thread(target=audio_thread, daemon=True).start()
-    ffmpeg = spawn_capture()
-    sox = spawn_sox()
+    video = backend.create_video_capture(DEVICES, FRAME, SAMPLE_FPS)
+    audio_cap = backend.create_audio_capture(DEVICES, AUDIO_PCM)
+    video.restart()
+    audio_cap.restart()
 
-    def spawn_ocrd():
+    def custom_words_file():
         words = set()
         for name in VOICES["characters"]:
             words.update(name.strip('"“”').split())
@@ -671,11 +632,9 @@ def main():
         cw = ROOT / "captures" / "custom_words.txt"
         cw.parent.mkdir(exist_ok=True)
         cw.write_text("\n".join(sorted(w for w in words if w)))
-        return subprocess.Popen(
-            [str(ROOT / "tools" / "ocrd"), str(cw)],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+        return cw
 
-    ocrd = spawn_ocrd()
+    ocr = backend.create_ocr(ROOT, custom_words_file())
 
     candidate, candidate_count = None, 0
     candidate_growing = False
@@ -715,11 +674,8 @@ def main():
                     json.dumps(VOICES, indent=2, ensure_ascii=False))
                 print(f"[devices] video={DEVICES['video']} "
                       f"audio={DEVICES['audio']}", flush=True)
-                for p in (ffmpeg, sox):
-                    if p.poll() is None:
-                        p.kill()
-                ffmpeg = spawn_capture()
-                sox = spawn_sox()
+                video.restart()
+                audio_cap.restart()
                 last_frame_change = time.monotonic()
 
             if record_request["want"] is not None:
@@ -729,9 +685,7 @@ def main():
                     CLIPS.mkdir(parents=True, exist_ok=True)
                     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                     raw = REC_DIR["path"] / f"rec_{ts}_raw.mkv"  # mkv: crash-safe
-                    if ffmpeg.poll() is None:
-                        ffmpeg.kill()
-                    ffmpeg = spawn_capture(raw)
+                    video.restart(record_path=raw)
                     for _ in range(40):          # align t0 with the video start
                         if raw.exists():
                             break
@@ -746,12 +700,8 @@ def main():
                     s1 = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
                     raw, clips = recording["raw"], recording["clips"]
                     s0 = recording.get("s0", 0)
-                    ffmpeg.send_signal(signal.SIGINT)   # clean mkv finalize
-                    try:
-                        ffmpeg.wait(timeout=8)
-                    except subprocess.TimeoutExpired:
-                        ffmpeg.kill()
-                    ffmpeg = spawn_capture()
+                    video.finalize(timeout=8)   # clean mkv close (platform-specific)
+                    video.restart()
                     last_frame_change = time.monotonic()
                     out = raw.replace("_raw.mkv", ".mp4")
                     threading.Thread(target=mux_recording,
@@ -759,7 +709,7 @@ def main():
                                      daemon=True).start()
                     print("[recording stopped — muxing]", flush=True)
 
-            if (speech.player and speech.player.poll() is None and speech.t_play
+            if (speech.playing and speech.t_play
                     and not speech.qr_playing
                     and is_voiced(speech.t_play + 0.2)):
                 speech.stop()
@@ -774,26 +724,23 @@ def main():
                 candidate, candidate_count = None, 0
                 continue
 
-            # Watchdog: ffmpeg keeps writing frames even on static screens, so
-            # a stalled frame file means capture broke (e.g. the device
+            # Watchdog: capture keeps writing frames even on static screens,
+            # so a stalled frame file means capture broke (e.g. the device
             # changed resolution mid-stream). Respawn to re-negotiate.
-            # sox watchdog: respawn if it died, or truncate the ever-growing
+            # audio watchdog: respawn if it died, or truncate the ever-growing
             # stream (~690 MB/hour) when safely between recordings
-            if sox.poll() is not None and not recording["on"]:
-                print("[sox died — respawning]", flush=True)
-                sox = spawn_sox()
+            if not audio_cap.alive and not recording["on"]:
+                print("[audio capture died — respawning]", flush=True)
+                audio_cap.restart()
             elif (AUDIO_PCM.exists()
                     and AUDIO_PCM.stat().st_size > 1_500_000_000
                     and not recording["on"]):
                 print("[truncating audio stream]", flush=True)
-                sox.kill()
-                sox = spawn_sox()
+                audio_cap.restart()
 
             if now - last_frame_change > 10:
-                print("[capture stalled — respawning ffmpeg]", flush=True)
-                if ffmpeg.poll() is None:
-                    ffmpeg.kill()
-                ffmpeg = spawn_capture()
+                print("[capture stalled — respawning]", flush=True)
+                video.restart()
                 last_frame_change = time.monotonic()
                 continue
 
@@ -807,19 +754,10 @@ def main():
             last_frame_change = now
 
             t0 = time.time()
-            try:
-                ocrd.stdin.write(str(FRAME) + "\n")
-                raw = ocrd.stdout.readline()
-            except (BrokenPipeError, OSError):
-                raw = ""
-            if not raw:
-                print("OCR daemon died — respawning", flush=True)
-                if ocrd.poll() is None:
-                    ocrd.kill()
-                ocrd = spawn_ocrd()
+            blocks = ocr.recognize(FRAME)
+            if blocks is None:          # daemon died; it respawned itself
                 continue
             stats["ocr_ms"].append(int((time.time() - t0) * 1000))
-            blocks = json.loads(raw)
 
             # --- Reading-mode screens (Quick Read books, info/profile
             # screens, message/group-chat panels): incremental reading ---
@@ -867,13 +805,11 @@ def main():
                     chat_senders.clear()
 
             # pump the reading queue when the voice is idle
-            if (read_queue
-                    and (speech.player is None
-                         or speech.player.poll() is not None)):
+            if read_queue and not speech.playing:
                 spk, text = read_queue.popleft()
                 voice, base_speed = pick_voice(spk)
-                segs, speed, _ = speech.synth(text, voice, base_speed)
-                speech.play(segs, qr=True)
+                audio, speed, _ = speech.synth(text, voice, base_speed)
+                speech.play(audio, qr=True)
                 stats["spoken"] += 1
                 add_event("chat" if spk else "quick read", "spoken", spk,
                           text, voice, speed, can_replay=True, shot=True)
@@ -1011,7 +947,7 @@ def main():
             spec = {}
             synth_thread = threading.Thread(
                 target=lambda: spec.update(zip(
-                    ("segs", "speed", "ms"),
+                    ("audio", "speed", "ms"),
                     speech.synth(speak_text, voice, base_speed))))
             synth_thread.start()
 
@@ -1058,8 +994,7 @@ def main():
                 # the remainder continues a line we're still speaking —
                 # let the prefix finish instead of cutting it off
                 wait_until = time.monotonic() + 15
-                while (speech.player and speech.player.poll() is None
-                       and time.monotonic() < wait_until):
+                while speech.playing and time.monotonic() < wait_until:
                     time.sleep(0.05)
             if voiced:
                 stats["skipped_voiced"] += 1
@@ -1069,7 +1004,7 @@ def main():
                       f"{state['dialogue'][:60]}", flush=True)
                 continue
 
-            speech.play(spec.get("segs"))
+            speech.play(spec.get("audio"))
             speed = spec.get("speed")
             stats["spoken"] += 1
             yield_event_id = add_event(
@@ -1082,9 +1017,9 @@ def main():
                   f"{speak_text}", flush=True)
     finally:
         speech.stop()
-        for p in (ffmpeg, sox, ocrd):
-            if p and p.poll() is None:
-                p.kill()
+        video.kill()
+        audio_cap.kill()
+        ocr.kill()
 
 
 if __name__ == "__main__":

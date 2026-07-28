@@ -2,7 +2,7 @@
 
 **Live TTS voiceover for the dialogue Hoyoverse forgot to voice.**
 
-*Requires macOS on Apple Silicon — see [Requirements](#requirements).*
+*Runs on macOS (Apple Silicon) and, experimentally, Windows — see [Requirements](#requirements).*
 
 Genshin Impact and Honkai: Star Rail voice some quest dialogue but leave many lines — and sometimes entire quests — silent. HoyoVoice watches your game feed, notices when a line has no voiceover, and reads it aloud in a per-character artificial voice within about a second. Lines the game *does* voice are left untouched. Everything runs locally on your Mac: no cloud, no API keys, no game modification.
 
@@ -26,21 +26,32 @@ console ──HDMI──► capture card ──USB──► Mac
 
 ## Requirements
 
-**Platform: macOS on Apple Silicon only.** (M1 or newer, macOS 14 Sonoma or later recommended.) This is a hard requirement, not a packaging gap — the pipeline is built on Apple-only frameworks: TTS runs on MLX (Apple Silicon GPU), OCR uses the Apple Vision framework, and capture uses AVFoundation/CoreAudio. Intel Macs won't run the MLX TTS; Windows and Linux are not supported and would need every pipeline stage replaced.
+**Platform: macOS on Apple Silicon (M1+, macOS 14+ recommended), or Windows 10/11 (experimental).** Each platform gets a native pipeline behind the same app (`hv_platform/`): on macOS, TTS runs on MLX (Apple Silicon GPU), OCR uses Apple Vision, capture uses AVFoundation/CoreAudio; on Windows, TTS runs Kokoro via ONNX on any CPU, OCR uses RapidOCR or the built-in Windows OCR, capture uses DirectShow/WASAPI. Intel Macs and Linux are not supported. The Windows backend is new and not yet hardware-validated — see `plans/WINDOWS-TESTING.md`.
 
 You'll also need:
 
 - A UVC HDMI capture card (built with a Genki ShadowCast 3; any UVC device should work — even a webcam pointed at a screen, selectable in the dashboard)
 - A console or device running the game (on PS5, **disable HDCP** in Settings → System → HDMI or you'll capture black)
-- Homebrew, Xcode Command Line Tools (`xcode-select --install`), Python 3.13 (`brew install python@3.13`)
+- macOS: Homebrew, Xcode Command Line Tools (`xcode-select --install`), Python 3.13 (`brew install python@3.13`)
+- Windows: winget (ships with Windows) — `setup.ps1` installs ffmpeg and Python itself
 - ~2 GB of disk for models and the Python environment; the game feed itself never leaves your machine
 
 ## Quick start
+
+macOS:
 
 ```sh
 git clone <this repo> && cd HoyoVoice
 ./setup.sh              # deps (ffmpeg, sox, espeak-ng, python env), OCR daemon, VAD model
 ./hoyovoice.sh start    # first run downloads the Kokoro TTS model (~360 MB)
+```
+
+Windows (PowerShell):
+
+```powershell
+git clone <this repo> ; cd HoyoVoice
+powershell -ExecutionPolicy Bypass -File setup.ps1   # deps + VAD + Kokoro models (~340 MB)
+python hoyovoice.py start
 ```
 
 Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video and audio devices from the dropdowns above the preview if they aren't auto-selected, then hit **Resume** and play. Unvoiced lines are spoken about half a second after their text settles.
@@ -109,12 +120,14 @@ Everything above is editable live from the dashboard. Kokoro ships ~50 voices (`
 | Path | Purpose |
 |---|---|
 | `live.py` | Orchestrator: capture, classify, gate, synthesize, play, record, serve |
+| `hv_platform/` | Platform backends (capture, audio, OCR daemon, TTS, playback) — `darwin.py` / `win32.py` behind `base.py` |
 | `tools/ocrd.swift` | Apple Vision OCR daemon (compiled to `tools/ocrd` by setup) |
+| `tools/ocrd_win.py` | Windows OCR daemon (RapidOCR / Windows.Media.Ocr, same protocol) |
 | `tools/classify.py` | OCR blocks → screen type + speaker/dialogue/choices |
 | `tools/vad.py` | Silero VAD onnx wrapper (torch-free) |
 | `tools/webui.py` | Dashboard (Flask, single page) |
 | `voices.json` | Casting + settings |
-| `hoyovoice.sh` | start / stop / status / log / restart |
+| `hoyovoice.sh` / `hoyovoice.py` | start / stop / status / log / restart (macOS shell / cross-platform) |
 
 ## Troubleshooting
 

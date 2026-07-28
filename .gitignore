@@ -18,3 +18,9 @@ nohup.out
 # built by setup.sh
 tools/ocrd
 tools/silero_vad.onnx
+
+# downloaded by setup.ps1 (Kokoro ONNX model + voices)
+models/
+
+# launcher state
+hoyovoice.pid

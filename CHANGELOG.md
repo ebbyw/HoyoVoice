@@ -8,6 +8,10 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 - **Group-chat/message panel reading** — messages read incrementally, each sender in their own cast voice.
+- **Windows support (experimental, untested on hardware)**: new `hv_platform/` backend layer — DirectShow video capture, in-process WASAPI audio capture (replaces sox's role), `tools/ocrd_win.py` OCR daemon (RapidOCR or Windows.Media.Ocr, same JSON protocol and Vision-style coordinates), Kokoro TTS via kokoro-onnx on CPU (same voice IDs — `voices.json` carries over), sounddevice playback, `setup.ps1`, and a cross-platform `hoyovoice.py` launcher. See `plans/WINDOWS-TESTING.md` for the first-run checklist.
+
+### Changed
+- Platform code (capture, audio, OCR daemon, TTS, playback) extracted from `live.py` into `hv_platform/darwin.py` and `hv_platform/win32.py` behind a shared interface (`hv_platform/base.py`). macOS behavior is intentionally unchanged.
 
 ### Fixed
 - Chat sender labels are OCR-jittered ("Ashveil"/"Ashvell"/"Ashval"), which auto-cast one character three ways and re-queued every message per variant (repeats while scrolling or idling, interleaved out-of-order reads). Senders now canonicalize per chat session, messages dedupe on text alone (fuzzy), and only short echoes keep the sender in the key.
