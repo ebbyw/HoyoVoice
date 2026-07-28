@@ -20,10 +20,21 @@ recognition lexicon; neither Windows engine supports that, so here it is
 accepted for protocol compatibility and ignored (live.py's fuzzy speaker
 matching and text_fixes cover the same ground downstream).
 """
+import io
 import json
 import os
+import random
 import sys
 import time
+
+
+def directml_available():
+    """Single probe used by both engine selection and the startup hint."""
+    try:
+        import onnxruntime as ort
+        return "DmlExecutionProvider" in ort.get_available_providers()
+    except Exception:
+        return False
 
 
 def out(blocks):
@@ -46,7 +57,6 @@ def read_frame_bytes(path, tries=12):
     frame is lost. Retry with jittered backoff (fixed delays alias
     against the writer's cycle) until the bytes are a complete image.
     Total worst case stays under one 6fps frame interval."""
-    import random
     delay = 0.004
     for _ in range(tries):
         try:
@@ -71,23 +81,21 @@ class RapidEngine:
         from PIL import Image
         self.Image = Image
         self.mode = "cpu"
-        try:
-            import onnxruntime as ort
-            if "DmlExecutionProvider" in ort.get_available_providers():
+        if directml_available():
+            try:
                 self.ocr = RapidOCR(det_use_dml=True, cls_use_dml=True,
                                     rec_use_dml=True)
                 self.mode = "directml"
                 return
-        except Exception as e:
-            print(f"[ocrd_win] DirectML unavailable ({e}) — using CPU",
-                  file=sys.stderr, flush=True)
+            except Exception as e:
+                print(f"[ocrd_win] DirectML init failed ({e}) — using CPU",
+                      file=sys.stderr, flush=True)
         self.ocr = RapidOCR()
 
     def recognize(self, path):
         data = read_frame_bytes(path)
         if data is None:
             return []
-        import io
         with self.Image.open(io.BytesIO(data)) as img:
             W, H = img.size
         result, _ = self.ocr(data)
@@ -200,7 +208,6 @@ AUTO_MAX_MS = 1200
 def _benchmark(engine):
     """Time one warmed-up recognize() on a synthetic 1080p frame."""
     import tempfile
-    import time
     from PIL import Image, ImageDraw
     img = Image.new("RGB", (1920, 1080), "black")
     d = ImageDraw.Draw(img)
@@ -217,13 +224,9 @@ def _benchmark(engine):
 
 def _engine_note():
     """One-line hint about what would make OCR better on this machine."""
-    try:
-        import onnxruntime as ort
-        if "DmlExecutionProvider" not in ort.get_available_providers():
-            return ("[ocrd_win] tip: install onnxruntime-directml for "
-                    "GPU-accelerated, more accurate OCR")
-    except Exception:
-        pass
+    if not directml_available():
+        return ("[ocrd_win] tip: install onnxruntime-directml for "
+                "GPU-accelerated, more accurate OCR")
     return None
 
 

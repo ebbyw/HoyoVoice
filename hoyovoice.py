@@ -13,6 +13,7 @@ handles them, and the process-group/tree kill is the backstop.
 import os
 import re
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -23,6 +24,12 @@ PIDFILE = ROOT / "hoyovoice.pid"
 LOG = ROOT / "live.log"
 WIN = sys.platform == "win32"
 VENV_PY = ROOT / (".venv/Scripts/python.exe" if WIN else ".venv/bin/python")
+
+sys.path.insert(0, str(ROOT / "tools"))
+try:
+    from webui import DASHBOARD_PORT
+except ImportError:            # flask not installed yet (pre-setup)
+    DASHBOARD_PORT = 8470
 
 LOG_NOISE = re.compile(
     "pixel format|Supported|uyvy|yuyv|nv12|0rgb|bgr0|in#0|Fetching|vad: chunks")
@@ -36,24 +43,34 @@ def read_pid():
 
 
 def pid_alive(pid):
+    """True only if `pid` is alive AND is one of OUR processes.
+
+    A stale pidfile whose PID has been recycled by an unrelated program
+    would otherwise make `stop` kill that program — on Windows with /T,
+    its whole process tree.
+    """
     if pid is None:
         return False
     if WIN:
         out = subprocess.run(
-            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
             capture_output=True, text=True).stdout
-        return str(pid) in out
+        if str(pid) not in out:
+            return False
+        return "python" in out.split(",")[0].strip('" ').lower()
     try:
         os.kill(pid, 0)
-        return True
-    except (ProcessLookupError, PermissionError):
+    except (ProcessLookupError, PermissionError, OSError):
         return False
+    try:                       # confirm it's our live.py, not a recycled PID
+        cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
+                             capture_output=True, text=True).stdout
+        return "live.py" in cmd
     except OSError:
-        return False
+        return True            # ps unavailable: assume the pidfile is honest
 
 
-def port_busy(port=8470):
-    import socket
+def port_busy(port=DASHBOARD_PORT):
     s = socket.socket()
     s.settimeout(0.5)
     try:
@@ -67,9 +84,10 @@ def start():
         print("already running")
         return
     if port_busy():
-        print("dashboard port 8470 is in use — an orphaned instance is still "
-              "running.\nWindows: taskkill /F /IM ffmpeg.exe & check Task "
-              "Manager for python.exe\nmacOS: ./hoyovoice.sh stop")
+        print(f"dashboard port {DASHBOARD_PORT} is in use — an orphaned "
+              "instance is still running.\nWindows: taskkill /F /IM "
+              "ffmpeg.exe & check Task Manager for python.exe\n"
+              "macOS: ./hoyovoice.sh stop")
         sys.exit(1)
     if not VENV_PY.exists():
         print(f"venv python not found: {VENV_PY}\n"

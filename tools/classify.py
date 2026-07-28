@@ -142,9 +142,14 @@ def classify_quickread(blocks):
 def _bottom_left_strip(blocks):
     """Joined text of the bottom-left build/UID strip. Engines disagree on
     how they chunk it — Apple Vision returns one block, Windows OCR splits
-    it and often drops the underscores — so match on the JOINED text."""
+    it and often drops the underscores — so match on the JOINED text.
+
+    Filters by confidence itself so every caller sees the same strip
+    whether it passes raw or pre-filtered blocks.
+    """
     strip = [b for b in blocks
-             if b["y"] < 0.08 and b["x"] + b["w"] / 2 < 0.45]
+             if b["confidence"] >= MIN_CONF
+             and b["y"] < 0.08 and b["x"] + b["w"] / 2 < 0.45]
     strip.sort(key=lambda b: b["x"])
     return " ".join(b["text"] for b in strip)
 

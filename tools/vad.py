@@ -22,6 +22,13 @@ class SileroVAD:
         self.state = np.zeros((2, 1, 128), dtype=np.float32)
         self.context = np.zeros(self.CONTEXT, dtype=np.float32)
 
+    def reset(self):
+        """Drop recurrent state + context. Call after seeking the audio
+        stream: the model would otherwise carry context from audio that is
+        no longer adjacent to what comes next."""
+        self.state = np.zeros((2, 1, 128), dtype=np.float32)
+        self.context = np.zeros(self.CONTEXT, dtype=np.float32)
+
     def prob(self, chunk_f32):
         """chunk_f32: np.float32 array of CHUNK samples."""
         x = np.concatenate([self.context, chunk_f32])[None, :]

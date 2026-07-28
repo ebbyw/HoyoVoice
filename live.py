@@ -6,8 +6,10 @@ Dashboard: http://127.0.0.1:8470
 """
 import difflib
 import json
+import os
 import re
 import queue
+import signal
 import subprocess
 import sys
 import threading
@@ -214,6 +216,7 @@ def audio_thread():
             fh = open(AUDIO_PCM, "rb")
             pos = size          # join at the live edge
             fh.seek(pos)
+            vad.reset()         # fresh stream: no usable prior context
             warmup = 32
         if size < pos:          # capture respawned and truncated the file
             fh.close()
@@ -230,6 +233,7 @@ def audio_thread():
             pos = size - AUDIO_BYTES_PER_SEC // 2
             pos -= pos % 4                     # stereo s16 frame alignment
             fh.seek(pos)
+            vad.reset()        # discarded audio is not adjacent to what's next
             warmup = 8
             continue
         if backlog < BLOCK:
@@ -678,7 +682,6 @@ def handle_commands(speech):
 
 
 def main():
-    import signal
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     print("loading Kokoro…", flush=True)
     speech = Speech()
@@ -723,9 +726,8 @@ def main():
         cw.write_text("\n".join(sorted(w for w in words if w)))
         return cw
 
-    # settings.ocr_engine (Windows): auto | rapid | windows — the native
-    # Windows engine is much faster on weak CPUs; rapid scores better
-    import os
+    # settings.ocr_engine (Windows): auto | rapid | windows. auto measures
+    # the accurate engine's speed on this machine and falls back if needed
     os.environ.setdefault("HOYOVOICE_OCR_ENGINE",
                           VOICES.get("settings", {}).get("ocr_engine", "auto"))
     ocr = backend.create_ocr(ROOT, custom_words_file())
@@ -914,6 +916,7 @@ def main():
                 audio, speed, _ = speech.synth(text, voice, base_speed)
                 speech.play(audio, qr=True)
                 stats["spoken"] += 1
+                last_spoken_norm = normalize_text(text)   # suppress its repeats
                 add_event("chat" if spk else "quick read", "spoken", spk,
                           text, voice, speed, can_replay=True, shot=True)
                 print(f"[{('chat ' + spk) if spk else 'quick read'} → {voice}] "
@@ -1010,14 +1013,13 @@ def main():
                     # genuinely new line (not the typewriter extending the
                     # current one) — anchor the VAD gate window here
                     candidate_t0 = time.monotonic()
-                # OCR-jitter detector: the same on-screen line reading
-                # differently on consecutive frames resets stabilization
-                # forever and NOTHING gets spoken or logged. Flag it.
-                if (candidate is not None and candidate[0] == key[0]
-                        and not candidate_growing and candidate[1]
-                        and key[1]
-                        and difflib.SequenceMatcher(
-                            None, key[1], candidate[1]).ratio() >= 0.85):
+                # Reads too different for the jitter branch to absorb (>5%
+                # apart) but clearly the same line still churning — the only
+                # instability that can now stop a line being spoken at all.
+                if (candidate is not None and candidate[1] and key[1]
+                        and not candidate_growing
+                        and 0.70 <= difflib.SequenceMatcher(
+                            None, key[1], candidate[1]).ratio() < 0.95):
                     unstable_count += 1
                     if unstable_count == 6:
                         add_event("OCR unstable — text won't stabilize",

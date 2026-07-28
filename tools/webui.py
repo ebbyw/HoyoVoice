@@ -4,12 +4,15 @@ Log (with voice used + screenshot hover-previews), casting with instant
 re-read and per-character mute, pause/resume, test speech, analytics.
 """
 import logging
+import socket
+import sys
 import threading
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
 
 VERSION = "0.5.1"
+DASHBOARD_PORT = 8470          # single source of truth (hoyovoice.py reads it)
 
 VOICE_CATALOG = [
     "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore",
@@ -200,7 +203,7 @@ tick();
 </script></body></html>"""
 
 
-def start_webui(shared, port=8470):
+def start_webui(shared, port=DASHBOARD_PORT):
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     app = Flask("hoyovoice")
 
@@ -322,8 +325,6 @@ def start_webui(shared, port=8470):
 
     # fail LOUDLY if the port is taken (usually an orphaned instance) —
     # otherwise the serving thread dies silently and the app runs headless
-    import socket
-    import sys
     probe = socket.socket()
     try:
         probe.bind((bind if bind != "0.0.0.0" else "", port))

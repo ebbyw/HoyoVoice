@@ -10,10 +10,14 @@ Verified end to end on real hardware; see plans/WINDOWS-TESTING.md for
 the checklist and the platform quirks this backend works around.
 """
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
+import time
+from glob import glob
 from pathlib import Path
 
 SAMPLE_RATE = 48000
@@ -23,14 +27,28 @@ CHANNELS = 2
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+def _dedupe_path(value):
+    """Preserve order, drop repeats (case-insensitive, trailing-slash
+    agnostic) — PATH is rebuilt more than once per process."""
+    out, seen = [], set()
+    for part in value.split(os.pathsep):
+        p = part.strip()
+        if not p:
+            continue
+        canon = p.rstrip("\\/").lower()
+        if canon not in seen:
+            seen.add(canon)
+            out.append(p)
+    return os.pathsep.join(out)
+
+
 def _refresh_path_from_registry():
     """Rebuild PATH the way a fresh shell would (machine + user registry
     values). The launching shell often predates installer PATH edits —
     e.g. winget's ffmpeg — and stale PATHs otherwise follow us into every
     subprocess (WinError 2)."""
-    import os
     import winreg
-    parts = []
+    parts = [os.environ.get("PATH", "")]
     for hive, key in (
             (winreg.HKEY_LOCAL_MACHINE,
              r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
@@ -41,38 +59,42 @@ def _refresh_path_from_registry():
                 parts.append(os.path.expandvars(val))
         except OSError:
             pass
-    merged = ";".join(p for p in parts if p)
-    if merged:
-        os.environ["PATH"] = os.environ.get("PATH", "") + ";" + merged
+    os.environ["PATH"] = _dedupe_path(os.pathsep.join(p for p in parts if p))
 
 
-def _ensure_ffmpeg():
-    """Make sure 'ffmpeg' resolves in this process; returns its path."""
-    import os
-    import shutil
-    from glob import glob
+_ffmpeg_checked = {"ok": False}
+
+
+def ensure_ffmpeg():
+    """Resolve 'ffmpeg' for this process; returns its path.
+
+    Called lazily (not at import) so a missing ffmpeg surfaces as a clear
+    message from the capture backend rather than an import-time traceback.
+    """
+    if _ffmpeg_checked["ok"]:
+        return shutil.which("ffmpeg")
     ff = shutil.which("ffmpeg")
-    if ff:
-        return ff
-    _refresh_path_from_registry()
-    ff = shutil.which("ffmpeg")
-    if ff:
-        return ff
-    local = os.environ.get("LOCALAPPDATA", "")
-    for pat in (rf"{local}\Microsoft\WinGet\Links\ffmpeg.exe",
-                rf"{local}\Microsoft\WinGet\Packages\Gyan.FFmpeg*\**\bin\ffmpeg.exe"):
-        hits = glob(pat, recursive=True)
-        if hits:
-            os.environ["PATH"] = (os.path.dirname(hits[0]) + ";"
-                                  + os.environ.get("PATH", ""))
-            return hits[0]
-    raise RuntimeError(
-        "ffmpeg not found — run setup.ps1, or open a new terminal so PATH "
-        "updates take effect")
-
-
-if sys.platform == "win32":            # no-op when imported for tests elsewhere
-    _ensure_ffmpeg()
+    if not ff:
+        _refresh_path_from_registry()
+        ff = shutil.which("ffmpeg")
+    if not ff:
+        local = os.environ.get("LOCALAPPDATA", "")
+        for pat in (rf"{local}\Microsoft\WinGet\Links\ffmpeg.exe",
+                    rf"{local}\Microsoft\WinGet\Packages"
+                    rf"\Gyan.FFmpeg*\**\bin\ffmpeg.exe"):
+            hits = glob(pat, recursive=True)
+            if hits:
+                os.environ["PATH"] = _dedupe_path(
+                    os.path.dirname(hits[0]) + os.pathsep
+                    + os.environ.get("PATH", ""))
+                ff = hits[0]
+                break
+    if not ff:
+        raise RuntimeError(
+            "ffmpeg not found — run setup.ps1, or open a new terminal so "
+            "PATH updates take effect")
+    _ffmpeg_checked["ok"] = True
+    return ff
 
 
 def _sd():
@@ -82,6 +104,7 @@ def _sd():
 
 def _list_dshow_video():
     """Parse `ffmpeg -f dshow -list_devices` for video device names."""
+    ensure_ffmpeg()
     p = subprocess.run(
         ["ffmpeg", "-hide_banner", "-f", "dshow",
          "-list_devices", "true", "-i", "dummy"],
@@ -145,6 +168,7 @@ class VideoCapture:
 
     def restart(self, record_path=None):
         self.kill()
+        ensure_ffmpeg()
         cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error",
                "-f", "dshow", "-rtbufsize", "256M",
                "-framerate", "30", "-video_size", "1920x1080",
@@ -254,6 +278,7 @@ class AudioCapture:
         self.fh = open(self.pcm, "wb", buffering=0)   # truncate, unbuffered
         self._dead = False
         self._rs_next = 0.0               # resampler phase (fallback mode)
+        self._rs_tail = None              # last frame of the previous block
 
         def make_callback(sr_in):
             import numpy as np
@@ -266,23 +291,36 @@ class AudioCapture:
                 if in_ch == 1:
                     buf = buf.repeat(2, axis=1)
                 if sr_in != SAMPLE_RATE:
-                    n = len(buf)
-                    pos = np.arange(self._rs_next, n, step)
-                    if len(pos):
-                        src = np.arange(n)
-                        buf = np.stack(
-                            [np.interp(pos, src, buf[:, c]) for c in (0, 1)],
-                            axis=1).astype(np.int16)
-                        self._rs_next = pos[-1] + step - n
-                    else:
-                        self._rs_next -= n
+                    # Prepend the previous block's last frame so interpolation
+                    # is continuous across block boundaries — without it every
+                    # boundary gets a small step discontinuity (audible as a
+                    # faint tick, and the VAD sees it as broadband noise).
+                    tail = self._rs_tail
+                    if tail is None:
+                        tail = buf[:1]
+                    work = np.concatenate([tail, buf])
+                    self._rs_tail = buf[-1:].copy()
+                    n = len(work)
+                    # Phase is measured from the start of `buf`, i.e. index 1
+                    # of `work`. Stop at n-1: np.interp CLAMPS beyond the last
+                    # sample, which flattens the tail and leaves a step at the
+                    # next block's join. Positions past it belong to the next
+                    # block, which prepends this block's final frame.
+                    pos = np.arange(1.0 + self._rs_next, n - 1, step)
+                    if not len(pos):
+                        self._rs_next -= len(buf)
                         return
+                    src = np.arange(n)
+                    buf = np.stack(
+                        [np.interp(pos, src, work[:, c]) for c in (0, 1)],
+                        axis=1).astype(np.int16)
+                    self._rs_next = pos[-1] + step - n
                 with self.lock:
                     if self.fh is not None:
                         try:
                             self.fh.write(np.ascontiguousarray(buf).tobytes())
                         except OSError:
-                            self._dead = True
+                            self._dead = True   # bool write: benign race
             return callback
 
         # WASAPI extra settings are REJECTED by other host APIs (-9984), so
