@@ -26,9 +26,10 @@ for _stream in (sys.stdout, sys.stderr):
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "tools"))
 from classify import (classify, classify_chat, classify_infoscreen,  # noqa: E402
-                      classify_loading, classify_narration,
-                      classify_overlay, classify_quickread,
-                      has_continue_hint, narration_self_certain)
+                      classify_loading, classify_lore_screen,
+                      classify_narration, classify_overlay,
+                      classify_quickread, has_continue_hint,
+                      narration_self_certain, split_camel)
 from vad import CHUNK, SileroVAD  # noqa: E402
 from webui import start_webui  # noqa: E402
 from hv_platform import get_backend  # noqa: E402
@@ -351,6 +352,15 @@ def center_burst(t_line):
 
 def normalize_text(s):
     return "".join(c for c in s.lower() if c.isalnum())
+
+
+def same_line(a, b, cutoff=0.9):
+    """Fuzzy equality for normalized lines — used to collapse repeated log
+    entries when OCR jitter makes the same on-screen line read slightly
+    differently on each pass."""
+    if not a or not b:
+        return False
+    return difflib.SequenceMatcher(None, a, b).ratio() >= cutoff
 
 
 def normalize_speaker(speaker):
@@ -866,9 +876,19 @@ def main():
 
             state = classify(blocks)
             loading = classify_loading(blocks)
+            # chrome-free lore/loading cards (title + prose, no Continue
+            # hint, no UID strip, no HUD) — classify() sees the title as a
+            # nameplate, so without this they're skipped as unknown speakers
+            lore = None if loading else classify_lore_screen(blocks)
+            if lore and normalize_speaker(lore[0]) in VOICES["characters"]:
+                lore = None       # a cast member really is speaking
             if loading:
                 # loading-screen lore: read as narration, never as dialogue
                 state = {"speaker": None, "dialogue": loading, "choices": []}
+            elif lore:
+                title, body = lore
+                state = {"speaker": None, "choices": [],
+                         "dialogue": f"{split_camel(title)}. {body}"}
             elif not state["dialogue"]:
                 overlay = classify_overlay(blocks)
                 narration = classify_narration(blocks)
@@ -895,10 +915,12 @@ def main():
                          or spk in VOICES.get("always_voiced", []))
                 if not known and not has_continue_hint(blocks):
                     # visible in the log (once per line): silent drops here
-                    # made missing-speaker/missing-hint issues undiagnosable
-                    ukey = (spk, normalize_text(state["dialogue"]))
-                    if last_unknown_logged != ukey and state["dialogue"]:
-                        last_unknown_logged = ukey
+                    # made missing-speaker/missing-hint issues undiagnosable.
+                    # Keyed on TEXT ONLY — the speaker read jitters too
+                    # ("Goldy" / "MysteriousGoldy") and would defeat this.
+                    utext = normalize_text(state["dialogue"])
+                    if utext and not same_line(utext, last_unknown_logged):
+                        last_unknown_logged = utext
                         add_event("skipped (unknown speaker, no Continue hint)",
                                   "skip", spk, state["dialogue"], shot=True)
                     candidate, candidate_count = None, 0
@@ -986,16 +1008,13 @@ def main():
             if dup:
                 # surface dedupe skips — invisible skips made "why didn't it
                 # speak?" undiagnosable. Collapse OCR-jitter variants of the
-                # same line (each stabilizes as a slightly different read)
-                # into ONE log entry. Window persists via spoken_cache.json.
-                similar = (last_dup_logged is not None
-                           and last_dup_logged[0] == key[0]
-                           and difflib.SequenceMatcher(
-                               None, key[1], last_dup_logged[1]).ratio() >= 0.9)
-                if not similar:
+                # same line (each stabilizes as a slightly different read,
+                # and the speaker read jitters independently) into ONE entry.
+                # Window persists via spoken_cache.json.
+                if not same_line(new_norm, last_dup_logged):
                     add_event("repeat (deduped)", "skip", state["speaker"],
                               state["dialogue"])
-                last_dup_logged = key
+                last_dup_logged = new_norm
                 continue
 
             speak_text = state["dialogue"]

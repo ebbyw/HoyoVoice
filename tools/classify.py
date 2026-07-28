@@ -174,6 +174,42 @@ def classify_loading(blocks):
     return text if len(text) >= 15 else None
 
 
+def classify_lore_screen(blocks):
+    """Full-screen lore/loading cards that carry NO chrome: a centered
+    title in the nameplate band with centered prose below it, and no
+    Continue hint, no bottom strip (UID/build), no HUD. Those cards look
+    exactly like a dialogue screen to classify() — title reads as a
+    nameplate — so they'd otherwise be skipped as an unknown speaker.
+
+    Returns (title, text) or None. Gameplay dialogue always carries some
+    chrome (at minimum the Continue hint), which disqualifies it here.
+    """
+    conf = [b for b in blocks if b["confidence"] >= MIN_CONF]
+    if not conf or has_continue_hint(blocks):
+        return None
+    for b in conf:                      # any chrome at all disqualifies
+        cy = b["y"] + b["h"] / 2
+        if cy < 0.08 or cy > 0.90:      # UID/build strip, HUD rails
+            return None
+    body = [b for b in conf if 0.15 <= b["x"] + b["w"] / 2 <= 0.85]
+    if len(body) != len(conf) or len(body) < 2:
+        return None                     # off-center text ⇒ not a lore card
+    body.sort(key=lambda b: -b["y"])
+    title = body[0]["text"].strip()
+    text = " ".join(b["text"] for b in body[1:]).strip()
+    if len(text) < NARRATION_MIN_CHARS or len(text.split()) < NARRATION_MIN_WORDS:
+        return None
+    if sum(c.isdigit() for c in text) > NARRATION_MAX_DIGIT_RATIO * len(text):
+        return None                     # menus/stat panels are digit-heavy
+    return title, text
+
+
+def split_camel(s):
+    """'CindearthAge' → 'Cindearth Age'. OCR drops the space in these
+    stylized titles, and TTS then reads them as one mangled word."""
+    return re.sub(r"(?<=[a-z])(?=[A-Z])", " ", s)
+
+
 def has_continue_hint(blocks):
     """Dialogue and narration screens show '✕ Continue' bottom-right; menus,
     boards, and info popups show other hints (Confirm, Adjust Lineup…)."""

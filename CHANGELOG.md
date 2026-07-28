@@ -13,8 +13,12 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 ### Changed
 - Platform code (capture, audio, OCR daemon, TTS, playback) extracted from `live.py` into `hv_platform/darwin.py` and `hv_platform/win32.py` behind a shared interface (`hv_platform/base.py`). macOS behavior is intentionally unchanged.
 
+### Added
+- Chrome-free lore/loading cards (centered title + prose, no Continue hint, no UID strip, no HUD) are recognized and read by the narrator. `classify()` sees their title as a nameplate, so they were previously skipped as an unknown speaker; stylized titles that OCR runs together ("CindearthAge") are split for speech.
+
 ### Fixed
 - Chat sender labels are OCR-jittered ("Ashveil"/"Ashvell"/"Ashval"), which auto-cast one character three ways and re-queued every message per variant (repeats while scrolling or idling, interleaved out-of-order reads). Senders now canonicalize per chat session, messages dedupe on text alone (fuzzy), and only short echoes keep the sender in the key.
+- Repeated log spam for a single on-screen line: dedupe and unknown-speaker entries are now collapsed on fuzzy text alone, since the speaker read jitters independently ("Goldy" vs "MysteriousGoldy").
 - Windows frames are read as validated complete images and decoded from memory: reading the frame file while ffmpeg rewrote it corrupted the overwhelming majority of frames (99/120 in a reproduction), which stalled line stabilization for tens of seconds and caused repeat reads.
 - Loading-screen and system-screen detection no longer depends on how an OCR engine chunks the bottom-left build string: the marker is matched on the joined strip and tolerates dropped underscores, so loading-screen lore is read (and epilepsy-style system screens stay silent) on both engines.
 - VAD tail-reader can no longer trail the live audio edge under load — stale audio stamped with fresh timestamps made the gate judge "now" against minutes-old sound, so real voiceover was spoken over. Backlogs >1s are dropped and the dashboard shows `LAG Xs`.
