@@ -103,14 +103,48 @@ class WindowsEngine:
         return self.loop.run_until_complete(self._run(path))
 
 
+# auto mode: rapid must OCR a full frame this fast to keep up with the
+# live loop (6 fps sampling, 2-read stabilization); otherwise use the
+# native engine, which is far faster on weak CPUs
+AUTO_MAX_MS = 1200
+
+
+def _benchmark(engine):
+    """Time one warmed-up recognize() on a synthetic 1080p frame."""
+    import tempfile
+    import time
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", (1920, 1080), "black")
+    d = ImageDraw.Draw(img)
+    d.text((760, 240), "Rin Tohsaka", fill="white")
+    d.text((650, 300), "The informant is right here in your agency?",
+           fill="white")
+    path = os.path.join(tempfile.gettempdir(), "hoyovoice_ocr_bench.png")
+    img.save(path)
+    engine.recognize(path)              # first call pays model warm-up
+    t0 = time.time()
+    engine.recognize(path)
+    return int((time.time() - t0) * 1000)
+
+
 def make_engine():
     want = os.environ.get("HOYOVOICE_OCR_ENGINE", "auto").lower()
     errors = []
     if want in ("auto", "rapid"):
         try:
             eng = RapidEngine()
-            print("[ocrd_win] engine: rapid", file=sys.stderr, flush=True)
-            return eng
+            if want == "rapid":
+                print("[ocrd_win] engine: rapid", file=sys.stderr, flush=True)
+                return eng
+            ms = _benchmark(eng)
+            if ms <= AUTO_MAX_MS:
+                print(f"[ocrd_win] engine: rapid ({ms}ms/frame)",
+                      file=sys.stderr, flush=True)
+                return eng
+            print(f"[ocrd_win] rapid too slow here ({ms}ms/frame) — "
+                  "falling back to the native Windows engine",
+                  file=sys.stderr, flush=True)
+            errors.append(f"rapid: {ms}ms/frame > {AUTO_MAX_MS}ms")
         except Exception as e:
             errors.append(f"rapid: {e}")
             if want == "rapid":
