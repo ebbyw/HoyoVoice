@@ -18,7 +18,7 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Refresh-Path
 }
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
-    # PATH refresh wasn't enough — locate the winget-installed binary and
+    # PATH refresh wasn't enough - locate the winget-installed binary and
     # add its bin dir to the user PATH (persistently) + this session
     $ffbin = Get-ChildItem -Path "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" `
         -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue |
@@ -51,14 +51,14 @@ foreach ($cand in @("python3.13", "python3.12", "python3.11", "python")) {
 }
 if (-not $py) {
     winget install --id Python.Python.3.13 -e --accept-source-agreements --accept-package-agreements
-    Write-Host "Python installed — open a NEW terminal and re-run setup.ps1"; exit 1
+    Write-Host "Python installed - open a NEW terminal and re-run setup.ps1"; exit 1
 }
 Write-Host "using $py"
 
 Write-Host "== creating venv + installing python deps"
 if (-not (Test-Path ".venv")) { & $py -m venv .venv }
 & .venv\Scripts\python.exe -m pip install --upgrade pip -q
-# kokoro-onnx bundles espeak-ng via espeakng-loader — no system install needed
+# kokoro-onnx bundles espeak-ng via espeakng-loader - no system install needed
 & .venv\Scripts\python.exe -m pip install -q `
     kokoro-onnx onnxruntime sounddevice soundfile pillow numpy `
     flask vaderSentiment rapidocr-onnxruntime winsdk
@@ -87,7 +87,7 @@ $devs = (ffmpeg -hide_banner -f dshow -list_devices true -i dummy 2>&1) | Out-St
 if ($devs -match "(?i)shadowcast") {
     Write-Host "capture card found"
 } else {
-    Write-Host "WARNING: no ShadowCast device found — plug in your capture card (any UVC device works; pick it in the dashboard)"
+    Write-Host "WARNING: no ShadowCast device found - plug in your capture card (any UVC device works; pick it in the dashboard)"
 }
 
 Write-Host ""
