@@ -309,12 +309,33 @@ _INTERJECTIONS = [
 ]
 
 
+# RapidOCR's default recognition model is Chinese-trained, and Chinese
+# doesn't use spaces — so it drops the space after punctuation
+# ("Patience,Sparxie,patience.Once"). Vision spaces correctly, so these
+# are no-ops there. Guards keep numbers ("1,000", "2.5") and initials
+# ("U.S.A") intact.
+_ELLIPSIS_RUN = re.compile(r"\.{2,}")
+_SPACE_AFTER_PUNCT = re.compile(r"(?<=[a-zA-Z])([,;:!?…])(?=[A-Za-z])")
+_SPACE_AFTER_DOT = re.compile(r"(?<=[a-z])\.(?=[A-Za-z])")
+# a lone period between two lowercase words is a misread comma — real
+# sentences start with a capital. Wrong pauses hurt TTS delivery most.
+_COMMA_MISREAD = re.compile(r"(?<=[a-z])\.(?=\s+[a-z])")
+
+
+def repair_punctuation(s):
+    s = _ELLIPSIS_RUN.sub("…", s)          # ".." / "..." → one ellipsis glyph
+    s = _SPACE_AFTER_PUNCT.sub(r"\1 ", s)
+    s = _SPACE_AFTER_DOT.sub(". ", s)
+    return _COMMA_MISREAD.sub(",", s)
+
+
 def _keep_case(rep):
     return lambda m: rep.capitalize() if m.group(0)[0].isupper() else rep
 
 
 def fix_ocr_text(s):
     s = re.sub(r"[’‘`´ʼ]", "'", s)      # normalize apostrophe glyph variants
+    s = repair_punctuation(s)           # before word fixes: \b needs spaces
     for pat, rep in _OCR_FIXES:
         s = pat.sub(rep, s)
     s = _STRIP_GLYPHS.sub("", s)
