@@ -62,6 +62,14 @@ if (-not (Test-Path ".venv")) { & $py -m venv .venv }
 & .venv\Scripts\python.exe -m pip install -q `
     kokoro-onnx onnxruntime sounddevice soundfile pillow numpy `
     flask vaderSentiment rapidocr-onnxruntime winsdk
+# DirectML: GPU-accelerated OCR (any modern GPU). Optional — the daemon
+# falls back to CPU, then to the built-in Windows engine, without it.
+Write-Host "== installing DirectML (GPU OCR acceleration, optional)"
+& .venv\Scripts\python.exe -m pip install -q onnxruntime-directml
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "   (DirectML unavailable on this machine - continuing on CPU)"
+}
+$global:LASTEXITCODE = 0
 
 Write-Host "== downloading Silero VAD model"
 if (-not (Test-Path "tools\silero_vad.onnx")) {

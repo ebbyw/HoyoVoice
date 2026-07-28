@@ -23,23 +23,74 @@ matching and text_fixes cover the same ground downstream).
 import json
 import os
 import sys
+import time
 
 
 def out(blocks):
     print(json.dumps(blocks, sort_keys=True), flush=True)
 
 
+def _complete_image(data):
+    """True if these bytes are a whole image, not a half-written one."""
+    if len(data) < 1024:
+        return False
+    return ((data[:2] == b"\xff\xd8" and data[-2:] == b"\xff\xd9")      # JPEG
+            or (data[:8] == b"\x89PNG\r\n\x1a\n"
+                and data[-8:-4] == b"IEND"))                            # PNG
+
+
+def read_frame_bytes(path, tries=12):
+    """ffmpeg rewrites the frame file continuously, so a naive read can
+    catch it half-written — on Windows that surfaces as a flood of
+    'The image is unrecognized' (WinError -2003292320) and nearly every
+    frame is lost. Retry with jittered backoff (fixed delays alias
+    against the writer's cycle) until the bytes are a complete image.
+    Total worst case stays under one 6fps frame interval."""
+    import random
+    delay = 0.004
+    for _ in range(tries):
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+            if _complete_image(data):
+                return data
+        except OSError:                    # sharing violation mid-swap
+            pass
+        time.sleep(delay * random.uniform(0.6, 1.4))
+        delay = min(delay * 1.5, 0.02)
+    return None
+
+
 class RapidEngine:
+    """RapidOCR (ONNX). Uses DirectML when available — on a gaming PC this
+    is the difference between ~4s and a fraction of a second per frame,
+    with materially better accuracy than the built-in Windows engine."""
+
     def __init__(self):
         from rapidocr_onnxruntime import RapidOCR
         from PIL import Image
         self.Image = Image
+        self.mode = "cpu"
+        try:
+            import onnxruntime as ort
+            if "DmlExecutionProvider" in ort.get_available_providers():
+                self.ocr = RapidOCR(det_use_dml=True, cls_use_dml=True,
+                                    rec_use_dml=True)
+                self.mode = "directml"
+                return
+        except Exception as e:
+            print(f"[ocrd_win] DirectML unavailable ({e}) — using CPU",
+                  file=sys.stderr, flush=True)
         self.ocr = RapidOCR()
 
     def recognize(self, path):
-        with self.Image.open(path) as img:
+        data = read_frame_bytes(path)
+        if data is None:
+            return []
+        import io
+        with self.Image.open(io.BytesIO(data)) as img:
             W, H = img.size
-        result, _ = self.ocr(path)
+        result, _ = self.ocr(data)
         blocks = []
         for box, text, score in result or []:
             xs = [p[0] for p in box]
@@ -78,10 +129,26 @@ class WindowsEngine:
             self.max_dim = 2600
         self.loop = asyncio.new_event_loop()
 
+    async def _decode_stream(self, data):
+        """Decode from memory — reading the file directly races ffmpeg's
+        rewrite and yields 'The image is unrecognized' on most frames."""
+        from winsdk.windows.storage.streams import (DataWriter,
+                                                    InMemoryRandomAccessStream)
+        stream = InMemoryRandomAccessStream()
+        writer = DataWriter(stream)
+        writer.write_bytes(data)
+        await writer.store_async()
+        await writer.flush_async()
+        writer.detach_stream()
+        stream.seek(0)
+        return stream
+
     async def _run(self, path):
         img = self.imaging
-        f = await self.StorageFile.get_file_from_path_async(os.path.abspath(path))
-        stream = await f.open_async(self.FileAccessMode.READ)
+        data = read_frame_bytes(path)
+        if data is None:
+            return []
+        stream = await self._decode_stream(data)
         decoder = await img.BitmapDecoder.create_async(stream)
         w0, h0 = decoder.pixel_width, decoder.pixel_height
         # upscale toward the engine's size limit: Windows OCR is markedly
@@ -148,6 +215,18 @@ def _benchmark(engine):
     return int((time.time() - t0) * 1000)
 
 
+def _engine_note():
+    """One-line hint about what would make OCR better on this machine."""
+    try:
+        import onnxruntime as ort
+        if "DmlExecutionProvider" not in ort.get_available_providers():
+            return ("[ocrd_win] tip: install onnxruntime-directml for "
+                    "GPU-accelerated, more accurate OCR")
+    except Exception:
+        pass
+    return None
+
+
 def make_engine():
     want = os.environ.get("HOYOVOICE_OCR_ENGINE", "auto").lower()
     errors = []
@@ -155,15 +234,18 @@ def make_engine():
         try:
             eng = RapidEngine()
             if want == "rapid":
-                print("[ocrd_win] engine: rapid", file=sys.stderr, flush=True)
+                print(f"[ocrd_win] engine: rapid ({eng.mode})",
+                      file=sys.stderr, flush=True)
                 return eng
             ms = _benchmark(eng)
             if ms <= AUTO_MAX_MS:
-                print(f"[ocrd_win] engine: rapid ({ms}ms/frame)",
+                print(f"[ocrd_win] engine: rapid ({eng.mode}, {ms}ms/frame)",
                       file=sys.stderr, flush=True)
                 return eng
-            print(f"[ocrd_win] rapid too slow here ({ms}ms/frame) — "
-                  "falling back to the native Windows engine",
+            print(f"[ocrd_win] rapid too slow here ({eng.mode}, {ms}ms/frame)"
+                  " — falling back to the native Windows engine. For better "
+                  "accuracy install DirectML: "
+                  ".venv\\Scripts\\pip install onnxruntime-directml",
                   file=sys.stderr, flush=True)
             errors.append(f"rapid: {ms}ms/frame > {AUTO_MAX_MS}ms")
         except Exception as e:
@@ -181,6 +263,9 @@ def make_engine():
 
 def main():
     engine = make_engine()
+    note = _engine_note()
+    if note:
+        print(note, file=sys.stderr, flush=True)
     for line in sys.stdin:
         path = line.strip()
         if not path:
