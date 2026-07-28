@@ -354,6 +354,19 @@ def normalize_text(s):
     return "".join(c for c in s.lower() if c.isalnum())
 
 
+def similar_speaker(a, b):
+    """True if two nameplate reads are plausibly the same character.
+    OCR drops leading words on stylized plates ('MysteriousGoldy' →
+    'Goldy'), so containment counts, not just fuzzy equality."""
+    if a == b:
+        return True
+    na, nb = normalize_text(a or ""), normalize_text(b or "")
+    if not na or not nb:
+        return not na and not nb
+    return na in nb or nb in na or difflib.SequenceMatcher(
+        None, na, nb).ratio() >= 0.8
+
+
 def same_line(a, b, cutoff=0.9):
     """Fuzzy equality for normalized lines — used to collapse repeated log
     entries when OCR jitter makes the same on-screen line read slightly
@@ -377,7 +390,18 @@ def normalize_speaker(speaker):
                          + VOICES.get("always_voiced", []))
              if (k.startswith('"') and k.endswith('"')) == quoted]
     m = difflib.get_close_matches(speaker, known, n=1, cutoff=0.8)
-    return m[0] if m else speaker
+    if m:
+        return m[0]
+    # OCR drops leading words on stylized plates ("Mysterious Goldy" reads
+    # as "Goldy"), which fuzzy matching misses — without this the partial
+    # read auto-casts as a SEPARATE character with a different voice
+    n_spk = normalize_text(speaker)
+    if len(n_spk) >= 4:
+        hits = [k for k in known
+                if n_spk in normalize_text(k) or normalize_text(k) in n_spk]
+        if hits:
+            return max(hits, key=len)
+    return speaker
 
 
 # Auto-casting pools: each newly met character claims the next voice not
@@ -690,6 +714,7 @@ def main():
     candidate_t0 = 0.0          # when the current line was FIRST seen on screen
     last_dup_logged = None
     last_unknown_logged = None
+    last_spoken_norm = None     # suppresses repeat-logs for the live line
     unstable_count = 0
     last_mtime = 0.0
     last_frame_change = time.monotonic()
@@ -929,7 +954,29 @@ def main():
             state["speaker"] = normalize_speaker(state["speaker"])
             state["dialogue"] = fix_ocr_text(state["dialogue"])
             key = (state["speaker"], normalize_text(state["dialogue"]))
+            same_text = candidate is not None and key[1] == candidate[1]
+            # a strict prefix is the typewriter growing, not jitter
+            growing = (candidate is not None and not same_text
+                       and (key[1].startswith(candidate[1])
+                            or candidate[1].startswith(key[1])))
+            jitter = (candidate is not None and key != candidate
+                      and not growing
+                      and (same_text
+                           or same_line(key[1], candidate[1], 0.95))
+                      # the nameplate read jitters independently of the line
+                      # ("Goldy" vs "MysteriousGoldy"); only treat unrelated
+                      # speakers as distinct, and only for short lines that
+                      # two characters could plausibly both say
+                      and (similar_speaker(key[0], candidate[0])
+                           or len(key[1]) >= SHORT_LINE))
             if key == candidate:
+                candidate_count += 1
+            elif jitter:
+                # Same on-screen line, slightly different read (". mongrel."
+                # vs ".mongrel."). Restarting the count here made lines
+                # re-stabilize forever: they'd re-enter dedupe and log a
+                # skip every few seconds. Keep counting, adopt the latest.
+                candidate = key
                 candidate_count += 1
             else:
                 # if the text GREW from the previous candidate, the typewriter
@@ -978,7 +1025,7 @@ def main():
             dup, ext_base = False, None
             for e in recent_lines:
                 o = e["norm"]
-                same_spk = e["speaker"] == state["speaker"]
+                same_spk = similar_speaker(e["speaker"], state["speaker"])
                 if not (same_spk or len(new_norm) >= SHORT_LINE):
                     continue
                 if (difflib.SequenceMatcher(None, new_norm, o).ratio() >= 0.90
@@ -1006,12 +1053,13 @@ def main():
                         dup = True
                         break
             if dup:
-                # surface dedupe skips — invisible skips made "why didn't it
-                # speak?" undiagnosable. Collapse OCR-jitter variants of the
-                # same line (each stabilizes as a slightly different read,
-                # and the speaker read jitters independently) into ONE entry.
+                # Log only genuinely INTERESTING repeats — a line we spoke
+                # long ago coming round again. A re-read of the line still
+                # on screen (or the one we just spoke) is noise: it answers
+                # no question and buries the real log.
                 # Window persists via spoken_cache.json.
-                if not same_line(new_norm, last_dup_logged):
+                if not (same_line(new_norm, last_spoken_norm)
+                        or same_line(new_norm, last_dup_logged)):
                     add_event("repeat (deduped)", "skip", state["speaker"],
                               state["dialogue"])
                 last_dup_logged = new_norm
@@ -1125,6 +1173,7 @@ def main():
             speech.play(spec.get("audio"))
             speed = spec.get("speed")
             stats["spoken"] += 1
+            last_spoken_norm = new_norm
             yield_event_id = add_event(
                 "spoken", "spoken", state["speaker"], speak_text,
                 voice, speed, can_replay=True, shot=True)
