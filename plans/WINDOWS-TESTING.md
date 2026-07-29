@@ -22,6 +22,7 @@ re-diagnosed):
 | VAD says 0.00 during real VO | The tail-reader fell behind under load and judged "now" using stale audio. Backlogs >1s are dropped; the dashboard shows `LAG Xs`. |
 | Loading screens read as dialogue | The build/UID strip is one block in Vision, split (and underscore-less) in Windows OCR. Matched on the joined strip now. |
 | Extra console windows | `DETACHED_PROCESS` + `CREATE_NO_WINDOW` are mutually exclusive. |
+| A line takes tens of seconds to speak | The detector loses light subtitles over bright backgrounds — 12/37 frames on a measured capture — and every miss reset stabilization. Fixed by background flattening in the daemon (30/37) plus `MISS_TOLERANCE` in the orchestrator. Note: encoder load during recording was ruled out; the recordings kept up with wall clock (177s captured of 180s). |
 
 
 The Windows backend (`hv_platform/win32.py`, `tools/ocrd_win.py`, `setup.ps1`, `hoyovoice.py`) was written and structurally verified off-Windows: everything compiles, the OCR daemon's RapidOCR engine reproduces Apple Vision's classify output on the golden frame (`captures/frame_001.png` → same speaker + dialogue), and the refactored `live.py` passes a stub-backend smoke test. **None of it has touched real Windows hardware yet.** Work through this list in order on the Windows box — each step isolates one subsystem, so a failure points at exactly one file.

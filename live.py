@@ -71,6 +71,10 @@ DEVICES = {
 list_devices = backend.list_devices
 SAMPLE_FPS = 6
 STABLE_READS = 2
+# consecutive frames where the detector loses an on-screen line before we
+# give up on the candidate (~0.5s at 6fps). OCR misses are common on bright
+# backgrounds; without this, a miss discards all accumulated stability.
+MISS_TOLERANCE = 3
 DEDUP_WINDOW = 3              # a line repeats only if it's within the last N messages
 SHORT_LINE = 15               # short lines (normalized chars) may echo across speakers
 
@@ -740,6 +744,7 @@ def main():
     last_spoken_norm = None     # suppresses repeat-logs for the live line
     fired_norm = None           # line already pushed through the gate once
     unstable_count = 0
+    miss_streak = 0             # consecutive frames the detector lost the line
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
@@ -954,7 +959,15 @@ def main():
                     # and event-hub screens must not be narrated
                     state = {"speaker": None, "dialogue": narration, "choices": []}
                 else:
-                    candidate, candidate_count = None, 0
+                    # OCR MISS, not necessarily a screen change: the detector
+                    # drops a line on some frames (bright backgrounds). A hard
+                    # reset here means every miss discards accumulated
+                    # stability, so a line that never gets N consecutive hits
+                    # is never spoken at all. Ride out a short gap; a real
+                    # screen change lands on the branches above instead.
+                    miss_streak += 1
+                    if miss_streak > MISS_TOLERANCE:
+                        candidate, candidate_count = None, 0
                     continue
             else:
                 # dialogue from an UNKNOWN speaker needs the Continue hint;
@@ -976,6 +989,7 @@ def main():
                     candidate, candidate_count = None, 0
                     continue
 
+            miss_streak = 0          # a real read: the line is on screen
             state["speaker"] = normalize_speaker(state["speaker"])
             state["dialogue"] = fix_ocr_text(state["dialogue"])
             key = (state["speaker"], normalize_text(state["dialogue"]))

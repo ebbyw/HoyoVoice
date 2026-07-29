@@ -41,6 +41,31 @@ def out(blocks):
     print(json.dumps(blocks, sort_keys=True), flush=True)
 
 
+# Background flattening. Game subtitles are light text that can sit over a
+# blown-out sky, where the detector loses them entirely: on a real capture
+# only 12/37 frames of one line were detected, so stabilization (which needs
+# consecutive reads) stalled for ~40s. Text is high-frequency and
+# backgrounds are smooth, so subtracting a blurred copy makes light text pop
+# on ANY background — measured 30/37 on the same frames, and the full line
+# is read instead of a truncated one. Signed (not absolute) difference:
+# taking abs() picks up faint UI edges that break the "no chrome" test used
+# to spot lore cards. Dark-text-on-light is therefore not enhanced; game
+# dialogue is always light on dark.
+HP_RADIUS, HP_GAIN, HP_OFFSET = 12, 3.0, 40
+
+
+def _flatten_background(data):
+    """Bytes of an image → grayscale ndarray with the background removed."""
+    from PIL import Image, ImageFilter
+    import numpy as np
+    with Image.open(io.BytesIO(data)) as img:
+        g = img.convert("L")
+        bg = g.filter(ImageFilter.GaussianBlur(HP_RADIUS))
+        a = (np.asarray(g, dtype=np.float32)
+             - np.asarray(bg, dtype=np.float32))
+    return np.clip(a * HP_GAIN + HP_OFFSET, 0, 255).astype(np.uint8)
+
+
 def _complete_image(data):
     """True if these bytes are a whole image, not a half-written one."""
     if len(data) < 1024:
@@ -98,7 +123,12 @@ class RapidEngine:
             return []
         with self.Image.open(io.BytesIO(data)) as img:
             W, H = img.size
-        result, _ = self.ocr(data)
+        # RapidOCR takes an ndarray directly, so no re-encode round trip
+        import numpy as np
+        flat = _flatten_background(data)
+        result, _ = self.ocr(np.stack([flat] * 3, axis=-1))
+        if not result:            # safety net for screens the filter hurts
+            result, _ = self.ocr(data)
         blocks = []
         for box, text, score in result or []:
             xs = [p[0] for p in box]
@@ -137,6 +167,18 @@ class WindowsEngine:
             self.max_dim = 2600
         self.loop = asyncio.new_event_loop()
 
+    @staticmethod
+    def _flattened_png(data):
+        """This engine decodes from bytes, so re-encode after flattening.
+        Falls back to the original frame if anything goes wrong."""
+        try:
+            from PIL import Image
+            buf = io.BytesIO()
+            Image.fromarray(_flatten_background(data)).save(buf, format="PNG")
+            return buf.getvalue()
+        except Exception:
+            return data
+
     async def _decode_stream(self, data):
         """Decode from memory — reading the file directly races ffmpeg's
         rewrite and yields 'The image is unrecognized' on most frames."""
@@ -156,6 +198,7 @@ class WindowsEngine:
         data = read_frame_bytes(path)
         if data is None:
             return []
+        data = self._flattened_png(data)
         stream = await self._decode_stream(data)
         decoder = await img.BitmapDecoder.create_async(stream)
         w0, h0 = decoder.pixel_width, decoder.pixel_height
