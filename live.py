@@ -88,6 +88,17 @@ VAD_PEAK = 0.85               # a single decisive spike counts (robot voices
 # sustained moderate probability also counts as voiced
 VAD_WEAK_THRESHOLD = 0.25
 VAD_WEAK_HITS = 8             # ~256ms of moderately speech-like audio
+# Some VO sits below every audio threshold we can safely use: measured on a
+# real capture, a voiced line peaked at 0.18 with 4 blocks >= 0.12, while an
+# UNVOICED line in the same scene had 5 — no global threshold separates them,
+# and lowering one silences the unvoiced lines this app exists to fill in.
+# For a speaker whose lines have consistently turned out voiced, use that
+# prior instead: accept much weaker evidence before talking over them.
+# Staying silent is the safer error for a character who has a real voice.
+VAD_SOFT_THRESHOLD = 0.12
+VAD_SOFT_HITS = 3
+SOFT_GATE_MIN_VOICED = 3      # observations before the prior is trusted
+SOFT_GATE_RATIO = 0.75
 # the gate's lookback must never reach back before the line appeared on
 # screen — otherwise the PREVIOUS speaker's VO tail counts as evidence that
 # THIS line is voiced (false skip on fast auto-advance transitions, where
@@ -99,6 +110,8 @@ VAD_LINE_MARGIN = 0.0
 
 vad_history = deque(maxlen=400)
 vad_lag = {"s": 0.0}          # how far the VAD tail-reader trails the live edge
+# speaker -> [times the game voiced them, times we spoke for them]
+voiced_history = {}
 # per-block stereo energy: (t, mid_dB, side_dB). Game VO is center-panned
 # (mid), music/ambience is wide (side) — a mid-only burst at line start is
 # voiceover even when the VAD can't recognize the voice as speech.
@@ -267,18 +280,27 @@ def speech_hits(since, threshold=None):
     return sum(1 for t, p in vad_history if t >= since and p >= threshold)
 
 
-def is_voiced(since):
+def usually_voiced(speaker):
+    """True once a speaker has a consistent record of the game voicing them."""
+    v, s = voiced_history.get(speaker, (0, 0))
+    return v >= SOFT_GATE_MIN_VOICED and v >= SOFT_GATE_RATIO * (v + s)
+
+
+def is_voiced(since, soft=False):
+    """soft: this speaker is usually voiced, so accept weaker evidence."""
+    weak_threshold = VAD_SOFT_THRESHOLD if soft else VAD_WEAK_THRESHOLD
+    weak_hits = VAD_SOFT_HITS if soft else VAD_WEAK_HITS
     strong = weak = 0
     peak = 0.0
     for t, p in vad_history:
         if t >= since:
             if p >= VAD_THRESHOLD:
                 strong += 1
-            if p >= VAD_WEAK_THRESHOLD:
+            if p >= weak_threshold:
                 weak += 1
             peak = max(peak, p)
     return (strong >= VAD_MIN_HITS or peak >= VAD_PEAK
-            or weak >= VAD_WEAK_HITS)
+            or weak >= weak_hits)
 
 
 # HSR renders capital I without serifs, so Vision reads it as l/L constantly.
@@ -700,7 +722,12 @@ def main():
             obj = json.loads(SPOKEN_CACHE.read_text())
             for spk, norm in obj.get("window", []):
                 recent_lines.append({"speaker": spk, "norm": norm})
-            print(f"restored dedupe window of {len(recent_lines)}", flush=True)
+            for spk, counts in obj.get("voiced_history", {}).items():
+                if isinstance(counts, list) and len(counts) == 2:
+                    voiced_history[spk] = list(counts)
+            print(f"restored dedupe window of {len(recent_lines)}"
+                  f"; voiced history for {len(voiced_history)} speaker(s)",
+                  flush=True)
         except (json.JSONDecodeError, ValueError, TypeError):
             pass
 
@@ -1136,7 +1163,8 @@ def main():
                 recent_lines.append(
                     {"speaker": state["speaker"], "norm": new_norm})
             SPOKEN_CACHE.write_text(json.dumps(
-                {"window": [[e["speaker"], e["norm"]] for e in recent_lines]}))
+                {"window": [[e["speaker"], e["norm"]] for e in recent_lines],
+                 "voiced_history": voiced_history}))
 
             if state["speaker"] in VOICES.get("always_voiced", []):
                 stats["always_voiced"] += 1
@@ -1171,17 +1199,20 @@ def main():
             # before that belongs to the PREVIOUS line's VO, not this one
             gate_since = max(t_stable - VAD_LOOKBACK,
                              candidate_t0 - VAD_LINE_MARGIN)
-            voiced = is_voiced(gate_since)
+            # this speaker's VO has consistently been detected before, so
+            # weak evidence is enough to hold our tongue
+            soft = usually_voiced(state["speaker"])
+            voiced = is_voiced(gate_since, soft)
             deadline = t_stable + VAD_WAIT
             while not voiced and time.monotonic() < deadline:
                 time.sleep(0.05)
-                voiced = is_voiced(gate_since)
+                voiced = is_voiced(gate_since, soft)
             if not voiced:
                 quiet_deadline = time.monotonic() + 2.5
                 while time.monotonic() < quiet_deadline:
                     if speech_hits(time.monotonic() - 0.4, threshold=0.25) == 0:
                         break
-                    if is_voiced(gate_since):
+                    if is_voiced(gate_since, soft):
                         voiced = True
                         break
                     time.sleep(0.1)
@@ -1207,9 +1238,12 @@ def main():
                 wait_until = time.monotonic() + 15
                 while speech.playing and time.monotonic() < wait_until:
                     time.sleep(0.05)
+            rec = voiced_history.setdefault(state["speaker"], [0, 0])
+            rec[0 if voiced else 1] += 1
             if voiced:
                 stats["skipped_voiced"] += 1
-                add_event("skipped (voiced)", "skip", state["speaker"],
+                add_event("skipped (voiced — soft gate)" if soft
+                          else "skipped (voiced)", "skip", state["speaker"],
                           state["dialogue"], shot=True)
                 print(f"[voiced — skipping mid+{mid_up:.1f} side+{side_up:.1f}] "
                       f"{state['dialogue'][:60]}", flush=True)

@@ -16,6 +16,9 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 ### Added
 - Chrome-free lore/loading cards (centered title + prose, no Continue hint, no UID strip, no HUD) are recognized and read by the narrator. `classify()` sees their title as a nameplate, so they were previously skipped as an unknown speaker; stylized titles that OCR runs together ("CindearthAge") are split for speech.
 
+### Added
+- **Per-speaker voiced prior ("soft gate").** Some voiceover sits below every audio threshold that can be used safely: measured on a real capture, a voiced line peaked at 0.18 on the speech detector with 4 blocks above 0.12, while a genuinely *unvoiced* line in the same scene had 5 — no global threshold separates them, and lowering one would silence the unvoiced lines this app exists to fill in. HoyoVoice now tracks, per speaker, how often the game turned out to be voicing them; once a speaker is consistently voiced (3+ observations, 75%+), much weaker evidence is enough to stay quiet for them. The trade-off is deliberate: for a character with a real voice, staying silent is the safer error. It self-corrects — every line spoken for a character counts against the ratio — and the history persists across restarts in `captures/spoken_cache.json`. Skips taken this way are logged as "skipped (voiced — soft gate)".
+
 ### Fixed
 - Chat sender labels are OCR-jittered ("Ashveil"/"Ashvell"/"Ashval"), which auto-cast one character three ways and re-queued every message per variant (repeats while scrolling or idling, interleaved out-of-order reads). Senders now canonicalize per chat session, messages dedupe on text alone (fuzzy), and only short echoes keep the sender in the key.
 - Repeated log spam for a single on-screen line: dedupe and unknown-speaker entries are now collapsed on fuzzy text alone, since the speaker read jitters independently ("Goldy" vs "MysteriousGoldy").
