@@ -257,6 +257,16 @@ def classify_overlay(blocks):
 CHAT_BODY = {"x": (0.63, 0.97), "y": (0.14, 0.74)}
 
 
+# Panel chrome that sits INSIDE the body band: the Scroll/Back hints hug
+# its lower edge, and system notices ("Conversation Over", "… started
+# sharing location") print in the message column. Left in, they attach to
+# the last message and drag its position under the clip threshold, which
+# deleted the final message of every conversation.
+CHAT_SYSTEM_ROW = re.compile(
+    r"^(scroll|back|answer|conversation over)$|started sharing", re.I)
+CHAT_CLIP_Y = 0.21
+
+
 def classify_chat(blocks):
     """Returns [(sender, message_text), …] for complete visible messages,
     dropping a bottom message still clipped by the panel edge. None if this
@@ -266,7 +276,11 @@ def classify_chat(blocks):
              if 0.10 < b["y"] < 0.20 and b["x"] > 0.72}
     if not {"Scroll", "Back"} <= hints:
         return None
-    body = [b for b in conf if in_region(b, CHAT_BODY)]
+    # a finished conversation can't have anything still scrolling in, so its
+    # last message is complete no matter how low it sits
+    ended = any(b["text"].strip().lower() == "conversation over" for b in conf)
+    body = [b for b in conf if in_region(b, CHAT_BODY)
+            and not CHAT_SYSTEM_ROW.search(b["text"].strip())]
     body.sort(key=lambda b: -(b["y"] + b["h"] / 2))
     msgs, sender, buf, last_y = [], None, [], 1.0
     for b in body:
@@ -281,7 +295,7 @@ def classify_chat(blocks):
         msgs.append((sender, " ".join(buf), last_y))
     # drop the last message if its deepest row hugs the clip edge — it's
     # still scrolling into view and will be read complete later
-    if msgs and msgs[-1][2] < 0.21:
+    if msgs and msgs[-1][2] < CHAT_CLIP_Y and not ended:
         msgs = msgs[:-1]
     return [(s, t) for s, t, _ in msgs]
 
