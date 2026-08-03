@@ -8,6 +8,9 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **Chat system notices are read by the narrator**, not in the sender's voice — they're events, not speech ("Ashveil started sharing location"). The small grey text OCRs badly, so they're matched tolerantly against known wordings and spoken in a canonical form, which also collapses mangled variants into one entry so a notice is never read twice. Logged as `chat notice`.
+- `lost frames` in the dashboard analytics: frames the OCR daemon couldn't read at all.
+
 - **"⤓ Download log" button** in the dashboard's Log section. Saves one text file containing the environment (version, platform, devices), live analytics, the casting table, the full decision log the dashboard shows, and the noise-filtered console log — everything needed to debug a session, searchable and complete, instead of a screenshot. Served at `/log.txt`; the CLI (`hoyovoice.py log`) and the download now share one noise filter.
 
 - **Group-chat/message panel reading** — messages read incrementally, each sender in their own cast voice.
@@ -22,6 +25,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 - Platform code (capture, audio, OCR daemon, TTS, playback) extracted from `live.py` into `hv_platform/darwin.py` and `hv_platform/win32.py` behind a shared interface (`hv_platform/base.py`). macOS behavior is intentionally unchanged.
 
 ### Fixed
+
+- **A failed frame read was treated as evidence the screen had changed.** A torn JPEG (read while ffmpeg rewrites it, common under recording load) yields no OCR blocks at all — which is indistinguishable from "the panel is gone" unless you check. That falsely closed a chat panel that was plainly on screen, stopping the read and dropping its queue. Frames with zero blocks are now skipped outright and counted as `lost frames`.
 
 - **A scrolled chat panel re-read the tail of a message as a new one** ("City right now" from "…is in Seafeld City right now"). Scrolling clips the topmost bubble, so its remaining rows look like a fresh short message. Fuzzy matching can't catch this — a short fragment scores low against the long original — so the dedupe now also rejects a message contained in one already read, with a length floor that keeps genuine short replies ("Okay", "Yes") readable.
 

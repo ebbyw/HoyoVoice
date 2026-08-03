@@ -162,6 +162,7 @@ def frame_is_dark():
 
 
 latest_ocr = {"blocks": None}     # raw blocks of the current frame (debug)
+lost_frames = {"n": 0}            # frames the OCR daemon couldn't read at all
 
 
 def save_shot(eid):
@@ -219,6 +220,7 @@ def metrics():
         "yielded": stats["yielded"],
         "synth_avg_ms": int(sum(synth) / len(synth)) if synth else 0,
         "ocr_avg_ms": int(sum(ocr) / len(ocr)) if ocr else 0,
+        "lost_frames": lost_frames["n"],
         "lines_per_min": round(stats["spoken"] / mins, 1),
     }
 
@@ -981,6 +983,14 @@ def main():
                 continue
             stats["ocr_ms"].append(int((time.time() - t0) * 1000))
             latest_ocr["blocks"] = blocks
+            if not blocks:
+                # NO blocks at all means we failed to read the frame (a torn
+                # JPEG mid-rewrite, common under recording load), not that
+                # the screen is empty. Counting it as evidence made reader
+                # panels look closed while they were plainly on screen —
+                # which stopped the read and dropped its queue.
+                lost_frames["n"] += 1
+                continue
 
             # --- Reading-mode screens (Quick Read books, info/profile
             # screens, message/group-chat panels): incremental reading ---
@@ -996,7 +1006,7 @@ def main():
                 for spk, t in items:
                     if spk:
                         spk = canon_sender(spk.strip())
-                    elif chat is not None and chat_senders:
+                    elif spk is None and chat is not None and chat_senders:
                         # label scrolled off the top (or was missed): a run of
                         # messages only labels its first, so inherit the last
                         # known sender rather than reading in the narrator's
@@ -1061,9 +1071,11 @@ def main():
                 speech.play(audio, qr=True)
                 stats["spoken"] += 1
                 last_spoken_norm = normalize_text(text)   # suppress its repeats
-                add_event("chat" if spk else "quick read", "spoken", spk,
-                          text, voice, speed, can_replay=True, shot=True)
-                print(f"[{('chat ' + spk) if spk else 'quick read'} → {voice}] "
+                kind = ("chat" if spk else
+                        "chat notice" if chat is not None else "quick read")
+                add_event(kind, "spoken", spk, text, voice, speed,
+                          can_replay=True, shot=True)
+                print(f"[{kind}{' ' + spk if spk else ''} → {voice}] "
                       f"{text[:70]}", flush=True)
             if qr is not None or chat is not None:
                 continue

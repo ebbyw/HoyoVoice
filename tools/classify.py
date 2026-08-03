@@ -6,6 +6,7 @@ Layout profile: Honkai Star Rail, standard dialogue screen.
 
 Usage: python3 classify.py <ocr.json>
 """
+import difflib
 import json
 import re
 import sys
@@ -268,8 +269,40 @@ CHAT_HEADER = {"x": (0.52, 0.88), "y": (0.75, 0.92)}
 # sharing location") print in the message column. Left in, they attach to
 # the last message and drag its position under the clip threshold, which
 # deleted the final message of every conversation.
-CHAT_SYSTEM_ROW = re.compile(
-    r"^(scroll|back|answer|conversation over)$|started sharing", re.I)
+CHAT_SYSTEM_ROW = re.compile(r"^(scroll|back|answer|conversation over)$", re.I)
+# In-conversation system notices. These are events, not speech, so they are
+# read by the narrator rather than in the sender's voice. The small grey
+# text OCRs badly ("started shan ing (ocation", "slarted sharing (ecatton"),
+# so match tolerantly and speak a canonical wording — which also collapses
+# the variants to one entry for dedupe.
+CHAT_NOTICES = ("started sharing location",)
+CHAT_NOTICE_SENDER = ""        # falsy but not None: narrator, never inherited
+
+
+CHAT_NOTICE_RATIO = 0.65       # measured: real notices 0.82-1.00, real
+                               # messages 0.33-0.42 — a wide, safe gap
+
+
+def _chat_notice(raw, header_name):
+    """Canonical text for a system notice row, or None if it isn't one.
+
+    Slides the comparison window over the tail so a leading sender name of
+    unknown length can't dilute the match — that alone was the difference
+    between catching one mangled read and missing the other.
+    """
+    n = re.sub(r"[^a-z]", "", raw.lower())
+    if len(n) < 12:
+        return None
+    for tpl in CHAT_NOTICES:
+        t = tpl.replace(" ", "")
+        best = 0.0
+        for pad in (0, 2, 4, 6, 8):
+            tail = n[-(len(t) + pad):] if len(n) > len(t) + pad else n
+            best = max(best, difflib.SequenceMatcher(None, tail, t).ratio())
+        if best >= CHAT_NOTICE_RATIO:
+            who = header_name or (raw.split() or [""])[0]
+            return f"{who} {tpl}".strip()
+    return None
 # Defer a message whose deepest row sits this low: near the panel's clip
 # edge, rows below are simply not rendered yet, and reading there produced
 # a truncated message ("…Should be") followed by the full one a moment
@@ -303,6 +336,17 @@ def classify_chat(blocks):
     body.sort(key=lambda b: -(b["y"] + b["h"] / 2))
     msgs, sender, buf, last_y = [], None, [], 1.0
     for b in body:
+        # Notices are centred, so they can land either side of the
+        # sender/message column split — test before that branch.
+        notice = _chat_notice(b["text"], header_name)
+        if notice:
+            cy = b["y"] + b["h"] / 2
+            if buf:                            # close the message above it
+                msgs.append((sender or header_name, " ".join(buf), last_y))
+                buf = []
+            msgs.append((CHAT_NOTICE_SENDER, notice, cy))
+            last_y = cy
+            continue
         if b["x"] < 0.666:                     # sender label row
             if buf:
                 msgs.append((sender or header_name, " ".join(buf), last_y))
