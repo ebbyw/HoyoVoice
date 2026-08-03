@@ -61,7 +61,7 @@ if (-not (Test-Path ".venv")) { & $py -m venv .venv }
 # kokoro-onnx bundles espeak-ng via espeakng-loader - no system install needed
 & .venv\Scripts\python.exe -m pip install -q `
     kokoro-onnx onnxruntime sounddevice soundfile pillow numpy `
-    flask vaderSentiment rapidocr-onnxruntime winsdk
+    flask vaderSentiment rapidocr-onnxruntime winsdk wordfreq
 # DirectML: GPU-accelerated OCR (any modern GPU). Optional — the daemon
 # falls back to CPU, then to the built-in Windows engine, without it.
 Write-Host "== installing DirectML (GPU OCR acceleration, optional)"

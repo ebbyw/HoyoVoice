@@ -358,6 +358,64 @@ _SPACE_AFTER_DOT = re.compile(r"(?<=[a-z])\.(?=[A-Za-z])")
 _COMMA_MISREAD = re.compile(r"(?<=[a-z])\.(?=\s+[a-z])")
 
 
+# Run-on repair. The Windows recognition model is Chinese-trained and
+# Chinese has no spaces, so it fuses word pairs ("mercyis", "thingandbring")
+# that no punctuation rule can catch. wordfreq scores candidate splits;
+# optional import so the macOS/Vision path (which spaces correctly) and
+# installs without it simply skip this.
+try:
+    from wordfreq import zipf_frequency as _zipf
+except ImportError:                                   # pragma: no cover
+    _zipf = None
+_RUNON_MIN_PART = 3.2     # both halves must be this common (zipf)
+_RUNON_IS_WORD = 2.0      # token this common is left alone
+
+
+def _split_runon(tok):
+    """['mercyis'] → ['mercy', 'is']; unsplittable tokens come back as-is."""
+    if (_zipf is None or len(tok) < 4 or not tok.isalpha()
+            or _zipf(tok.lower(), "en") >= _RUNON_IS_WORD):
+        return [tok]
+    best = None
+    for i in range(1, len(tok)):
+        a, b = tok[:i], tok[i:]
+        if len(a) == 1 and a.lower() not in "ai":
+            continue
+        if len(b) == 1 and b.lower() not in "ai":
+            continue
+        fa, fb = _zipf(a.lower(), "en"), _zipf(b.lower(), "en")
+        if fa >= _RUNON_MIN_PART and fb >= _RUNON_MIN_PART:
+            if best is None or min(fa, fb) > best[0]:
+                best = (min(fa, fb), a, b)
+    return [best[1], best[2]] if best else [tok]
+
+
+def repair_runons(s):
+    out = []
+    for tok in re.split(r"(\W+)", s):
+        # Capitalised tokens are game proper nouns ("Wishpower", "Cindearth")
+        # — splitting those is worse than leaving a fused pair.
+        if tok[:1].isupper() or not tok.isalpha():
+            out.append(tok)
+        else:
+            out.append(" ".join(_split_runon(tok)))
+    return "".join(out)
+
+
+def text_quality(s):
+    """Fraction of tokens that are real words — used to pick the best of
+    several OCR reads of the SAME line. A read with 'mercy is' scores above
+    one with 'mercyis' even when the fused version is far more common."""
+    if _zipf is None:
+        return 0.0
+    toks = re.findall(r"[A-Za-z']+", s)
+    if not toks:
+        return 0.0
+    good = sum(1 for w in toks
+               if w[:1].isupper() or _zipf(w.lower(), "en") >= _RUNON_IS_WORD)
+    return good / len(toks)
+
+
 def repair_punctuation(s):
     s = _ELLIPSIS_RUN.sub("…", s)          # ".." / "..." → one ellipsis glyph
     s = _SPACE_AFTER_PUNCT.sub(r"\1 ", s)
@@ -372,6 +430,7 @@ def _keep_case(rep):
 def fix_ocr_text(s):
     s = re.sub(r"[’‘`´ʼ]", "'", s)      # normalize apostrophe glyph variants
     s = repair_punctuation(s)           # before word fixes: \b needs spaces
+    s = repair_runons(s)                # 'mercyis' → 'mercy is'
     for pat, rep in _OCR_FIXES:
         s = pat.sub(rep, s)
     s = _STRIP_GLYPHS.sub("", s)
@@ -778,6 +837,7 @@ def main():
     fired_norm = None           # line already pushed through the gate once
     unstable_count = 0
     miss_streak = 0             # consecutive frames the detector lost the line
+    candidate_variants = []     # every raw read of the current line
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
@@ -1048,6 +1108,7 @@ def main():
                            or len(key[1]) >= SHORT_LINE))
             if key == candidate:
                 candidate_count += 1
+                candidate_variants.append(state["dialogue"])
             elif jitter:
                 # Same on-screen line, slightly different read (". mongrel."
                 # vs ".mongrel."). Restarting the count here made lines
@@ -1055,7 +1116,9 @@ def main():
                 # skip every few seconds. Keep counting, adopt the latest.
                 candidate = key
                 candidate_count += 1
+                candidate_variants.append(state["dialogue"])
             else:
+                candidate_variants = [state["dialogue"]]
                 # if the text GREW from the previous candidate, the typewriter
                 # is mid-render (it pauses at sentence ends!) — stay patient
                 candidate_growing = (candidate is not None
@@ -1106,6 +1169,17 @@ def main():
                 continue
             fired_norm = key[1]
             candidate_growing = False
+            # Speak the BEST read of this line, not whichever frame happened
+            # to trip the threshold. OCR emits micro-variants of the same
+            # line ("mercy is" vs "mercyis"); measured on a real capture, the
+            # correct one was a 2-of-29 minority, so majority voting would
+            # pick the wrong text. Score by how many tokens are real words.
+            same_norm = [v for v in candidate_variants
+                         if normalize_text(v) == key[1]]
+            if len(same_norm) > 1:
+                best = max(same_norm, key=text_quality)
+                if best != state["dialogue"]:
+                    state["dialogue"] = best
 
             new_norm = key[1]
 
