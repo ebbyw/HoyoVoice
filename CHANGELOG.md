@@ -6,6 +6,9 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+<!-- Before merging: collapse the branch-only fixes (chat reader, etc.)
+     into the feature entries they belong to — see plans/PRE-MERGE.md -->
+
 ### Added
 
 - **Windows support (experimental)**: new `hv_platform/` backend layer — DirectShow video capture, in-process WASAPI audio capture (replaces sox's role), `tools/ocrd_win.py` OCR daemon (RapidOCR or Windows.Media.Ocr, same JSON protocol and Vision-style coordinates), Kokoro TTS via kokoro-onnx on CPU (same voice IDs — `voices.json` carries over), sounddevice playback, `setup.ps1`, and a cross-platform `hoyovoice.py` launcher. See `plans/WINDOWS-TESTING.md` for the first-run checklist.
