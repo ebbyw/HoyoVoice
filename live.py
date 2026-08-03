@@ -685,6 +685,18 @@ def main():
     yield_event_id = None
     qr_seen, qr_absent = set(), 99      # Quick Read incremental-reading state
     read_queue = deque()
+    chat_senders = []                   # session canon: OCR jitters the tiny
+                                        # sender labels (Ashveil/Ashvell/Ashval)
+
+    def canon_sender(name):
+        """Snap a jittered sender label to this chat session's canonical
+        spelling (or a cast name) so one character can't multiply."""
+        known = list(VOICES["characters"].keys()) + chat_senders
+        m = difflib.get_close_matches(name, known, n=1, cutoff=0.75)
+        if m:
+            return m[0]
+        chat_senders.append(name)
+        return name
     print("live — watching feed + listening for VO", flush=True)
 
     try:
@@ -820,8 +832,16 @@ def main():
                 items = [(None, t) for t in qr] if qr is not None else chat
                 new = []
                 for spk, t in items:
-                    n = normalize_text((spk or "") + t)
-                    if len(n) > 2 and n not in qr_seen:
+                    if spk:
+                        spk = canon_sender(spk.strip())
+                    # dedupe on text alone for substantial messages — sender
+                    # label jitter must not requeue the same message; keep
+                    # sender in the key only for short echoes ("ok")
+                    tn = normalize_text(t)
+                    n = tn if len(tn) >= 12 else normalize_text((spk or "") + t)
+                    if (len(n) > 2 and n not in qr_seen
+                            and not any(difflib.SequenceMatcher(
+                                None, n, o).ratio() >= 0.9 for o in qr_seen)):
                         qr_seen.add(n)
                         new.append((spk, t))
                 if qr is not None:
@@ -844,6 +864,7 @@ def main():
                         speech.stop()
                 if qr_absent == 40:             # gone a while: forget progress
                     qr_seen.clear()
+                    chat_senders.clear()
 
             # pump the reading queue when the voice is idle
             if (read_queue

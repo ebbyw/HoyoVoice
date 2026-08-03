@@ -9,6 +9,9 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 ### Added
 - **Group-chat/message panel reading** — messages read incrementally, each sender in their own cast voice.
 
+### Fixed
+- Chat sender labels are OCR-jittered ("Ashveil"/"Ashvell"/"Ashval"), which auto-cast one character three ways and re-queued every message per variant (repeats while scrolling or idling, interleaved out-of-order reads). Senders now canonicalize per chat session, messages dedupe on text alone (fuzzy), and only short echoes keep the sender in the key.
+
 ## [0.5.1] - 2026-07-27
 
 ### Fixed
