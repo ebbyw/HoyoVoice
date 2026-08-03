@@ -18,10 +18,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "tools"))
-from classify import (classify, classify_infoscreen, classify_loading,  # noqa: E402
-                      classify_narration, classify_overlay,
-                      classify_quickread, has_continue_hint,
-                      narration_self_certain)
+from classify import (classify, classify_chat, classify_infoscreen,  # noqa: E402
+                      classify_loading, classify_narration,
+                      classify_overlay, classify_quickread,
+                      has_continue_hint, narration_self_certain)
 from vad import CHUNK, SileroVAD  # noqa: E402
 from webui import start_webui  # noqa: E402
 
@@ -810,20 +810,30 @@ def main():
             blocks = json.loads(raw)
 
             # --- Reading-mode screens (Quick Read books, info/profile
-            # screens): incremental narrator reading ---
+            # screens, message/group-chat panels): incremental reading ---
             qr = classify_quickread(blocks)
             if qr is None:
                 qr = classify_infoscreen(blocks)
-            if qr is not None:
+            chat = None if qr is not None else classify_chat(blocks)
+            if qr is not None or chat is not None:
                 qr_absent = 0
+                items = [(None, t) for t in qr] if qr is not None else chat
                 new = []
-                for t in qr:
-                    n = normalize_text(t)
+                for spk, t in items:
+                    n = normalize_text((spk or "") + t)
                     if len(n) > 2 and n not in qr_seen:
                         qr_seen.add(n)
-                        new.append(t)
-                if new:
-                    read_queue.append(fix_ocr_text(" ".join(new)))
+                        new.append((spk, t))
+                if qr is not None:
+                    if new:
+                        read_queue.append(
+                            (None, fix_ocr_text(" ".join(t for _, t in new))))
+                else:
+                    # chat messages queue individually — each sender reads
+                    # in their own cast (or auto-cast) voice
+                    for spk, t in new:
+                        read_queue.append((normalize_speaker(spk),
+                                           fix_ocr_text(t)))
                 candidate, candidate_count = None, 0
             else:
                 if qr_absent < 99:
@@ -839,15 +849,16 @@ def main():
             if (read_queue
                     and (speech.player is None
                          or speech.player.poll() is not None)):
-                text = read_queue.popleft()
-                voice = VOICES["defaults"]["narrator"]
-                segs, speed, _ = speech.synth(text, voice, 1.0)
+                spk, text = read_queue.popleft()
+                voice, base_speed = pick_voice(spk)
+                segs, speed, _ = speech.synth(text, voice, base_speed)
                 speech.play(segs, qr=True)
                 stats["spoken"] += 1
-                add_event("quick read", "spoken", None, text, voice, speed,
-                          can_replay=True, shot=True)
-                print(f"[quick read → {voice}] {text[:70]}", flush=True)
-            if qr is not None:
+                add_event("chat" if spk else "quick read", "spoken", spk,
+                          text, voice, speed, can_replay=True, shot=True)
+                print(f"[{('chat ' + spk) if spk else 'quick read'} → {voice}] "
+                      f"{text[:70]}", flush=True)
+            if qr is not None or chat is not None:
                 continue
 
             state = classify(blocks)

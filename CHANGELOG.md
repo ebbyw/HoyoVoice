@@ -6,6 +6,9 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+- **Group-chat/message panel reading** — messages read incrementally, each sender in their own cast voice.
+
 ## [0.5.1] - 2026-07-27
 
 ### Fixed
