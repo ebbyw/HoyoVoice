@@ -1081,10 +1081,13 @@ def main():
                     qr_gone_t0 = now
                 # Treat the panel as CLOSED only after it has been missing
                 # for a sustained stretch. Scrolling briefly hides the
-                # Scroll/Back hints this detector keys on, and a 3-frame
-                # rule (~0.5s) fired on that: it cleared the queue and cut
-                # the read in progress just as the user scrolled.
-                if (qr_absent >= 3 and not reader_closed
+                # Scroll/Back hints this detector keys on, and the old
+                # 3-frame rule (~0.5s) fired on that: it cleared the queue
+                # and cut the read in progress just as the user scrolled.
+                # Wall-clock is the whole test — a frame count would only
+                # restate it, and badly, since the loop rate varies with
+                # OCR and synth load.
+                if (not reader_closed
                         and now - qr_gone_t0 >= READER_CLOSE_AFTER):
                     reader_closed = True
                     dropped = len(read_queue)
@@ -1224,8 +1227,11 @@ def main():
                     # current one) — anchor the VAD gate window here
                     candidate_t0 = time.monotonic()
                 # Reads too different for the jitter branch to absorb (>5%
-                # apart) but clearly the same line still churning — the only
-                # instability that can now stop a line being spoken at all.
+                # apart) yet clearly the same line still churning. KEPT
+                # deliberately: the jitter branch and MISS_TOLERANCE cover
+                # everything milder, so this narrow 0.70–0.95 band is the
+                # remaining way a line can fail to stabilise, and it is the
+                # only warning that would say so.
                 if (candidate is not None and candidate[1] and key[1]
                         and not candidate_growing
                         and 0.70 <= difflib.SequenceMatcher(

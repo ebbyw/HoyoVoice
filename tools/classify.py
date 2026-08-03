@@ -252,16 +252,24 @@ def classify_overlay(blocks):
     return text if len(text) >= 12 else None
 
 
-# HSR message/group-chat panel ("Answer" screens): sender labels at the
-# bubble's left edge (x<0.666), message text indented (x>=0.666), panel
-# header above y=0.74, R-Scroll/O-Back hints floating at y~0.135
-# Floor sits ABOVE the Scroll/Back hint row (y≈0.13–0.16). Those hints
-# include bare button glyphs ("R", "O") that no text filter catches, and
-# one was read aloud as a message. Nothing is lost: a message whose last
-# row lands this low is still scrolling in and is deferred anyway.
+# --- HSR message/group-chat panel ("Answer" screens) -------------------
+# All of these are tuned to this game's phone UI at 1080p and would need
+# re-deriving for another game.
+#
+# The body floor sits ABOVE the Scroll/Back hint row (y≈0.13–0.16): those
+# hints include bare button glyphs ("R", "O") that no text filter can
+# catch, and one was read aloud as a message. Nothing is lost — a message
+# whose last row lands that low is still scrolling in and is deferred.
 CHAT_BODY = {"x": (0.63, 0.97), "y": (0.20, 0.74)}
 # conversation title above the message list ("Ashveil" over "Answer")
 CHAT_HEADER = {"x": (0.52, 0.88), "y": (0.75, 0.92)}
+# Sender labels sit at the bubble's left edge, message text is indented —
+# but only just. Measured across real frames: labels land at x=0.659,
+# message rows at x=0.671, so the two classes are separated by 0.011 and
+# nothing else distinguishes them. This is the midpoint of that gap, a
+# calibrated value rather than a round number; re-measure from
+# shots/<id>.json before changing it.
+CHAT_SENDER_MAX_X = 0.665
 
 
 # Panel chrome that sits INSIDE the body band: the Scroll/Back hints hug
@@ -347,7 +355,7 @@ def classify_chat(blocks):
             msgs.append((CHAT_NOTICE_SENDER, notice, cy))
             last_y = cy
             continue
-        if b["x"] < 0.666:                     # sender label row
+        if b["x"] < CHAT_SENDER_MAX_X:         # sender label row
             if buf:
                 msgs.append((sender or header_name, " ".join(buf), last_y))
             sender, buf = b["text"].strip(), []
