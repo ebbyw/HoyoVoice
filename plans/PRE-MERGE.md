@@ -73,3 +73,22 @@ it and date the section when cutting the release.
 - **`plans/PLAN-WINDOWS.md`** is historical now — the plan it describes is
   built. Either mark it as such or fold the still-true parts into
   `WINDOWS-TESTING.md`.
+
+## 5. Known, and deliberately not fixed
+
+Not blockers — recorded so they aren't mistaken for oversights.
+
+- **Sentence streaming has never been judged by ear.** It's the newest
+  behaviour on the branch: a completed sentence is spoken at the
+  typewriter's pause and the remainder follows once it renders. It
+  verifies correctly in replay, but "does it sound chopped?" is a
+  listening question, not a test. Worth one deliberate pass before
+  release.
+- **Word-level OCR misreads remain** ("for a" → "fora", "thingandbring").
+  Run-on repair only splits into two known words, so three-way fusions
+  survive. The real lever is an English-trained PP-OCR recognition model
+  in place of the Chinese-trained default — droppable into RapidOCR via
+  `rec_model_path`, unmeasured so far.
+- **PS5 system menus are read before the game starts** (Ebby: P3, leave
+  it). They're skipped as unknown speakers, so nothing is spoken; the log
+  just fills with rejections.

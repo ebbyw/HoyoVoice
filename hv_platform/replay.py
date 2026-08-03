@@ -61,6 +61,11 @@ class VideoCapture:
     def restart(self, record_path=None):
         if self.thread and self.thread.is_alive():
             return                       # never restart a replay mid-flight
+        if _done["video"]:
+            # The clip is finished. live.py's stall watchdog fires ~10s
+            # after the last frame; without this it replayed the whole clip
+            # again, appending phantom reads to the transcript.
+            return
         self.stop_flag.clear()
         self.frame.parent.mkdir(parents=True, exist_ok=True)
         frames = sorted((REPLAY_DIR / "frames").glob("*.jpg"))
