@@ -26,13 +26,13 @@ WIN = sys.platform == "win32"
 VENV_PY = ROOT / (".venv/Scripts/python.exe" if WIN else ".venv/bin/python")
 
 sys.path.insert(0, str(ROOT / "tools"))
-try:
-    from webui import DASHBOARD_PORT
+try:                           # one source of truth, shared with the dashboard
+    from webui import DASHBOARD_PORT, LOG_NOISE
 except ImportError:            # flask not installed yet (pre-setup)
     DASHBOARD_PORT = 8470
-
-LOG_NOISE = re.compile(
-    "pixel format|Supported|uyvy|yuyv|nv12|0rgb|bgr0|in#0|Fetching|vad: chunks")
+    LOG_NOISE = re.compile(
+        "pixel format|Supported|uyvy|yuyv|nv12|0rgb|bgr0|in#0|Fetching|"
+        "vad: chunks")
 
 
 def read_pid():

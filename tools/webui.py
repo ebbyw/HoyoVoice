@@ -5,17 +5,25 @@ re-read and per-character mute, pause/resume, test speech, analytics.
 """
 import logging
 import os
+import platform
+import re
 import socket
 import sys
 import threading
+from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 VERSION = "0.5.1"
 # single source of truth (hoyovoice.py reads it); env override lets
 # tools/replay.py run beside a live instance without a port collision
 DASHBOARD_PORT = int(os.environ.get("HOYOVOICE_PORT", "8470"))
+# ffmpeg/format chatter that buries the interesting lines (hoyovoice.py
+# imports this so the CLI and the download filter identically)
+LOG_NOISE = re.compile(
+    "pixel format|Supported|uyvy|yuyv|nv12|0rgb|bgr0|in#0|Fetching|vad: chunks")
+LOG_TAIL_LINES = 4000
 
 VOICE_CATALOG = [
     "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore",
@@ -89,7 +97,8 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
 </div>
 
 <h2>Log <button id="toggleLog" onclick="toggleLog()">Hide</button>
-<button onclick="post('/api/clearlog',{})">Clear</button></h2>
+<button onclick="post('/api/clearlog',{})">Clear</button>
+<button onclick="window.location='/log.txt'" title="Download this session's decisions + console log as a text file">⤓ Download log</button></h2>
 <table id="log"><thead><tr><th>time</th><th>speaker</th><th>line</th><th>voice</th><th>action</th><th></th></tr></thead><tbody></tbody></table>
 
 <script>
@@ -227,6 +236,64 @@ def start_webui(shared, port=DASHBOARD_PORT):
     @app.get("/recordings/<path:name>")
     def rec(name):
         return send_from_directory(str(shared["rec_dir"]["path"]), name)
+
+    @app.get("/log.txt")
+    def log_txt():
+        """One downloadable file with everything needed to debug a session:
+        environment, live analytics, casting, the decision log that the
+        dashboard shows, and the filtered console log. Beats a screenshot —
+        the text is searchable and complete."""
+        m = shared["metrics_fn"]()
+        out = [
+            f"HoyoVoice {VERSION} session log",
+            f"generated   {datetime.now().isoformat(timespec='seconds')}",
+            f"platform    {platform.platform()}  python {platform.python_version()}",
+            f"observing   {shared['observing']['on']}   recording "
+            f"{shared['recording']['on']}",
+            f"devices     video={shared['devices']['video']!r} "
+            f"audio={shared['devices']['audio']!r}",
+            "",
+            "ANALYTICS",
+            "  " + "   ".join(f"{k}={v}" for k, v in m.items()),
+            "",
+            "CASTING",
+        ]
+        always = shared["voices"].get("always_voiced", [])
+        for ch, c in shared["voices"]["characters"].items():
+            out.append(f"  {ch:28s} {c.get('voice',''):12s}"
+                       f"{'  [muted]' if ch in always else ''}"
+                       f"{'  (auto)' if c.get('auto') else ''}")
+        unknown = [u for u in sorted(shared["unknown"])
+                   if u not in shared["voices"]["characters"]]
+        if unknown:
+            out.append("  unassigned: " + ", ".join(unknown))
+
+        out += ["", "DECISION LOG (oldest first)", ""]
+        for e in shared["events"]:
+            speed = f" x{e['speed']}" if e.get("speed") else ""
+            out.append(f"  {e['t']}  {(e['speaker'] or '—'):20.20s} "
+                       f"{e['action']:34.34s} {(e['voice'] or ''):10s}{speed}")
+            out.append(f"            {e['text']}")
+
+        out += ["", "CONSOLE LOG (noise filtered)", ""]
+        path = Path(shared.get("log_path", ""))
+        try:
+            lines = [ln for ln in path.read_text(
+                         encoding="utf-8", errors="replace").splitlines()
+                     if not LOG_NOISE.search(ln)]
+            if len(lines) > LOG_TAIL_LINES:
+                out.append(f"  … {len(lines) - LOG_TAIL_LINES} earlier lines "
+                           "omitted …")
+                lines = lines[-LOG_TAIL_LINES:]
+            out += ["  " + ln for ln in lines]
+        except OSError as exc:
+            out.append(f"  (console log unavailable: {exc})")
+
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        resp = Response("\n".join(out) + "\n", mimetype="text/plain")
+        resp.headers["Content-Disposition"] = (
+            f'attachment; filename="hoyovoice-{stamp}.log"')
+        return resp
 
     @app.get("/api/state")
     def state():

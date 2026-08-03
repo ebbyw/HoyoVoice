@@ -808,6 +808,8 @@ def main():
                         "commands": commands, "observing": observing,
                         "shots_dir": str(SHOTS), "frame_dir": str(FRAME.parent),
                         "rec_dir": REC_DIR,
+                        # written by the launcher (repo root), not STATE
+                        "log_path": str(ROOT / "live.log"),
                         "recording": recording,
                         "devices": DEVICES, "list_devices_fn": list_devices})
     print(f"dashboard: http://127.0.0.1:{port}", flush=True)

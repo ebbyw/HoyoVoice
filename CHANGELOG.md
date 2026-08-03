@@ -8,6 +8,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **"⤓ Download log" button** in the dashboard's Log section. Saves one text file containing the environment (version, platform, devices), live analytics, the casting table, the full decision log the dashboard shows, and the noise-filtered console log — everything needed to debug a session, searchable and complete, instead of a screenshot. Served at `/log.txt`; the CLI (`hoyovoice.py log`) and the download now share one noise filter.
+
 - **Group-chat/message panel reading** — messages read incrementally, each sender in their own cast voice.
 - **Windows support (experimental)**: new `hv_platform/` backend layer — DirectShow video capture, in-process WASAPI audio capture (replaces sox's role), `tools/ocrd_win.py` OCR daemon (RapidOCR or Windows.Media.Ocr, same JSON protocol and Vision-style coordinates), Kokoro TTS via kokoro-onnx on CPU (same voice IDs — `voices.json` carries over), sounddevice playback, `setup.ps1`, and a cross-platform `hoyovoice.py` launcher. See `plans/WINDOWS-TESTING.md` for the first-run checklist.
 - Chrome-free lore/loading cards (centered title + prose, no Continue hint, no UID strip, no HUD) are recognized and read by the narrator. `classify()` sees their title as a nameplate, so they were previously skipped as an unknown speaker; stylized titles that OCR runs together ("CindearthAge") are split for speech.
