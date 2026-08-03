@@ -1007,7 +1007,14 @@ def main():
                     # sender in the key only for short echoes ("ok")
                     tn = normalize_text(t)
                     n = tn if len(tn) >= 12 else normalize_text((spk or "") + t)
-                    if (len(n) > 2 and n not in qr_seen
+                    # A scrolled panel clips its TOP message, so the tail of
+                    # one already read comes back as its own bubble ("City
+                    # right now" from "…is in Seafeld City right now"). Fuzzy
+                    # ratio can't see that — a short fragment scores low
+                    # against the long original — so test containment. The
+                    # length floor keeps genuine short replies ("Okay").
+                    fragment = len(n) >= 8 and any(n in o for o in qr_seen)
+                    if (len(n) > 2 and n not in qr_seen and not fragment
                             and not any(difflib.SequenceMatcher(
                                 None, n, o).ratio() >= 0.9 for o in qr_seen)):
                         qr_seen.add(n)

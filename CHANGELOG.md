@@ -23,6 +23,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **A scrolled chat panel re-read the tail of a message as a new one** ("City right now" from "…is in Seafeld City right now"). Scrolling clips the topmost bubble, so its remaining rows look like a fresh short message. Fuzzy matching can't catch this — a short fragment scores low against the long original — so the dedupe now also rejects a message contained in one already read, with a length floor that keeps genuine short replies ("Okay", "Yes") readable.
+
 - **Scrolling a chat panel cut the read and dropped the queue.** The panel-closed rule fired after 3 undetected frames (~0.5s), but scrolling briefly hides the Scroll/Back hints the detector keys on — so an ordinary scroll looked like a close, stopped the message being read and discarded everything queued behind it (seen live as "stopping mid-read, 4 queued dropped"). Closing is now judged on sustained absence (2s) rather than a frame count.
 - **A button glyph was read aloud as a chat message** ("R" from the Scroll hint). The message band reached down over the hint row; its floor now sits above it. Bare glyphs like this can't be caught by a text filter, so geometry is the right fix.
 - **Truncated chat messages read a beat before their last row rendered** ("…Should be" then the full "…Should be worth trusting"). Messages hugging the panel's clip edge are deferred more conservatively.
