@@ -6,9 +6,15 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-03
+
 ### Fixed
 
-- `setup.sh` did not install `flask` or `vaderSentiment`. Nothing else pulls them in, so a fresh macOS clone failed at import; `numpy` is now declared explicitly too rather than relying on a transitive dependency. The capture-device warning also pointed at a `live.py` constant that no longer exists — devices are chosen by name from the dashboard.
+- `setup.sh` did not install `flask` or `vaderSentiment`, and nothing else pulls them in — a fresh macOS clone installed cleanly and then failed at import. Both are now declared, along with `numpy`, which `live.py` imports directly but only received as a transitive dependency. The no-capture-device warning also pointed at a `live.py` constant removed several releases ago; devices are chosen by name from the dashboard.
+
+### Changed
+
+- README documents what 0.6.0 actually shipped: message/group-chat panel reading, sentence streaming, screen-kind labels in the log, and the log download button. OCR repair is now split by platform, since the Windows text repairs (space restoration, run-on splitting, best-read selection) exist for a recogniser macOS doesn't use. Adds a **Debugging a session** section covering the log download and `tools/replay.py`. `setup.sh` records why `wordfreq` is deliberately absent there but present in `setup.ps1`.
 
 ## [0.6.0] - 2026-08-03
 
