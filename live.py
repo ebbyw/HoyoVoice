@@ -379,7 +379,12 @@ try:
 except ImportError:                                   # pragma: no cover
     _zipf = None
 _RUNON_MIN_PART = 3.2     # both halves must be this common (zipf)
-_RUNON_IS_WORD = 2.0      # token this common is left alone
+# A token this common is left alone. Measured over the repo's own prose:
+# at 2.0 the splitter mangled real words with common affixes — "tolerantly"
+# (zipf 1.32) → "tolerant ly", "misreads" (1.68) → "mis reads". Genuine OCR
+# fusions ("mercyis", "thingandbring", "shaning") all score 0.00, so
+# dropping the bar to 1.0 keeps every true split and drops the damage.
+_RUNON_IS_WORD = 1.0
 
 
 def _split_runon(tok):

@@ -28,6 +28,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- Run-on repair no longer splits legitimate words with common affixes ("tolerantly" → "tolerant ly", "misreads" → "mis reads"). Measured over 3204 words of correct prose, the known-word threshold was too aggressive: real words with affixes score 1.3–1.9 while genuine OCR fusions score 0.00, so the bar moved to 1.0 — false positives 15 → 3 (all code/URL strings), with every true split preserved.
+
 - **Loading-screen lore was silently skipped as a repeat.** The dedupe window persists across restarts so a restart mid-scene doesn't re-read the line still on screen — but it never expired, so a loading screen you see every session was suppressed by a read from the previous one. The window now goes stale after 10 minutes (the per-speaker voiced prior still persists indefinitely, since that one is meant to accumulate).
 - **Chat messages could be read mid-animation.** They were queued the instant they were seen, so a frame caught during the fade-in was spoken verbatim — the source of "started shan ing (ocation", which reads at 0.98+ confidence once settled. A message must now survive one further frame before it is read.
 - **A failed frame read was treated as evidence the screen had changed.** A torn JPEG (read while ffmpeg rewrites it, common under recording load) yields no OCR blocks at all — which is indistinguishable from "the panel is gone" unless you check. That falsely closed a chat panel that was plainly on screen, stopping the read and dropping its queue. Frames with zero blocks are now skipped outright and counted as `lost frames`.
