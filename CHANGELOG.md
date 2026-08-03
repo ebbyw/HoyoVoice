@@ -26,6 +26,9 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **Loading-screen lore was silently skipped as a repeat.** The dedupe window persists across restarts so a restart mid-scene doesn't re-read the line still on screen — but it never expired, so a loading screen you see every session was suppressed by a read from the previous one. The window now goes stale after 10 minutes (the per-speaker voiced prior still persists indefinitely, since that one is meant to accumulate).
+- **Chat messages could be read mid-animation.** They were queued the instant they were seen, so a frame caught during the fade-in was spoken verbatim — the source of "started shan ing (ocation", which reads at 0.98+ confidence once settled. A message must now survive one further frame before it is read.
+
 - **A failed frame read was treated as evidence the screen had changed.** A torn JPEG (read while ffmpeg rewrites it, common under recording load) yields no OCR blocks at all — which is indistinguishable from "the panel is gone" unless you check. That falsely closed a chat panel that was plainly on screen, stopping the read and dropping its queue. Frames with zero blocks are now skipped outright and counted as `lost frames`.
 
 - **A scrolled chat panel re-read the tail of a message as a new one** ("City right now" from "…is in Seafeld City right now"). Scrolling clips the topmost bubble, so its remaining rows look like a fresh short message. Fuzzy matching can't catch this — a short fragment scores low against the long original — so the dedupe now also rejects a message contained in one already read, with a length floor that keeps genuine short replies ("Okay", "Yes") readable.

@@ -85,6 +85,11 @@ MISS_TOLERANCE = 3
 # hints the detector keys on, so a short count fires on ordinary scrolling.
 READER_CLOSE_AFTER = 2.0
 DEDUP_WINDOW = 3              # a line repeats only if it's within the last N messages
+# the persisted window only guards against a restart mid-scene; older than
+# this, the same text is a new encounter (a loading screen seen every
+# session was being skipped as a repeat). voiced_history is NOT aged out —
+# that prior is meant to accumulate.
+SPOKEN_CACHE_TTL = 600
 SHORT_LINE = 15               # short lines (normalized chars) may echo across speakers
 
 VAD_THRESHOLD = 0.5
@@ -798,8 +803,17 @@ def main():
     if SPOKEN_CACHE.exists():
         try:
             obj = json.loads(SPOKEN_CACHE.read_text())
-            for spk, norm in obj.get("window", []):
-                recent_lines.append({"speaker": spk, "norm": norm})
+            # The window exists so a restart MID-SCENE doesn't re-read the
+            # line still on screen. After a real break the same text is a
+            # fresh encounter — a loading screen you see every session was
+            # being silently skipped as a repeat — so let it go stale.
+            age = time.time() - obj.get("saved_at", 0)
+            if age <= SPOKEN_CACHE_TTL:
+                for spk, norm in obj.get("window", []):
+                    recent_lines.append({"speaker": spk, "norm": norm})
+            else:
+                print(f"dedupe window discarded ({age / 60:.0f} min old)",
+                      flush=True)
             for spk, counts in obj.get("voiced_history", {}).items():
                 if isinstance(counts, list) and len(counts) == 2:
                     voiced_history[spk] = list(counts)
@@ -858,6 +872,7 @@ def main():
     yield_event_id = None
     qr_seen, qr_absent = set(), 99      # Quick Read incremental-reading state
     qr_gone_t0 = 0.0                    # when the reader panel first vanished
+    chat_prev = set()                   # last frame's messages (settle check)
     reader_closed = True                # panel-closed handling already done
     read_queue = deque()
     chat_senders = []                   # session canon: OCR jitters the tiny
@@ -1002,6 +1017,19 @@ def main():
                 qr_absent = 0
                 reader_closed = False
                 items = [(None, t) for t in qr] if qr is not None else chat
+                if chat is not None:
+                    # A message is queued the instant it's seen, so a frame
+                    # caught mid fade-in gets read verbatim — that is where
+                    # "started shan ing (ocation" came from; the same text
+                    # reads at 0.98+ confidence once settled. Require a
+                    # message to survive one more frame before reading it.
+                    cur = {normalize_text(t) for _, t in chat}
+                    settled = {c for c in cur
+                               if any(same_line(c, p, 0.92)
+                                      for p in chat_prev)}
+                    chat_prev = cur
+                    items = [(s, t) for s, t in items
+                             if normalize_text(t) in settled]
                 new = []
                 for spk, t in items:
                     if spk:
@@ -1041,6 +1069,7 @@ def main():
                                            fix_ocr_text(t)))
                 candidate, candidate_count = None, 0
             else:
+                chat_prev = set()
                 if qr_absent < 99:
                     qr_absent += 1
                 if qr_absent == 1:
@@ -1315,6 +1344,7 @@ def main():
                     {"speaker": state["speaker"], "norm": new_norm})
             SPOKEN_CACHE.write_text(json.dumps(
                 {"window": [[e["speaker"], e["norm"]] for e in recent_lines],
+                 "saved_at": time.time(),
                  "voiced_history": voiced_history}))
 
             if state["speaker"] in VOICES.get("always_voiced", []):
