@@ -289,8 +289,16 @@ def classify_chat(blocks):
                 msgs.append((sender, " ".join(buf), last_y))
             sender, buf = b["text"].strip(), []
         else:                                  # message text row
+            cy = b["y"] + b["h"] / 2
+            # A big vertical gap means a new bubble even though no sender
+            # label was read — consecutive messages from one sender only
+            # label the first, and OCR drops the small grey label often.
+            # Without this, two messages fuse into one utterance.
+            if buf and (last_y - cy) > 2.2 * b["h"]:
+                msgs.append((sender, " ".join(buf), last_y))
+                buf = []
             buf.append(b["text"])
-            last_y = b["y"] + b["h"] / 2
+            last_y = cy
     if sender and buf:
         msgs.append((sender, " ".join(buf), last_y))
     # drop the last message if its deepest row hugs the clip edge — it's

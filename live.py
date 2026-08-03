@@ -580,11 +580,18 @@ class Speech:
         self.player = backend.create_player()
         self.sia = SentimentIntensityAnalyzer()
         self.t_play = None
-        self.qr_playing = False
+        self._qr = False
 
     @property
     def playing(self):
         return self.player.playing
+
+    @property
+    def qr_playing(self):
+        """True only while a reader-queue item is ACTUALLY sounding. The
+        raw flag survives natural end-of-playback, which made 'is a read in
+        flight?' checks lie."""
+        return self._qr and self.player.playing
 
     def sentiment_speed(self, text):
         """Map sentiment to delivery pace: excited slightly faster, somber slower."""
@@ -598,7 +605,7 @@ class Speech:
 
     def stop(self):
         interrupted = self.player.stop()
-        self.qr_playing = False
+        self._qr = False
         # if a recorded clip was cut short (yield/interrupt), trim it in the mix
         if interrupted and recording["on"] and recording["clips"]:
             last = recording["clips"][-1]
@@ -625,7 +632,7 @@ class Speech:
         if audio is None or not len(audio):
             return
         self.stop()
-        self.qr_playing = qr
+        self._qr = qr
         # trim Kokoro's silence padding: snappier starts, tight handoffs
         loud = self.np.where(self.np.abs(audio) > 0.012)[0]
         if len(loud):
@@ -1005,8 +1012,11 @@ def main():
                 if qr_absent < 99:
                     qr_absent += 1
                 if qr_absent == 3:              # user closed the book screen
+                    dropped = len(read_queue)
                     read_queue.clear()
                     if speech.qr_playing:
+                        print(f"[reader panel gone — stopping mid-read, "
+                              f"{dropped} queued dropped]", flush=True)
                         speech.stop()
                 if qr_absent == 40:             # gone a while: forget progress
                     qr_seen.clear()

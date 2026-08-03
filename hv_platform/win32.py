@@ -466,6 +466,7 @@ class Player:
     def __init__(self):
         self.sd = _sd()
         self._started = False
+        self._deadline = 0.0
 
     def play(self, wav_path, audio=None, samplerate=24000):
         if audio is None:
@@ -473,21 +474,31 @@ class Player:
             audio, samplerate = sf.read(str(wav_path), dtype="float32")
         self.sd.play(audio, samplerate)
         self._started = True
+        # We know exactly how long this audio runs. PortAudio reports a
+        # stream INACTIVE as soon as the callback has handed over the last
+        # frames, which on WASAPI happens well before the sound has finished
+        # coming out — the caller then thought playback was idle, started the
+        # next line, and cut this one off mid-sentence (chat reads were
+        # audibly truncated). Sample count is the authority.
+        self._deadline = time.monotonic() + len(audio) / float(samplerate)
 
     def stop(self):
         interrupted = self.playing
         if self._started:
             self.sd.stop()
         self._started = False
+        self._deadline = 0.0
         return interrupted
 
     @property
     def playing(self):
         if not self._started:
             return False
+        if time.monotonic() < self._deadline:
+            return True
+        # past the expected end: trust the device (it may still be draining)
         try:
-            stream = self.sd.get_stream()
-            return stream.active
+            return bool(self.sd.get_stream().active)
         except Exception:
             return False
 
