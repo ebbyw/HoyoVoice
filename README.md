@@ -75,7 +75,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 - **Casting** — every speaker the OCR meets appears here, and each new character is **auto-cast** with a distinct voice from a gender-guessed pool (marked "(auto)" until you choose). Assign a voice (instantly re-reads their last line so you can audition), tick **muted** for characters whose real VO the detector can't hear (creature voices), ✕ deletes bogus entries. **Add cast** pre-assigns a voice to a character before they first appear.
 - **Test box** — type anything, pick a voice, hear it.
 - **Recording** — ⏺ captures game video + game audio, tracks every TTS clip with wall-clock timestamps, and on ⏹ muxes everything into one MP4 (TTS boosted +8dB over the game bed, clips trimmed where real VO interrupted them). Files land in the configurable save folder; raw capture is crash-safe MKV until the mux succeeds.
-- **Log** — every decision with the voice used, a 📷 screenshot hover-preview per event for diagnostics, replay buttons, Hide/Clear controls.
+- **Log** — every decision with the voice used and what kind of screen it came from (`chat`, `lore card`, `loading screen`, `narration`…), a 📷 screenshot hover-preview per event, replay buttons, Hide/Clear controls, and **⤓ Download log** — one text file with the environment, analytics, casting, the full decision log and the console log. That file is what to attach when reporting a problem.
 
 ## What it recognizes
 
@@ -88,19 +88,23 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 | Lore cards (centered title + prose, no UI chrome) | Title + blurb read by narrator |
 | System screens (version string, no UID — e.g. epilepsy warning) | Silent |
 | Quick Read book screens | Read incrementally as you scroll; Back stops mid-sentence |
+| Message / group-chat panels | Each message in its sender's cast voice, incrementally as you scroll; system notices ("… started sharing location") read by the narrator |
 | Info screens (Participant Details…) | Read top-to-bottom via the same reader |
 | Floating host bubbles (portrait, no nameplate) | Spoken as `settings.overlay_speaker` |
 | Menus, boards, HUDs | Ignored (dialogue must be centered; unknown speakers need the Continue hint) |
 
 ## How it stays out of the way
 
-- **Text stabilization** — a line must OCR identically on consecutive frames, with extra patience while text is still growing (the typewriter pauses at sentence ends).
+- **Text stabilization** — a line must OCR identically on consecutive frames, with extra patience while text is still growing, and a short tolerance for frames where the detector loses the line entirely.
+- **Sentence streaming** — the typewriter pauses at sentence boundaries, so a finished sentence is spoken at that pause rather than waiting for the whole line; the remainder follows once it renders, after the first part finishes.
 - **Two-tier VAD gate** — a strong speech spike *or* ~¼s of sustained moderate speech marks a line as voiced; short soft lines ("Which king?") are caught.
 - **Center-energy detector** — game VO is mixed to the stereo center; a mid-channel burst with flat sides (plus a minimum speechiness) catches robot/vocoder voices the speech model can't recognize.
 - **Per-speaker voiced prior** — once a character has consistently turned out to be voiced, much weaker audio evidence is enough to stay quiet for them. Some voiceover is quiet enough to sit below any threshold that could be used safely, and for a character with a real voice, silence is the better error. Self-correcting: lines HoyoVoice does speak for them count against the prior.
 - **Late-VO yield** — if voiceover starts while HoyoVoice is talking, it shuts up instantly.
 - **Sliding dedupe window** — a line only counts as a repeat if it's within the last 3 messages (fuzzy-matched, so OCR jitter like "l"/"I" can't re-trigger it); replaying a quest re-voices everything.
-- **OCR repair** — the game font's I/l confusion, dropped apostrophes ("youre" → "you're"), decorative glyphs, and spelled-out interjections ("shh" → "shush") are all fixed before synthesis; Apple Vision is fed a custom vocabulary built from your casting and `settings.custom_words`.
+- **OCR repair** — the game font's I/l confusion, dropped apostrophes ("youre" → "you're"), decorative glyphs, and spelled-out interjections ("shh" → "shush") are all fixed before synthesis.
+  - *macOS:* Apple Vision is fed a custom vocabulary built from your casting and `settings.custom_words`.
+  - *Windows:* the recognition model is Chinese-trained and drops spaces, so punctuation spacing is restored and fused word pairs are split ("mercyis" → "mercy is"); capitalised tokens are protected so game proper nouns survive. Where several reads of one line disagree, the one that scans as the most real words is the one spoken.
 - **Pronunciations** — `settings.pronunciations` substitutes spoken forms at synthesis only ("Wishpower" → "Wish power"); logs keep the real spelling.
 - **Sentiment pacing** — positive/exclamatory lines read slightly faster, somber ones slower (±~10%).
 
@@ -137,9 +141,25 @@ Everything above is editable live from the dashboard. Kokoro ships ~50 voices (`
 | `tools/ocrd_win.py` | Windows OCR daemon (RapidOCR / Windows.Media.Ocr, same protocol) |
 | `tools/classify.py` | OCR blocks → screen type + speaker/dialogue/choices |
 | `tools/vad.py` | Silero VAD onnx wrapper (torch-free) |
-| `tools/webui.py` | Dashboard (Flask, single page) |
+| `tools/webui.py` | Dashboard (Flask, single page) + `VERSION` |
+| `tools/replay.py` | Replay a recording through the real pipeline (see below) |
 | `voices.json` | Casting + settings |
+| `setup.sh` / `setup.ps1` | One-time install (macOS / Windows) |
 | `hoyovoice.sh` / `hoyovoice.py` | start / stop / status / log / restart (macOS shell / cross-platform) |
+| `plans/` | Windows first-run checklist, pre-merge notes |
+
+## Debugging a session
+
+Two things make problems reproducible without re-playing the game:
+
+1. **⤓ Download log** in the dashboard — environment, analytics, casting, every decision, and the console log in one file.
+2. **Record the session** (⏺), then replay it through the real pipeline:
+
+```sh
+python tools/replay.py ~/Videos/rec_20260803_112929.mp4 --start 68 --duration 30
+```
+
+That runs the actual OCR daemon, classifier, stabilization, dedupe, VAD gate and yield against the recording — only capture, TTS and playback are simulated — in a throwaway state directory, so it can't touch your casting or caches. Most behaviour questions ("why did it read that twice?") are answerable this way in about a minute. Runs on either platform.
 
 ## Troubleshooting
 

@@ -6,6 +6,10 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Fixed
+
+- `setup.sh` did not install `flask` or `vaderSentiment`. Nothing else pulls them in, so a fresh macOS clone failed at import; `numpy` is now declared explicitly too rather than relying on a transitive dependency. The capture-device warning also pointed at a `live.py` constant that no longer exists — devices are chosen by name from the dashboard.
+
 ## [0.6.0] - 2026-08-03
 
 ### Added

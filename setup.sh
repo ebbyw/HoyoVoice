@@ -16,7 +16,14 @@ command -v $PY >/dev/null || { echo "python3.13 required: brew install python@3.
 echo "== creating venv + installing python deps"
 [ -d .venv ] || $PY -m venv .venv
 .venv/bin/pip install --upgrade pip -q
-.venv/bin/pip install mlx-audio soundfile pillow onnxruntime -q
+# flask (dashboard) and vaderSentiment (delivery pacing) are NOT pulled in
+# by anything else — a fresh clone fails at import without them.
+# NOTE: wordfreq is deliberately absent. Its OCR repairs exist for the
+# Windows recogniser, which drops spaces; Apple Vision spaces correctly, so
+# on macOS they are a no-op with a small false-positive risk. The import is
+# optional, so the code simply skips them here. See plans/PRE-MERGE.md.
+.venv/bin/pip install mlx-audio soundfile pillow onnxruntime numpy \
+  flask vaderSentiment -q
 # misaki pins a spacy version that fights py3.13 wheels — install around it
 .venv/bin/pip install --only-binary :all: spacy -q
 .venv/bin/pip install --no-deps misaki -q
@@ -34,7 +41,7 @@ mkdir -p captures tts_out
 
 echo "== verifying capture device"
 ffmpeg -hide_banner -f avfoundation -list_devices true -i "" 2>&1 | grep -i shadowcast \
-  || echo "WARNING: no ShadowCast device found — plug in your capture card and check live.py CAPTURE_INPUT indices"
+  || echo "WARNING: no ShadowCast device found — plug in your capture card (any UVC device works; pick it from the dashboard dropdowns)"
 
 echo
 echo "Setup complete. Start with: ./hoyovoice.sh start"
