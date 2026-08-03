@@ -4,6 +4,7 @@ Log (with voice used + screenshot hover-previews), casting with instant
 re-read and per-character mute, pause/resume, test speech, analytics.
 """
 import logging
+import os
 import socket
 import sys
 import threading
@@ -12,7 +13,9 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 
 VERSION = "0.5.1"
-DASHBOARD_PORT = 8470          # single source of truth (hoyovoice.py reads it)
+# single source of truth (hoyovoice.py reads it); env override lets
+# tools/replay.py run beside a live instance without a port collision
+DASHBOARD_PORT = int(os.environ.get("HOYOVOICE_PORT", "8470"))
 
 VOICE_CATALOG = [
     "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore",

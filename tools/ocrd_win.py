@@ -319,10 +319,18 @@ def main():
             continue
         try:
             out(engine.recognize(path))
+        except BrokenPipeError:
+            return                      # parent exited — quiet shutdown
         except Exception as e:
             print(f"[ocrd_win] {e}", file=sys.stderr, flush=True)
-            out([])
+            try:
+                out([])
+            except BrokenPipeError:
+                return
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (BrokenPipeError, KeyboardInterrupt):
+        pass

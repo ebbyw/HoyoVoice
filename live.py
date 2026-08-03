@@ -26,6 +26,10 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent
+# All mutable state (frames, PCM, casting, caches, TTS output) lives under
+# STATE — normally the repo root. tools/replay.py points this somewhere
+# disposable so replays can't touch real casting or dedupe state.
+STATE = Path(os.environ.get("HOYOVOICE_STATE_DIR", str(ROOT)))
 sys.path.insert(0, str(ROOT / "tools"))
 from classify import (classify, classify_chat, classify_infoscreen,  # noqa: E402
                       classify_loading, classify_lore_screen,
@@ -38,27 +42,28 @@ from hv_platform import get_backend  # noqa: E402
 
 backend = get_backend()
 
-FRAME = ROOT / "captures" / "live_frame.jpg"
+FRAME = STATE / "captures" / "live_frame.jpg"
 # Continuous 48k stereo s16le stream (sox/CoreAudio on macOS, in-process
 # WASAPI on Windows). Never route audio through ffmpeg on macOS — its
 # AVFoundation input drops ~12% of samples.
-AUDIO_PCM = ROOT / "captures" / "game_audio_48k.pcm"
+AUDIO_PCM = STATE / "captures" / "game_audio_48k.pcm"
 AUDIO_BYTES_PER_SEC = 48000 * 2 * 2   # 48k, stereo, s16
-GAME_SLICE = ROOT / "captures" / "game_slice.pcm"
-SHOTS = ROOT / "captures" / "shots"
+GAME_SLICE = STATE / "captures" / "game_slice.pcm"
+SHOTS = STATE / "captures" / "shots"
 SHOTS_KEEP = 300
-WAV = ROOT / "tts_out" / "live.wav"
-UNKNOWN_LOG = ROOT / "unknown_speakers.log"
-SPOKEN_CACHE = ROOT / "captures" / "spoken_cache.json"
-VOICES_PATH = ROOT / "voices.json"
+WAV = STATE / "tts_out" / "live.wav"
+UNKNOWN_LOG = STATE / "unknown_speakers.log"
+SPOKEN_CACHE = STATE / "captures" / "spoken_cache.json"
+VOICES_PATH = STATE / "voices.json"
 if not VOICES_PATH.exists():                      # first run: seed from example
     import shutil
+    VOICES_PATH.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(ROOT / "voices.example.json", VOICES_PATH)
 VOICES = json.loads(VOICES_PATH.read_text())
 
 REC_DIR = {"path": Path(VOICES.get("settings", {}).get(
-    "recordings_dir", str(ROOT / "recordings"))).expanduser()}
-CLIPS = ROOT / "captures" / "rec_clips"     # temp TTS clips, cleaned after mux
+    "recordings_dir", str(STATE / "recordings"))).expanduser()}
+CLIPS = STATE / "captures" / "rec_clips"    # temp TTS clips, cleaned after mux
 
 # Devices BY NAME — indices can shift (index 0 once became the Mac webcam!)
 # Both selectable from the dashboard; persisted in voices.json settings.
@@ -132,7 +137,8 @@ if UNKNOWN_LOG.exists():
     unknown_speakers.update(
         n.strip() for n in UNKNOWN_LOG.read_text().splitlines() if n.strip())
 commands = queue.Queue()
-observing = {"on": False}     # start paused — resume from the dashboard
+# start paused — resume from the dashboard (replays auto-resume)
+observing = {"on": os.environ.get("HOYOVOICE_AUTORESUME") == "1"}
 stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
          "synth_ms": deque(maxlen=100), "ocr_ms": deque(maxlen=200),
          "started": time.time()}
@@ -842,9 +848,14 @@ def main():
                                      daemon=True).start()
                     print("[recording stopped — muxing]", flush=True)
 
+            # Mid-play yield. Our TTS is NOT in the capture (it plays on the
+            # computer's speakers; the card hears only HDMI), so while we're
+            # talking, ANY speech evidence in the feed is game VO — use the
+            # aggressive soft thresholds unconditionally. The worst false
+            # positive merely clips our own playback.
             if (speech.playing and speech.t_play
                     and not speech.qr_playing
-                    and is_voiced(speech.t_play + 0.2)):
+                    and is_voiced(speech.t_play + 0.2, soft=True)):
                 speech.stop()
                 stats["yielded"] += 1
                 if yield_event_id:
@@ -1074,8 +1085,17 @@ def main():
             # visual row — hold a few extra reads so we speak it whole
             complete = state["dialogue"].rstrip().endswith(
                 (".", "!", "?", "…", '"', "”", "’", ")"))
-            required = (STABLE_READS if complete and not candidate_growing
-                        else STABLE_READS + 4)
+            if complete and not candidate_growing:
+                required = STABLE_READS
+            elif complete:
+                # SENTENCE STREAMING: the text is still growing but pauses at
+                # a sentence boundary (HSR's typewriter pauses exactly there).
+                # Speak what's complete now instead of waiting the patient +4;
+                # if more text follows, it arrives as growth and the extension
+                # path speaks only the remainder — after the prefix finishes.
+                required = STABLE_READS + 1
+            else:
+                required = STABLE_READS + 4
             # `>=`, not `==`: `required` can DROP mid-count (a jittered read
             # adds the closing period, so `complete` flips and the patient
             # +4 allowance disappears). With exact equality the count sails
@@ -1100,6 +1120,17 @@ def main():
                 same_spk = similar_speaker(e["speaker"], state["speaker"])
                 if not (same_spk or len(new_norm) >= SHORT_LINE):
                     continue
+                # extension FIRST: with sentence streaming, a grown line's
+                # remainder can be short enough that the 0.90 fuzzy check
+                # below would classify the whole thing as a repeat and the
+                # remainder would never be spoken
+                if new_norm != o and new_norm.startswith(o):
+                    if len(new_norm) - len(o) < 8:   # trivial tail = jitter
+                        dup = True
+                        break
+                    if ext_base is None or len(o) > len(ext_base):
+                        ext_base = o
+                    continue
                 if (difflib.SequenceMatcher(None, new_norm, o).ratio() >= 0.90
                         or new_norm in o):   # substring too: VFX flicker can
                     dup = True               # drop a row, leaving just a tail
@@ -1108,13 +1139,6 @@ def main():
                         and len(new_norm) - len(o) <= 25):
                     dup = True   # long recent line wrapped in OCR ghost-junk
                     break
-                if new_norm.startswith(o):
-                    if len(new_norm) - len(o) < 8:   # trivial tail = jitter
-                        dup = True
-                        break
-                    if ext_base is None or len(o) > len(ext_base):
-                        ext_base = o
-                    continue
                 # fuzzy tail: OCR jitter re-reads the last visual row with a
                 # near-miss ("thereetoo" vs "thereatoo") that exact substring
                 # checks can't catch

@@ -5,10 +5,14 @@
 
 (Named hv_platform, not platform, to avoid shadowing the stdlib module.)
 """
+import os
 import sys
 
 
 def get_backend():
+    if os.environ.get("HOYOVOICE_BACKEND") == "replay":
+        from hv_platform import replay
+        return replay
     if sys.platform == "darwin":
         from hv_platform import darwin
         return darwin
