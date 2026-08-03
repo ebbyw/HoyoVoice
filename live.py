@@ -1117,13 +1117,19 @@ def main():
             lore = None if loading else classify_lore_screen(blocks)
             if lore and normalize_speaker(lore[0]) in VOICES["characters"]:
                 lore = None       # a cast member really is speaking
+            # what KIND of screen this line came from — surfaced in the log
+            # so a loading screen, lore card, narration and ordinary dialogue
+            # are told apart instead of all reading as "spoken"
+            screen_kind = "spoken"
             if loading:
                 # loading-screen lore: read as narration, never as dialogue
                 state = {"speaker": None, "dialogue": loading, "choices": []}
+                screen_kind = "loading screen"
             elif lore:
                 title, body = lore
                 state = {"speaker": None, "choices": [],
                          "dialogue": f"{split_camel(title)}. {body}"}
+                screen_kind = "lore card"
             elif not state["dialogue"]:
                 overlay = classify_overlay(blocks)
                 narration = classify_narration(blocks)
@@ -1132,12 +1138,14 @@ def main():
                     state = {"speaker": VOICES.get("settings", {}).get(
                                  "overlay_speaker"),
                              "dialogue": overlay, "choices": []}
+                    screen_kind = "overlay"
                 elif narration and (has_continue_hint(blocks)
                                     or frame_is_dark()
                                     or narration_self_certain(narration)):
                     # narration requires the Continue hint — menu banners
                     # and event-hub screens must not be narrated
                     state = {"speaker": None, "dialogue": narration, "choices": []}
+                    screen_kind = "narration"
                 else:
                     # OCR MISS, not necessarily a screen change: the detector
                     # drops a line on some frames (bright backgrounds). A hard
@@ -1312,8 +1320,9 @@ def main():
                 # Window persists via spoken_cache.json.
                 if not (same_line(new_norm, last_spoken_norm)
                         or same_line(new_norm, last_dup_logged)):
-                    add_event("repeat (deduped)", "skip", state["speaker"],
-                              state["dialogue"])
+                    add_event("repeat (deduped)" if screen_kind == "spoken"
+                              else f"repeat (deduped) · {screen_kind}",
+                              "skip", state["speaker"], state["dialogue"])
                 last_dup_logged = new_norm
                 continue
 
@@ -1423,8 +1432,11 @@ def main():
             rec[0 if voiced else 1] += 1
             if voiced:
                 stats["skipped_voiced"] += 1
-                add_event("skipped (voiced — soft gate)" if soft
-                          else "skipped (voiced)", "skip", state["speaker"],
+                skip_label = ("skipped (voiced — soft gate)" if soft
+                              else "skipped (voiced)")
+                if screen_kind != "spoken":
+                    skip_label += f" · {screen_kind}"
+                add_event(skip_label, "skip", state["speaker"],
                           state["dialogue"], shot=True)
                 print(f"[voiced — skipping mid+{mid_up:.1f} side+{side_up:.1f}] "
                       f"{state['dialogue'][:60]}", flush=True)
@@ -1435,11 +1447,12 @@ def main():
             stats["spoken"] += 1
             last_spoken_norm = new_norm
             yield_event_id = add_event(
-                "spoken", "spoken", state["speaker"], speak_text,
+                screen_kind, "spoken", state["speaker"], speak_text,
                 voice, speed, can_replay=True, shot=True)
             gate_max = max((p for t, p in vad_history
                             if t >= gate_since), default=-1.0)
-            print(f"[{state['speaker'] or 'Narrator'} → {voice} ×{speed} "
+            tag = "" if screen_kind == "spoken" else f"{screen_kind}: "
+            print(f"[{tag}{state['speaker'] or 'Narrator'} → {voice} ×{speed} "
                   f"gate={gate_max:.2f} mid+{mid_up:.1f} side+{side_up:.1f}] "
                   f"{speak_text}", flush=True)
     finally:

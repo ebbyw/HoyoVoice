@@ -8,6 +8,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **Screen kinds are labelled in the log.** Loading screens, lore cards, narration and floating overlays used to log as plain `spoken`, indistinguishable from character dialogue. Each now carries its own label (`loading screen`, `lore card`, `narration`, `overlay`), and skips carry it too — so a suppressed loading screen reads `repeat (deduped) · loading screen` instead of leaving you to guess what was skipped.
+
 - **Chat system notices are read by the narrator**, not in the sender's voice — they're events, not speech ("Ashveil started sharing location"). The small grey text OCRs badly, so they're matched tolerantly against known wordings and spoken in a canonical form, which also collapses mangled variants into one entry so a notice is never read twice. Logged as `chat notice`.
 - `lost frames` in the dashboard analytics: frames the OCR daemon couldn't read at all.
 
