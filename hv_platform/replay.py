@@ -17,9 +17,7 @@ Caveat: recordings mux OUR TTS into the audio bed (+8dB), so the gate
 "hears" any TTS the original session spoke. Interpret gate decisions in
 windows right after an original spoken line accordingly.
 """
-import io
 import os
-import sys
 import threading
 import time
 from pathlib import Path

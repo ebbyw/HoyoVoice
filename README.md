@@ -2,7 +2,7 @@
 
 **Live TTS voiceover for the dialogue Hoyoverse forgot to voice.**
 
-*Runs on macOS (Apple Silicon) and, experimentally, Windows — see [Requirements](#requirements).*
+*Runs on macOS (Apple Silicon) and Windows 10/11 — see [Requirements](#requirements).*
 
 Genshin Impact and Honkai: Star Rail voice some quest dialogue but leave many lines — and sometimes entire quests — silent. HoyoVoice watches your game feed, notices when a line has no voiceover, and reads it aloud in a per-character artificial voice within about a second. Lines the game *does* voice are left untouched. Everything runs locally on your own machine: no cloud, no API keys, no game modification.
 
@@ -36,7 +36,7 @@ Every stage above is platform-native, selected at startup by `hv_platform/`:
 
 ## Requirements
 
-**Platform: macOS on Apple Silicon (M1+, macOS 14+ recommended), or Windows 10/11 (experimental).** Intel Macs and Linux are not supported: the macOS TTS path needs Apple Silicon for MLX. The Windows backend works end to end but is newer and less battle-tested — see `plans/WINDOWS-TESTING.md` for its first-run checklist and known platform quirks.
+**Platform: macOS on Apple Silicon (M1+, macOS 14+ recommended), or Windows 10/11.** Intel Macs and Linux are not supported: the macOS TTS path needs Apple Silicon for MLX. See `plans/WINDOWS-TESTING.md` for the Windows first-run checklist and platform quirks.
 
 You'll also need:
 

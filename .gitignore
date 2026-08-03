@@ -24,3 +24,6 @@ models/
 
 # launcher state
 hoyovoice.pid
+
+# historical planning docs (kept locally, not tracked)
+archive/

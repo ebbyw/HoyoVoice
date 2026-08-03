@@ -68,11 +68,15 @@ it and date the section when cutting the release.
   The optional import already handles this: without `wordfreq` both
   repairs no-op, so macOS behaviour is unchanged. Revisit if macOS ever
   moves off Vision.
-- **README wording.** Windows is described as "experimental". It has now
-  had several clean end-to-end sessions; decide whether that still holds.
-- **`plans/PLAN-WINDOWS.md`** is historical now — the plan it describes is
-  built. Either mark it as such or fold the still-true parts into
-  `WINDOWS-TESTING.md`.
+- **README wording — DECIDED: Windows is no longer "experimental".** Several
+  clean end-to-end sessions (dialogue, chat panels, loading screens) on real
+  hardware. README and the changelog entry updated.
+
+
+- **Planning docs — DONE.** `PLAN.md` and `PLAN-WINDOWS.md` moved to
+  `archive/`, which is gitignored: they describe work that is built, and
+  `WINDOWS-TESTING.md` carries everything still true.
+
 
 ## 5. Known, and deliberately not fixed
 
