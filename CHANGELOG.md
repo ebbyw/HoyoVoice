@@ -7,22 +7,20 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 ## [Unreleased]
 
 ### Added
+
 - **Group-chat/message panel reading** — messages read incrementally, each sender in their own cast voice.
-- **Windows support (experimental, untested on hardware)**: new `hv_platform/` backend layer — DirectShow video capture, in-process WASAPI audio capture (replaces sox's role), `tools/ocrd_win.py` OCR daemon (RapidOCR or Windows.Media.Ocr, same JSON protocol and Vision-style coordinates), Kokoro TTS via kokoro-onnx on CPU (same voice IDs — `voices.json` carries over), sounddevice playback, `setup.ps1`, and a cross-platform `hoyovoice.py` launcher. See `plans/WINDOWS-TESTING.md` for the first-run checklist.
-
-### Changed
-- Platform code (capture, audio, OCR daemon, TTS, playback) extracted from `live.py` into `hv_platform/darwin.py` and `hv_platform/win32.py` behind a shared interface (`hv_platform/base.py`). macOS behavior is intentionally unchanged.
-
-### Added
+- **Windows support (experimental)**: new `hv_platform/` backend layer — DirectShow video capture, in-process WASAPI audio capture (replaces sox's role), `tools/ocrd_win.py` OCR daemon (RapidOCR or Windows.Media.Ocr, same JSON protocol and Vision-style coordinates), Kokoro TTS via kokoro-onnx on CPU (same voice IDs — `voices.json` carries over), sounddevice playback, `setup.ps1`, and a cross-platform `hoyovoice.py` launcher. See `plans/WINDOWS-TESTING.md` for the first-run checklist.
 - Chrome-free lore/loading cards (centered title + prose, no Continue hint, no UID strip, no HUD) are recognized and read by the narrator. `classify()` sees their title as a nameplate, so they were previously skipped as an unknown speaker; stylized titles that OCR runs together ("CindearthAge") are split for speech.
-
-### Added
 - **Session replay harness (`tools/replay.py`).** Any dashboard recording now replays through the REAL pipeline — actual OCR daemon, classification, stabilization, dedupe, VAD gate, and yield, with only capture/TTS/playback simulated — in a throwaway state dir that can't touch real casting or caches. Every reported bug becomes a reproducible test case; this diagnosed and verified the two fixes below. (`HOYOVOICE_STATE_DIR`, `HOYOVOICE_BACKEND=replay`, `HOYOVOICE_PORT` are the supporting hooks.)
 - **Sentence streaming.** The typewriter pauses at sentence boundaries; HoyoVoice now starts speaking a completed sentence at that pause instead of waiting out the full patient threshold, and the existing extension machinery speaks only the remainder once the rest renders (after the first part finishes playing). Long lines start ~0.5s after their first sentence completes rather than after the whole line.
-- **Group-chat/message panel reading** — messages read incrementally, each sender in their own cast voice.
 - **Per-speaker voiced prior ("soft gate").** Some voiceover sits below every audio threshold that can be used safely: measured on a real capture, a voiced line peaked at 0.18 on the speech detector with 4 blocks above 0.12, while a genuinely *unvoiced* line in the same scene had 5 — no global threshold separates them, and lowering one would silence the unvoiced lines this app exists to fill in. HoyoVoice now tracks, per speaker, how often the game turned out to be voicing them; once a speaker is consistently voiced (3+ observations, 75%+), much weaker evidence is enough to stay quiet for them. The trade-off is deliberate: for a character with a real voice, staying silent is the safer error. It self-corrects — every line spoken for a character counts against the ratio — and the history persists across restarts in `captures/spoken_cache.json`. Skips taken this way are logged as "skipped (voiced — soft gate)".
 
+### Changed
+
+- Platform code (capture, audio, OCR daemon, TTS, playback) extracted from `live.py` into `hv_platform/darwin.py` and `hv_platform/win32.py` behind a shared interface (`hv_platform/base.py`). macOS behavior is intentionally unchanged.
+
 ### Fixed
+
 - Chat sender labels are OCR-jittered ("Ashveil"/"Ashvell"/"Ashval"), which auto-cast one character three ways and re-queued every message per variant (repeats while scrolling or idling, interleaved out-of-order reads). Senders now canonicalize per chat session, messages dedupe on text alone (fuzzy), and only short echoes keep the sender in the key.
 - Repeated log spam for a single on-screen line: dedupe and unknown-speaker entries are now collapsed on fuzzy text alone, since the speaker read jitters independently ("Goldy" vs "MysteriousGoldy").
 - **Talking over voiceover without yielding ("double voices").** Reconstructed via replay: a line appears, its VO starts a beat late or too quietly for the strict gate's 0.2s window, HoyoVoice speaks — and the old mid-play yield used the same strict thresholds, so it never cut playback. The yield now uses the aggressive soft thresholds unconditionally: our TTS plays on the computer's speakers and is NOT in the capture, so any speech evidence during playback is by definition game VO. Worst-case false positive merely clips our own audio. Verified in replay: the same line now speaks and yields the moment the ongoing voice registers.
