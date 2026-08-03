@@ -23,6 +23,11 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **Scrolling a chat panel cut the read and dropped the queue.** The panel-closed rule fired after 3 undetected frames (~0.5s), but scrolling briefly hides the Scroll/Back hints the detector keys on — so an ordinary scroll looked like a close, stopped the message being read and discarded everything queued behind it (seen live as "stopping mid-read, 4 queued dropped"). Closing is now judged on sustained absence (2s) rather than a frame count.
+- **A button glyph was read aloud as a chat message** ("R" from the Scroll hint). The message band reached down over the hint row; its floor now sits above it. Bare glyphs like this can't be caught by a text filter, so geometry is the right fix.
+- **Truncated chat messages read a beat before their last row rendered** ("…Should be" then the full "…Should be worth trusting"). Messages hugging the panel's clip edge are deferred more conservatively.
+- **Messages read in the narrator's voice when their sender label had scrolled off-screen.** A run of messages from one sender labels only its first, so scrolling leaves later ones unlabelled. They now inherit the conversation name from the panel header (an explicit label still wins).
+
 - **Chat reads were cut off mid-sentence on Windows.** Measured against a session recording: three consecutive messages played 0.75s, 2.25s and 2.25s of audio that should have run ~3s, ~4.5s and ~10s. PortAudio marks a stream inactive as soon as the callback hands over its last frames, which on WASAPI happens well before the sound stops coming out — so the reader thought playback was idle, started the next message, and `play()` cut the current one. Windows playback now tracks the deadline implied by the sample count, which is authoritative; `qr_playing` also no longer survives natural end-of-playback, so "is a read in flight?" stops lying. (Not reproducible in replay — the symptom is specific to the real audio backend.)
 - **Two chat messages could fuse into one utterance.** Consecutive messages from the same sender only label the first, and OCR frequently drops the small grey label, so both bodies accumulated into a single read. A vertical gap larger than a line now starts a new bubble; wrapped multi-row messages still read as one.
 

@@ -80,6 +80,10 @@ STABLE_READS = 2
 # give up on the candidate (~0.5s at 6fps). OCR misses are common on bright
 # backgrounds; without this, a miss discards all accumulated stability.
 MISS_TOLERANCE = 3
+# how long a Quick Read / chat panel must stay undetected before we treat it
+# as closed (drop the queue, stop reading). Scrolling briefly hides the
+# hints the detector keys on, so a short count fires on ordinary scrolling.
+READER_CLOSE_AFTER = 2.0
 DEDUP_WINDOW = 3              # a line repeats only if it's within the last N messages
 SHORT_LINE = 15               # short lines (normalized chars) may echo across speakers
 
@@ -851,6 +855,8 @@ def main():
     last_frame_change = time.monotonic()
     yield_event_id = None
     qr_seen, qr_absent = set(), 99      # Quick Read incremental-reading state
+    qr_gone_t0 = 0.0                    # when the reader panel first vanished
+    reader_closed = True                # panel-closed handling already done
     read_queue = deque()
     chat_senders = []                   # session canon: OCR jitters the tiny
                                         # sender labels (Ashveil/Ashvell/Ashval)
@@ -984,11 +990,18 @@ def main():
             chat = None if qr is not None else classify_chat(blocks)
             if qr is not None or chat is not None:
                 qr_absent = 0
+                reader_closed = False
                 items = [(None, t) for t in qr] if qr is not None else chat
                 new = []
                 for spk, t in items:
                     if spk:
                         spk = canon_sender(spk.strip())
+                    elif chat is not None and chat_senders:
+                        # label scrolled off the top (or was missed): a run of
+                        # messages only labels its first, so inherit the last
+                        # known sender rather than reading in the narrator's
+                        # voice — which is what a None sender falls back to
+                        spk = chat_senders[-1]
                     # dedupe on text alone for substantial messages — sender
                     # label jitter must not requeue the same message; keep
                     # sender in the key only for short echoes ("ok")
@@ -1013,11 +1026,20 @@ def main():
             else:
                 if qr_absent < 99:
                     qr_absent += 1
-                if qr_absent == 3:              # user closed the book screen
+                if qr_absent == 1:
+                    qr_gone_t0 = now
+                # Treat the panel as CLOSED only after it has been missing
+                # for a sustained stretch. Scrolling briefly hides the
+                # Scroll/Back hints this detector keys on, and a 3-frame
+                # rule (~0.5s) fired on that: it cleared the queue and cut
+                # the read in progress just as the user scrolled.
+                if (qr_absent >= 3 and not reader_closed
+                        and now - qr_gone_t0 >= READER_CLOSE_AFTER):
+                    reader_closed = True
                     dropped = len(read_queue)
                     read_queue.clear()
                     if speech.qr_playing:
-                        print(f"[reader panel gone — stopping mid-read, "
+                        print(f"[reader panel closed — stopping mid-read, "
                               f"{dropped} queued dropped]", flush=True)
                         speech.stop()
                 if qr_absent == 40:             # gone a while: forget progress

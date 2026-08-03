@@ -254,7 +254,13 @@ def classify_overlay(blocks):
 # HSR message/group-chat panel ("Answer" screens): sender labels at the
 # bubble's left edge (x<0.666), message text indented (x>=0.666), panel
 # header above y=0.74, R-Scroll/O-Back hints floating at y~0.135
-CHAT_BODY = {"x": (0.63, 0.97), "y": (0.14, 0.74)}
+# Floor sits ABOVE the Scroll/Back hint row (y≈0.13–0.16). Those hints
+# include bare button glyphs ("R", "O") that no text filter catches, and
+# one was read aloud as a message. Nothing is lost: a message whose last
+# row lands this low is still scrolling in and is deferred anyway.
+CHAT_BODY = {"x": (0.63, 0.97), "y": (0.20, 0.74)}
+# conversation title above the message list ("Ashveil" over "Answer")
+CHAT_HEADER = {"x": (0.52, 0.88), "y": (0.75, 0.92)}
 
 
 # Panel chrome that sits INSIDE the body band: the Scroll/Back hints hug
@@ -264,7 +270,12 @@ CHAT_BODY = {"x": (0.63, 0.97), "y": (0.14, 0.74)}
 # deleted the final message of every conversation.
 CHAT_SYSTEM_ROW = re.compile(
     r"^(scroll|back|answer|conversation over)$|started sharing", re.I)
-CHAT_CLIP_Y = 0.21
+# Defer a message whose deepest row sits this low: near the panel's clip
+# edge, rows below are simply not rendered yet, and reading there produced
+# a truncated message ("…Should be") followed by the full one a moment
+# later. Kept clear of the body floor so a partly-visible message is
+# always deferred rather than half-read.
+CHAT_CLIP_Y = 0.26
 
 
 def classify_chat(blocks):
@@ -279,14 +290,22 @@ def classify_chat(blocks):
     # a finished conversation can't have anything still scrolling in, so its
     # last message is complete no matter how low it sits
     ended = any(b["text"].strip().lower() == "conversation over" for b in conf)
+    # The panel header names the conversation partner. Messages whose own
+    # label scrolled off the top (a run from one sender labels only its
+    # first) would otherwise have no sender and read in the narrator's
+    # voice; the header is the right default.
+    hdr = [b for b in conf if in_region(b, CHAT_HEADER)
+           and b["text"].strip().lower() not in ("answer", "close")]
+    hdr.sort(key=lambda b: -(b["y"] + b["h"] / 2))
+    header_name = hdr[0]["text"].strip() if hdr else None
     body = [b for b in conf if in_region(b, CHAT_BODY)
             and not CHAT_SYSTEM_ROW.search(b["text"].strip())]
     body.sort(key=lambda b: -(b["y"] + b["h"] / 2))
     msgs, sender, buf, last_y = [], None, [], 1.0
     for b in body:
         if b["x"] < 0.666:                     # sender label row
-            if sender and buf:
-                msgs.append((sender, " ".join(buf), last_y))
+            if buf:
+                msgs.append((sender or header_name, " ".join(buf), last_y))
             sender, buf = b["text"].strip(), []
         else:                                  # message text row
             cy = b["y"] + b["h"] / 2
@@ -295,12 +314,12 @@ def classify_chat(blocks):
             # label the first, and OCR drops the small grey label often.
             # Without this, two messages fuse into one utterance.
             if buf and (last_y - cy) > 2.2 * b["h"]:
-                msgs.append((sender, " ".join(buf), last_y))
+                msgs.append((sender or header_name, " ".join(buf), last_y))
                 buf = []
             buf.append(b["text"])
             last_y = cy
-    if sender and buf:
-        msgs.append((sender, " ".join(buf), last_y))
+    if buf:
+        msgs.append((sender or header_name, " ".join(buf), last_y))
     # drop the last message if its deepest row hugs the clip edge — it's
     # still scrolling into view and will be read complete later
     if msgs and msgs[-1][2] < CHAT_CLIP_Y and not ended:
