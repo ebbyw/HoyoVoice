@@ -36,6 +36,7 @@ from classify import (classify, classify_chat, classify_infoscreen,  # noqa: E40
                       classify_narration, classify_overlay,
                       classify_quickread, has_continue_hint,
                       narration_self_certain, split_camel)
+from change_gate import ChangeGate  # noqa: E402
 from vad import CHUNK, SileroVAD  # noqa: E402
 from webui import start_webui  # noqa: E402
 from hv_platform import get_backend  # noqa: E402
@@ -168,6 +169,10 @@ def frame_is_dark():
 
 latest_ocr = {"blocks": None}     # raw blocks of the current frame (debug)
 lost_frames = {"n": 0}            # frames the OCR daemon couldn't read at all
+# skips OCR while the text region is pixel-identical; see tools/change_gate.py
+# for the contract (an "unchanged" verdict replays the previous blocks — it
+# must never skip the iteration, or stabilization counting stalls)
+gate = ChangeGate()
 
 
 def save_shot(eid):
@@ -225,6 +230,7 @@ def metrics():
         "yielded": stats["yielded"],
         "synth_avg_ms": int(sum(synth) / len(synth)) if synth else 0,
         "ocr_avg_ms": int(sum(ocr) / len(ocr)) if ocr else 0,
+        "ocr_skipped": gate.skips,
         "lost_frames": lost_frames["n"],
         "lines_per_min": round(stats["spoken"] / mins, 1),
     }
@@ -902,6 +908,11 @@ def main():
     os.environ.setdefault("HOYOVOICE_OCR_ENGINE",
                           VOICES.get("settings", {}).get("ocr_engine", "auto"))
     ocr = backend.create_ocr(ROOT, custom_words_file())
+    # settings.change_gate: false disables the pixel gate entirely;
+    # settings.change_gate_mad tunes how identical "identical" must be
+    gate.enabled = bool(VOICES.get("settings", {}).get("change_gate", True))
+    gate.mad = float(VOICES.get("settings", {}).get("change_gate_mad",
+                                                    gate.mad))
 
     candidate, candidate_count = None, 0
     candidate_growing = False
@@ -1056,12 +1067,20 @@ def main():
             last_mtime = mtime
             last_frame_change = now
 
-            t0 = time.time()
-            blocks = ocr.recognize(FRAME)
-            if blocks is None:          # daemon died; it respawned itself
-                continue
-            stats["ocr_ms"].append(int((time.time() - t0) * 1000))
-            latest_ocr["blocks"] = blocks
+            # cheap pixel gate first: while the text region is identical to
+            # the previous frame, REPLAY the previous blocks through the
+            # normal path instead of paying for OCR. Replaying (not
+            # skipping) keeps stabilization counting, chat settle checks
+            # and panel-close detection ticking exactly as before.
+            if gate.unchanged(FRAME, latest_ocr["blocks"]):
+                blocks = latest_ocr["blocks"]
+            else:
+                t0 = time.time()
+                blocks = ocr.recognize(FRAME)
+                if blocks is None:      # daemon died; it respawned itself
+                    continue
+                stats["ocr_ms"].append(int((time.time() - t0) * 1000))
+                latest_ocr["blocks"] = blocks
             if not blocks:
                 # NO blocks at all means we failed to read the frame (a torn
                 # JPEG mid-rewrite, common under recording load), not that
