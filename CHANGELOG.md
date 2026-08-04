@@ -6,6 +6,10 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Changed
+
+- **Windows OCR reads English at the source.** RapidOCR's bundled recognition model is Chinese-trained; on English game text it drops spaces ("Everythingis going smoothlymy nobleKing.", "RinTohsaka") and the pipeline repaired the damage statistically after the fact. `tools/ocrd_win.py` now loads an English-trained recognition model (en_PP-OCRv5_mobile_rec, ONNX) when present — `setup.ps1` downloads it to `models\` (~8 MB), `HOYOVOICE_REC_MODEL`/`HOYOVOICE_REC_KEYS` override the path, and deleting the files falls back to the bundled model. Detection is untouched, so box geometry and every classify decision stay put. Measured over an 81-shot corpus: fusion-class defects 333 → 144, 22 frames of nameplate fixes ("MysteriousGoldy" → "Mysterious Goldy", "Sparxile" → "Sparxie"), two frames where a dropped nameplate came back, three info screens that had been misread as loading/dialogue now classify as reader panels with clean text, zero regressions.
+
 ### Fixed
 
 - **Stopping a recording froze reading for several seconds.** The main loop closed the recording MKV and respawned the capture inline, so `finalize()` — which waits for ffmpeg to flush, seconds on a long take — held up OCR and every reading decision at exactly the moment a line is usually on screen. Both steps now run on a worker; the loop reads straight through the handover, and the stall watchdog stands down while a swap is in flight rather than respawning on top of it. Because one ffmpeg owns both the capture device and the live frame file, every restart and finalize — on the loop or off it — is serialised behind a single lock, the mux is sequenced after the MKV is genuinely closed instead of racing it, and shutdown waits out an in-flight swap so the worker can't respawn an orphan capture over the next run's frames. `tools/test_video_swap.py` pins all four invariants against a fake capture with ffmpeg-like timing, in about two seconds and with no hardware.
