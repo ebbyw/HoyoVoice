@@ -137,7 +137,14 @@ def classify(blocks, _no_plate=False):
     if current:
         options.append(" ".join(x["text"] for x in current))
 
-    return {"speaker": state["speaker"], "dialogue": dialogue_text, "choices": options}
+    return {"speaker": state["speaker"], "dialogue": dialogue_text,
+            "choices": options,
+            # weakest link of the rows that made the line: a mid-fade or
+            # half-rendered read scores visibly below settled text, and
+            # live.py uses that to make shaky reads earn extra sightings.
+            # Engines without real confidences report 1.0 → no effect.
+            "conf": min((b["confidence"] for b in state["dialogue"]),
+                        default=1.0)}
 
 
 # HSR "Quick Read" book screens: label top-left, Scroll/Back hints bottom

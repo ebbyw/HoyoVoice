@@ -77,6 +77,12 @@ DEVICES = {
 list_devices = backend.list_devices
 SAMPLE_FPS = 6
 STABLE_READS = 2
+# OCR confidence thresholds for stabilization (classify() reports the
+# weakest block that made the line; engines without confidences say 1.0,
+# which leaves behavior exactly as before). Measured on real captures: a
+# settled line reads at 0.98+, a mid-fade / half-rendered one visibly lower.
+CONF_TRUSTED = 0.97           # skip the sentence-streaming cushion read
+CONF_SHAKY = 0.85             # earn one extra sighting before speaking
 # consecutive frames where the detector loses an on-screen line before we
 # give up on the candidate (~0.5s at 6fps). OCR misses are common on bright
 # backgrounds; without this, a miss discards all accumulated stability.
@@ -1266,6 +1272,7 @@ def main():
             miss_streak = 0          # a real read: the line is on screen
             state["speaker"] = normalize_speaker(state["speaker"])
             state["dialogue"] = fix_ocr_text(state["dialogue"])
+            conf = state.get("conf", 1.0)   # 1.0 = engine has no confidences
             key = (state["speaker"], normalize_text(state["dialogue"]))
             same_text = candidate is not None and key[1] == candidate[1]
             # a strict prefix is the typewriter growing, not jitter
@@ -1284,7 +1291,7 @@ def main():
                            or len(key[1]) >= SHORT_LINE))
             if key == candidate:
                 candidate_count += 1
-                candidate_variants.append(state["dialogue"])
+                candidate_variants.append((state["dialogue"], conf))
             elif jitter:
                 # Same on-screen line, slightly different read (". mongrel."
                 # vs ".mongrel."). Restarting the count here made lines
@@ -1292,9 +1299,9 @@ def main():
                 # skip every few seconds. Keep counting, adopt the latest.
                 candidate = key
                 candidate_count += 1
-                candidate_variants.append(state["dialogue"])
+                candidate_variants.append((state["dialogue"], conf))
             else:
-                candidate_variants = [state["dialogue"]]
+                candidate_variants = [(state["dialogue"], conf)]
                 # if the text GREW from the previous candidate, the typewriter
                 # is mid-render (it pauses at sentence ends!) — stay patient
                 candidate_growing = (candidate is not None
@@ -1335,9 +1342,18 @@ def main():
                 # Speak what's complete now instead of waiting the patient +4;
                 # if more text follows, it arrives as growth and the extension
                 # path speaks only the remainder — after the prefix finishes.
-                required = STABLE_READS + 1
+                # A high-confidence read doesn't need the extra cushion — the
+                # cushion exists to ride out shaky mid-render reads, and the
+                # recognizer already vouches for this one.
+                required = STABLE_READS + (0 if conf >= CONF_TRUSTED else 1)
             else:
                 required = STABLE_READS + 4
+            if conf < CONF_SHAKY:
+                # mid-fade / half-rendered text scores visibly below settled
+                # text (a settled chat line reads at 0.98+; the mid-fade
+                # "started shan ing (ocation" class doesn't) — make a shaky
+                # read earn one extra sighting before it can be spoken
+                required += 1
             # `>=`, not `==`: `required` can DROP mid-count (a jittered read
             # adds the closing period, so `complete` flips and the patient
             # +4 allowance disappears). With exact equality the count sails
@@ -1354,9 +1370,13 @@ def main():
             # correct one was a 2-of-29 minority, so majority voting would
             # pick the wrong text. Score by how many tokens are real words.
             same_norm = [v for v in candidate_variants
-                         if normalize_text(v) == key[1]]
+                         if normalize_text(v[0]) == key[1]]
             if len(same_norm) > 1:
-                best = max(same_norm, key=text_quality)
+                # real-word fraction first (measured: the correct split was a
+                # 2-of-29 minority, so majority voting picks wrong); engine
+                # confidence breaks the ties word-count can't see
+                best = max(same_norm,
+                           key=lambda v: (text_quality(v[0]), v[1]))[0]
                 if best != state["dialogue"]:
                     state["dialogue"] = best
 
