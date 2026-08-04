@@ -36,8 +36,11 @@ them, so losing them from the changelog is acceptable.
 
 ## 2. Version + release section
 
-`VERSION` lives in `tools/webui.py` (shown in the dashboard header). Bump
-it and date the section when cutting the release.
+See **[RELEASING.md](RELEASING.md)** for the full sequence. In short:
+`VERSION` lives in `tools/webui.py` (shown in the dashboard header); bump
+it and date the section when cutting the release, then publish a GitHub
+release with `gh release create` — pushing the tag alone leaves the repo
+page advertising the previous version.
 
 ## 3. Re-verify both platforms after the final squash/rebase
 
