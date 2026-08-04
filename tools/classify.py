@@ -20,7 +20,10 @@ PROFILE = {
     "plate_max_w": 0.30,               # names are short; dialogue lines are wide
     "dialogue_x": (0.40, 0.60),        # real lines are centered
     "dialogue_span": 0.15,             # lines live this far below the nameplate
-    "dialogue_fallback_y": (0.08, 0.19),
+    # Overlaps plate_y on purpose: a single-line dialogue/narration row sits
+    # at cy≈0.189, one pixel of OCR jitter away from the plate band, and the
+    # old 0.19 ceiling clipped it on the frames that jittered upward.
+    "dialogue_fallback_y": (0.08, 0.21),
     "choices":  {"x": (0.66, 1.00), "y": (0.22, 0.62)},
 }
 # Choice option text is left-aligned just right of the "→" marker
@@ -43,7 +46,7 @@ def in_region(block, region):
     return x0 <= cx <= x1 and y0 <= cy <= y1
 
 
-def classify(blocks):
+def classify(blocks, _no_plate=False):
     state = {"speaker": None, "dialogue": [], "choices": []}
     conf = [b for b in blocks
             if b["confidence"] >= MIN_CONF and b["text"].strip() not in IGNORE]
@@ -53,7 +56,13 @@ def classify(blocks):
               if PROFILE["plate_y"][0] <= b["y"] + b["h"] / 2 <= PROFILE["plate_y"][1]
               and PROFILE["plate_x"][0] <= b["x"] + b["w"] / 2 <= PROFILE["plate_x"][1]
               and b["w"] <= PROFILE["plate_max_w"]]
-    plate = max(plates, key=lambda b: b["h"]) if plates else None
+    # TOPMOST, not tallest. A SHORT dialogue line ("The beach!") is narrow
+    # enough to pass plate_max_w and sits at cy≈0.189 — just inside plate_y —
+    # and HSR renders dialogue in a LARGER font than the nameplate, so
+    # picking by height handed the speaker slot to the line itself and left
+    # the dialogue band (anchored below it) empty. The nameplate is always
+    # the higher of the two.
+    plate = max(plates, key=lambda b: b["y"]) if plates and not _no_plate else None
     if plate is not None:
         state["speaker"] = plate["text"]
         dlg_top = plate["y"] - 0.004            # just below the nameplate
@@ -104,6 +113,15 @@ def classify(blocks):
     state["dialogue"].sort(
         key=lambda b: (round((1 - (b["y"] + b["h"] / 2)) / 0.022), b["x"]))
     dialogue_text = " ".join(b["text"] for b in state["dialogue"])
+
+    # A nameplate with nothing under it is not a nameplate. Un-nameplated
+    # narration ("A bicycle station.") is short and centered enough to pass
+    # the plate filters, so it became a phantom speaker with empty dialogue —
+    # which live.py drops SILENTLY (the skip log only fires when there IS
+    # text), so whole lines vanished with no trace in the log. Re-parse with
+    # the plate suppressed so the line lands in the fallback band instead.
+    if plate is not None and not dialogue_text and not _no_plate:
+        return classify(blocks, _no_plate=True)
 
     # Group choice lines into options: lines belong to the same option if their
     # vertical gap is small (< 1.5x line height)
