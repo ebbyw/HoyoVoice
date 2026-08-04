@@ -722,6 +722,47 @@ def mux_recording(raw, clips, out, s0, s1):
     print(f"[recording] mux {'ok' if ok else 'FAILED'}: {out}", flush=True)
 
 
+# One owner of the capture process at a time. A single ffmpeg holds BOTH the
+# capture device and the live frame file, so two of them must never overlap —
+# every restart/finalize, on the loop or off it, goes through this lock.
+video_lock = threading.Lock()
+video_swap = {"thread": None}
+
+
+def swap_video_async(video, finalize_first=False, on_finalized=None):
+    """Tear down and respawn the capture WITHOUT blocking the reading loop.
+
+    finalize() waits for ffmpeg to flush the recording MKV — seconds on a
+    long take — and restart() then re-negotiates the device. Run inline on
+    recording stop, they froze OCR for that whole window, so a line already
+    on screen could not stabilise until capture came back; that is the tail
+    of the late "The beach!" read. The two steps cannot be overlapped with
+    each other, so they move to a worker together. The loop needs no other
+    change — a frame file that stops changing is already a no-op — beyond
+    holding off the stall watchdog while the swap is in flight.
+
+    on_finalized runs once the MKV is closed and before the respawn. The
+    mux MUST be sequenced here rather than fired from the caller: ffmpeg is
+    still writing the file until finalize returns, so a mux kicked off in
+    parallel would read a half-written recording.
+    """
+    def run():
+        with video_lock:
+            if finalize_first:
+                video.finalize(timeout=8)
+            if on_finalized is not None:
+                on_finalized()
+            video.restart()
+
+    video_swap["thread"] = threading.Thread(target=run, daemon=True)
+    video_swap["thread"].start()
+
+
+def video_swapping():
+    t = video_swap["thread"]
+    return t is not None and t.is_alive()
+
+
 def handle_commands(speech):
     """Dashboard actions: assign voice (+re-read), replay event, test speech."""
     while not commands.empty():
@@ -910,7 +951,8 @@ def main():
                     json.dumps(VOICES, indent=2, ensure_ascii=False))
                 print(f"[devices] video={DEVICES['video']} "
                       f"audio={DEVICES['audio']}", flush=True)
-                video.restart()
+                with video_lock:        # waits out an in-flight swap
+                    video.restart()
                 audio_cap.restart()
                 last_frame_change = time.monotonic()
 
@@ -921,11 +963,16 @@ def main():
                     CLIPS.mkdir(parents=True, exist_ok=True)
                     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
                     raw = REC_DIR["path"] / f"rec_{ts}_raw.mkv"  # mkv: crash-safe
-                    video.restart(record_path=raw)
-                    for _ in range(40):          # align t0 with the video start
-                        if raw.exists():
-                            break
-                        time.sleep(0.1)
+                    # stays INLINE: t0/s0 must be sampled at the moment the
+                    # video starts, or every TTS clip is muxed at the wrong
+                    # offset. The lock waits out a swap from a just-stopped
+                    # recording rather than racing it for the device.
+                    with video_lock:
+                        video.restart(record_path=raw)
+                        for _ in range(40):      # align t0 with the video start
+                            if raw.exists():
+                                break
+                            time.sleep(0.1)
                     s0 = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
                     recording.update(on=True, t0=time.monotonic(), clips=[],
                                      raw=str(raw), s0=s0)
@@ -936,14 +983,19 @@ def main():
                     s1 = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
                     raw, clips = recording["raw"], recording["clips"]
                     s0 = recording.get("s0", 0)
-                    video.finalize(timeout=8)   # clean mkv close (platform-specific)
-                    video.restart()
-                    last_frame_change = time.monotonic()
                     out = raw.replace("_raw.mkv", ".mp4")
-                    threading.Thread(target=mux_recording,
-                                     args=(raw, clips, out, s0, s1),
-                                     daemon=True).start()
-                    print("[recording stopped — muxing]", flush=True)
+                    # clean mkv close, then mux, then respawn — all off the
+                    # loop, so reading keeps running through it. The mux is
+                    # handed to the swap worker so it starts only once the
+                    # MKV is actually closed (see swap_video_async).
+                    swap_video_async(
+                        video, finalize_first=True,
+                        on_finalized=lambda: threading.Thread(
+                            target=mux_recording,
+                            args=(raw, clips, out, s0, s1),
+                            daemon=True).start())
+                    last_frame_change = time.monotonic()
+                    print("[recording stopped — finalizing]", flush=True)
 
             # Mid-play yield. Our TTS is NOT in the capture (it plays on the
             # computer's speakers; the card hears only HDMI), so while we're
@@ -982,9 +1034,16 @@ def main():
                 print("[truncating audio stream]", flush=True)
                 audio_cap.restart()
 
-            if now - last_frame_change > 10:
+            if video_swapping():
+                # capture is being respawned off-loop: the frame file goes
+                # briefly stale between the old process exiting and the new
+                # one writing. That is a handover, not a stall — respawning
+                # on top of it would fight the swap for the device.
+                last_frame_change = now
+            elif now - last_frame_change > 10:
                 print("[capture stalled — respawning]", flush=True)
-                video.restart()
+                with video_lock:
+                    video.restart()
                 last_frame_change = time.monotonic()
                 continue
 
@@ -1468,7 +1527,14 @@ def main():
                   f"{speak_text}", flush=True)
     finally:
         speech.stop()
-        video.kill()
+        # let an in-flight swap finish first: killing mid-swap leaves the
+        # worker to respawn ffmpeg AFTER we quit, and an orphaned capture
+        # keeps overwriting the frame file for the next run
+        t = video_swap["thread"]
+        if t is not None:
+            t.join(timeout=10)
+        with video_lock:
+            video.kill()
         audio_cap.kill()
         ocr.kill()
 
