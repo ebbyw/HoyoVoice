@@ -187,6 +187,44 @@ def audit(rosters, g2p):
               + ", ".join(missing))
 
 
+def check(path, sample):
+    """What THIS machine's config would actually say — the answer to
+    'it still reads the name wrong'.
+
+    Deliberately does not import live.py: the point is to work on a machine
+    where the app itself may be the thing that's broken. The substitution
+    below mirrors live.spoken_form(), which is what really runs.
+    """
+    if not path.exists():
+        print(f"{path}: MISSING — the app writes it on first run")
+        return 1
+    settings = json.loads(path.read_text()).get("settings", {})
+    pron = settings.get("pronunciations", {})
+    exact = set(settings.get("pronunciations_exact", []))
+    stamp = __import__("datetime").datetime.fromtimestamp(path.stat().st_mtime)
+    print(f"{path}\n  last written {stamp:%Y-%m-%d %H:%M:%S} — the app reads "
+          "this file ONCE at startup, so restart it if it has been running "
+          "since before then")
+    print(f"  {len(pron)} pronunciations, {len(exact)} exact-case, "
+          f"{len(settings.get('custom_words', []))} OCR words")
+    absent = [n for n in FIXES if n not in pron]
+    stale = [n for n, v in FIXES.items() if n in pron and pron[n] != v]
+    if absent:
+        print(f"  MISSING {len(absent)}: {', '.join(absent[:8])}"
+              f"{' …' if len(absent) > 8 else ''}")
+        print("  -> run this script with --write")
+    if stale:
+        print(f"  differs from the table (yours wins): {', '.join(stale)}")
+    if not absent and not stale:
+        print("  every name in the table is present")
+    out = sample
+    for word, spoken in pron.items():
+        out = re.sub(rf"\b{re.escape(word)}\b", spoken, out,
+                     flags=0 if word in exact else re.IGNORECASE)
+    print(f"\n  in:  {sample}\n  out: {out}")
+    return 0
+
+
 def merge(path, rosters, custom_words):
     cfg = json.loads(path.read_text())
     settings = cfg.setdefault("settings", {})
@@ -223,7 +261,13 @@ def main():
     ap.add_argument("--voices", default=str(ROOT / "voices.json"))
     ap.add_argument("--offline", action="store_true",
                     help="skip the roster fetch (audit the table only)")
+    ap.add_argument("--check", nargs="?", const="Paimon met Xiao and Qiqi.",
+                    metavar="LINE",
+                    help="report what this machine's voices.json would say")
     args = ap.parse_args()
+
+    if args.check:
+        return check(Path(args.voices).expanduser(), args.check)
 
     rosters = {}
     if not args.offline:
