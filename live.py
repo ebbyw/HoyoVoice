@@ -267,9 +267,15 @@ def save_shot(eid):
 def add_event(action, cls, speaker=None, text="", voice=None, speed=None,
               can_replay=False, shot=False):
     event_seq["n"] += 1
+    said = tts_text(text)[:160]
     events.append({
         "id": event_seq["n"], "t": datetime.now().strftime("%H:%M:%S"),
+        # what the synthesizer was handed, when that isn't the line as
+        # written. Respellings and delivery fixes are invisible everywhere
+        # else by design, which makes "is the fix even running?" unanswerable
+        # from a session log — the one question a bug report has to settle.
         "speaker": speaker, "text": text[:160], "voice": voice,
+        "spoken": said if said != text[:160] else None,
         "speed": round(speed, 2) if speed else None,
         "action": action, "cls": cls, "can_replay": can_replay,
         "shot": shot and save_shot(event_seq["n"]),
@@ -628,6 +634,15 @@ def speech_parts(text):
         at = m.end()
     say(text[at:])
     return parts
+
+
+def tts_text(text):
+    """The whole TTS-side transform of a line, flattened back to one string
+    for logs: respellings, collapsed punctuation, and stage directions with
+    a sound file shown as [path] where the synthesizer is handed silence and
+    the file is spliced in instead."""
+    return " ".join(v if kind == "say" else f"[{v}]"
+                    for kind, v in speech_parts(spoken_form(text)))
 
 
 def center_burst(t_line):
@@ -2225,9 +2240,12 @@ def main():
             gate_max = max((p for t, p in vad_history
                             if t >= gate_since), default=-1.0)
             tag = "" if screen_kind == "spoken" else f"{screen_kind}: "
+            said = tts_text(speak_text)
             print(f"[{tag}{state['speaker'] or 'Narrator'} → {voice} ×{speed} "
                   f"gate={gate_max:.2f} mid+{mid_up:.1f} side+{side_up:.1f}] "
-                  f"{speak_text}", flush=True)
+                  f"{speak_text}"
+                  + (f"\n  ↳ synth heard: {said}" if said != speak_text else ""),
+                  flush=True)
     finally:
         speech.stop()
         # let an in-flight swap finish first: killing mid-swap leaves the
