@@ -47,6 +47,17 @@ PARTS = [
     ("Nothing here.", [("say", "Nothing here.")]),
 ]
 
+# (line, the one-string form the logs show as "synth heard") — a line the TTS
+# path doesn't touch has to come back identical, or every log grows a
+# duplicate of every line
+FLATTENED = [
+    ("*cough* Anyway.", "[sounds/cough.wav] Anyway."),
+    ("Huh!? Really", "Huh? Really"),
+    ("Hello, you two. Is something the matter?",
+     "Hello, you two. Is something the matter?"),
+    ("", ""),
+]
+
 
 def main():
     bad = 0
@@ -68,12 +79,17 @@ def main():
             if got != want:
                 print(f"FAIL parts {line!r}: want {want}, got {got}")
                 bad += 1
+        for line, want in FLATTENED:
+            got = live.tts_text(line)
+            if got != want:
+                print(f"FAIL flat {line!r}: want {want!r}, got {got!r}")
+                bad += 1
     finally:
         if saved is None:
             live.VOICES["settings"].pop("sound_effects", None)
         else:
             live.VOICES["settings"]["sound_effects"] = saved
-    total = len(OCR) + len(SPOKEN) + len(PARTS)
+    total = len(OCR) + len(SPOKEN) + len(PARTS) + len(FLATTENED)
     print(f"{total - bad}/{total} ok")
     return 1 if bad else 0
 

@@ -217,7 +217,7 @@ Calibrating a screen type takes captures, not guesswork: every logged event save
 
 Two things make problems reproducible without re-playing the game:
 
-1. **⤓ Download log** in the dashboard — environment, analytics, casting, every decision, and the console log in one file.
+1. **⤓ Download log** in the dashboard — environment, analytics, casting, every decision, and the console log in one file. A line the TTS path changed carries a second `↳ synth heard:` line with what the synthesizer was actually handed; respellings and delivery fixes are invisible everywhere else by design, which otherwise leaves "is that fix even running on this machine?" unanswerable from a log.
 2. **Record the session** (⏺), then replay it through the real pipeline:
 
 ```sh
@@ -241,6 +241,7 @@ That runs the actual OCR daemon, classifier, stabilization, dedupe, VAD gate and
   The line above it should read `[ocrd_win] rec model: rec_en.onnx`. Without it RapidOCR is recognising English with its bundled Chinese-trained model, which fuses words ("fora", "RinTohsaka") — rerun `setup.ps1`, or point `HOYOVOICE_REC_MODEL` and `HOYOVOICE_REC_KEYS` at the model and its dictionary.
 
 - **Words are being spoken half-typed, or the log looks like it stopped reading.** The change gate skips OCR while the text region is unchanged, so a bug there shows up as either stale text or no savings. `ocr saved` in the dashboard metrics is the count of skipped calls: zero on static dialogue means it is failing open on every frame, and lines cut mid-word mean it is skipping when it shouldn't. `settings.change_gate: false` turns it off, which is the fastest way to tell whether it is involved at all.
+- **A name is still mispronounced after you pulled a fix for it.** `voices.json` is gitignored — it's yours, seeded from `voices.example.json` on first run only — so a pull never updates the spoken forms in it. Stop the app and run `python tools/pronounce_names.py --write`, which merges the shipped table in and overwrites any entry that has since changed. The `↳ synth heard:` line in the log tells you which respelling is actually in play, and second machines are the usual culprit: each one has its own `voices.json`, seeded whenever *it* was first run.
 - **Windows: dashboard won't load / app won't start.** An orphaned instance is holding port 8470 — `python hoyovoice.py stop`, then check Task Manager for stray `python.exe` / `ffmpeg.exe`.
 
 ## Contributing / releases
