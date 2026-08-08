@@ -412,8 +412,12 @@ _OCR_FIXES = [
     (re.compile(r"\b[lL]ts\b"), "Its"),
     (re.compile(r"\bi\b"), "I"),
 ]
-# decorative glyphs TTS would read aloud ("tilde") or spell out
-_STRIP_GLYPHS = re.compile(r"[~*＊♪♡♥★☆]+")
+# decorative glyphs TTS would read aloud ("tilde") or spell out. Asterisks
+# are NOT in here: *cough* is a stage direction, handled at synthesis.
+_STRIP_GLYPHS = re.compile(r"[~♪♡♥★☆]+")
+# *cough*, *sigh* — a sound the character makes, written out. Kept through
+# OCR repair with a canonical spelling so the TTS path can act on it.
+_STAGE_DIRECTION = re.compile(r"[*＊]\s*([^*＊]{1,24}?)\s*[*＊]")
 # Vision drops apostrophes in this font ("youre" → Kokoro says "yo-ray").
 # Restore only bare forms that aren't real English words — can't misfire.
 _CONTRACTIONS = {
@@ -527,6 +531,17 @@ def _keep_case(rep):
     return lambda m: rep.capitalize() if m.group(0)[0].isupper() else rep
 
 
+def mark_stage_directions(s):
+    """Normalize *cough* to one spelling and drop asterisks used as decoration.
+
+    A paired asterisk around a short phrase is the games' notation for a
+    sound the character makes rather than a word they say; an unpaired one
+    is emphasis or ornament, and TTS reads it as "asterisk"."""
+    s = _STAGE_DIRECTION.sub(lambda m: f"\0{m.group(1)}\0", s)
+    s = re.sub(r"[*＊]+", "", s)
+    return s.replace("\0", "*")
+
+
 def fix_ocr_text(s):
     s = re.sub(r"[’‘`´ʼ]", "'", s)      # normalize apostrophe glyph variants
     s = repair_punctuation(s)           # before word fixes: \b needs spaces
@@ -534,6 +549,7 @@ def fix_ocr_text(s):
     for pat, rep in _OCR_FIXES:
         s = pat.sub(rep, s)
     s = _STRIP_GLYPHS.sub("", s)
+    s = mark_stage_directions(s)
     s = _CONTRACTION_RE.sub(
         lambda m: (_CONTRACTIONS[m.group(0).lower()].capitalize()
                    if m.group(0)[0].isupper()
@@ -546,6 +562,15 @@ def fix_ocr_text(s):
     return re.sub(r"  +", " ", s).strip()
 
 
+# "Huh!?" reaches Kokoro as two adjacent punctuation tokens, and that pair is
+# rare enough in what it was trained on that the stop after the word collapses
+# — "Huh!? You…" comes out as one slurred blob instead of an interjection and
+# then a pause. A single mark reads cleanly. "?" wins whenever the run has
+# one, because a mixed run is a question asked with force and it's the rising
+# contour that carries the surprise; "!!" collapses to "!".
+_MIXED_TERMINAL = re.compile(r"[!?]{2,}")
+
+
 def spoken_form(text):
     """Apply settings.pronunciations — what the TTS hears, not what we log.
 
@@ -555,13 +580,54 @@ def spoken_form(text):
     case-insensitive so OCR case jitter can't miss a name — a name that is
     ALSO an ordinary English word ("Gaming") goes in
     settings.pronunciations_exact, or every "gaming" in prose is respelled too.
+
+    Mixed terminal punctuation is collapsed here too, for the same reason: it
+    is a delivery fix, and the log keeps what the game actually wrote.
     """
     settings = VOICES.get("settings", {})
     exact = set(settings.get("pronunciations_exact", []))
     for word, spoken in settings.get("pronunciations", {}).items():
         text = re.sub(rf"\b{re.escape(word)}\b", spoken, text,
                       flags=0 if word in exact else re.IGNORECASE)
-    return text
+    return _MIXED_TERMINAL.sub(lambda m: "?" if "?" in m.group(0) else "!", text)
+
+
+# what mark_stage_directions() leaves behind, and the extensions that make a
+# settings.sound_effects value a file to play rather than words to speak
+_MARKED_DIRECTION = re.compile(r"\*([^*]+)\*")
+_EFFECT_SUFFIXES = (".wav", ".mp3", ".flac", ".ogg", ".oga", ".aiff", ".aif")
+
+
+def speech_parts(text):
+    """A line split into ("say", text) and ("play", sound file) pieces.
+
+    `settings.sound_effects` maps the inside of a stage direction to either an
+    audio file — Kokoro can't cough, so the only convincing cough is a
+    recording — or to a respelling to speak in its place ("cough": "Ahem.").
+    A direction with no entry keeps the old behavior and is read as the bare
+    word, which for "*sigh*" is what you want anyway.
+    """
+    effects = {str(k).strip().lower(): v for k, v in
+               VOICES.get("settings", {}).get("sound_effects", {}).items()}
+    parts, at = [], 0
+
+    def say(s):
+        s = re.sub(r"\s+", " ", s.replace("*", " ")).strip()
+        if s:
+            parts.append(("say", s))
+
+    for m in _MARKED_DIRECTION.finditer(text):
+        repl = effects.get(m.group(1).strip().lower())
+        if repl is None:
+            continue                        # unmapped: stays in the spoken text
+        say(text[at:m.start()])
+        if str(repl).lower().endswith(_EFFECT_SUFFIXES):
+            parts.append(("play", str(repl)))
+        else:
+            say(str(repl))
+        at = m.end()
+    say(text[at:])
+    return parts
 
 
 def center_burst(t_line):
@@ -813,6 +879,7 @@ class Speech:
         self.sia = SentimentIntensityAnalyzer()
         self.t_play = None
         self._qr = False
+        self._effects = {}                # sound file → decoded 24k mono
 
     @property
     def playing(self):
@@ -845,11 +912,37 @@ class Speech:
                 last["end"] = time.monotonic() - recording["t0"]
         self.t_play = None
 
+    def effect(self, path):
+        """A stage-direction sound, decoded once and resampled to the synth
+        rate. A file that won't load isn't worth losing the line over: the
+        read goes ahead without it, and the failure is logged once."""
+        if path not in self._effects:
+            p = Path(path).expanduser()
+            try:
+                audio, sr = self.sf.read(str(p if p.is_absolute() else STATE / p),
+                                         dtype="float32", always_2d=True)
+                audio = audio.mean(axis=1)
+                if sr != 24000:             # linear is plenty for a one-shot
+                    n = round(len(audio) * 24000 / sr)
+                    audio = self.np.interp(
+                        self.np.linspace(0, len(audio) - 1, n),
+                        self.np.arange(len(audio)), audio).astype("float32")
+                self._effects[path] = audio
+            except Exception as e:
+                print(f"sound effect {path!r}: {e}", flush=True)
+                self._effects[path] = None
+        return self._effects[path]
+
     def synth(self, text, voice, base_speed=1.0):
-        text = spoken_form(text)
+        # sentiment reads the line as written: spoken_form respells names into
+        # nonsense words and collapses "!?", both of which it would score on
         speed = round(base_speed * self.sentiment_speed(text), 3)
         t0 = time.time()
-        audio = self.tts.synth(text, voice, speed)
+        pieces = [self.effect(val) if kind == "play"
+                  else self.tts.synth(val, voice, speed)
+                  for kind, val in speech_parts(spoken_form(text))]
+        pieces = [p for p in pieces if p is not None and len(p)]
+        audio = self.np.concatenate(pieces) if pieces else None
         synth_ms = int((time.time() - t0) * 1000)
         if audio is not None:
             stats["synth_ms"].append(synth_ms)
