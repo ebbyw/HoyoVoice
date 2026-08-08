@@ -103,7 +103,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 - **Two-tier VAD gate** — a strong speech spike *or* ~¼s of sustained moderate speech marks a line as voiced; short soft lines ("Which king?") are caught.
 - **Center-energy detector** — game VO is mixed to the stereo center; a mid-channel burst with flat sides (plus a minimum speechiness) catches robot/vocoder voices the speech model can't recognize.
 - **Per-speaker voiced prior** — once a character has consistently turned out to be voiced, much weaker audio evidence is enough to stay quiet for them. Some voiceover is quiet enough to sit below any threshold that could be used safely, and for a character with a real voice, silence is the better error. Self-correcting: lines HoyoVoice does speak for them count against the prior.
-- **Late-VO yield** — if voiceover starts while HoyoVoice is talking, it shuts up instantly.
+- **Late-VO yield** — if voiceover starts while HoyoVoice is talking, it shuts up instantly, judging the evidence at the same sensitivity that decided to speak: for a character the game has voiced before, the faintest hint is enough. `settings.late_yield: false` turns it off, for a quest with no voice acting in it where every yield is by definition a false one.
 - **Sliding dedupe window** — a line only counts as a repeat if it's within the last 3 messages (fuzzy-matched, so OCR jitter like "l"/"I" can't re-trigger it); replaying a quest re-voices everything.
 - **OCR repair** — the game font's I/l confusion, dropped apostrophes ("youre" → "you're"), decorative glyphs, and spelled-out interjections ("shh" → "shush") are all fixed before synthesis.
   - *macOS:* Apple Vision is fed a custom vocabulary built from your casting and `settings.custom_words`.
@@ -131,6 +131,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
     "pronunciations": {"Wishpower": "Wish power"},  // spoken form only
     "custom_words": ["Wishpower", "Planarcadia"],   // OCR vocabulary hints
     "change_gate": true,                    // skip OCR while the text is static
+    "late_yield": true,                     // stop talking if game VO starts
     "dashboard_bind": "127.0.0.1"           // "0.0.0.0" to reach the dashboard
   }                                         // from other machines you trust —
                                             // it has no authentication

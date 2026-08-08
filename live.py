@@ -130,6 +130,11 @@ VAD_SOFT_THRESHOLD = 0.12
 VAD_SOFT_HITS = 3
 SOFT_GATE_MIN_VOICED = 3      # observations before the prior is trusted
 SOFT_GATE_RATIO = 0.75
+# settings.late_yield: false stops HoyoVoice cutting its own playback when
+# it thinks the game has started talking over it. Worth having as a switch
+# rather than only a threshold: in a scene with no voice acting at all,
+# every yield is a false one, and this is the one-line way to prove it.
+LATE_YIELD = True
 # the gate's lookback must never reach back before the line appeared on
 # screen — otherwise the PREVIOUS speaker's VO tail counts as evidence that
 # THIS line is voiced (false skip on fast auto-advance transitions, where
@@ -1119,6 +1124,8 @@ def main():
     gate.enabled = bool(VOICES.get("settings", {}).get("change_gate", True))
     gate.frac = float(VOICES.get("settings", {}).get("change_gate_frac",
                                                      gate.frac))
+    global LATE_YIELD
+    LATE_YIELD = bool(VOICES.get("settings", {}).get("late_yield", True))
 
     candidate, candidate_count = None, 0
     candidate_growing = False
@@ -1136,6 +1143,7 @@ def main():
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
+    playing_speaker = None      # whose line is on the speakers right now
     qr_seen, qr_absent = set(), 99      # Quick Read incremental-reading state
     qr_gone_t0 = 0.0                    # when the reader panel first vanished
     chat_prev = set()                   # last frame's messages (settle check)
@@ -1224,15 +1232,28 @@ def main():
 
             # Mid-play yield. Our TTS is NOT in the capture (it plays on the
             # computer's speakers; the card hears only HDMI), so while we're
-            # talking, ANY speech evidence in the feed is game VO — use the
-            # aggressive soft thresholds unconditionally. The worst false
-            # positive merely clips our own playback.
+            # talking, speech evidence in the feed is the game's voice.
+            #
+            # It reads that evidence at the SAME sensitivity as the decision
+            # to speak in the first place, which means the per-speaker prior:
+            # for a character the game has voiced before, the softest hint is
+            # enough to stand down. Forcing the soft thresholds on regardless
+            # was justified as "the worst false positive merely clips our own
+            # playback" — but the soft floor is a VAD probability of 0.12
+            # over three 32ms chunks, which Natlan's vocal music clears
+            # comfortably, and a scene with no voice acting in it at all lost
+            # four lines to it, each cut off mid-sentence with nothing
+            # audible taking over. Clipping our own playback IS the failure
+            # the whole feature exists to avoid.
+            yield_soft = (usually_voiced(playing_speaker)
+                          if playing_speaker else False)
             if (speech.playing and speech.t_play
                     and not speech.qr_playing
-                    and is_voiced(speech.t_play + 0.2, soft=True)):
+                    and LATE_YIELD
+                    and is_voiced(speech.t_play + 0.2, soft=yield_soft)):
                 # read the evidence BEFORE stopping — stop() clears t_play
                 t_play = speech.t_play
-                s, w, pk = vad_evidence(t_play + 0.2, soft=True)
+                s, w, pk = vad_evidence(t_play + 0.2, soft=yield_soft)
                 speech.stop()
                 stats["yielded"] += 1
                 if yield_event_id:
@@ -1242,7 +1263,8 @@ def main():
                 # what it heard, and how far in — a yield that cut a line
                 # short reads exactly like a correct one otherwise
                 print(f"[yielded to late VO — {time.monotonic() - t_play:.1f}s in,"
-                      f" peak {pk:.2f}, strong {s}, weak {w}]", flush=True)
+                      f" peak {pk:.2f}, strong {s}, weak {w}"
+                      f"{', soft' if yield_soft else ''}]", flush=True)
 
             if not observing["on"]:
                 candidate, candidate_count = None, 0
@@ -1877,6 +1899,7 @@ def main():
             yield_event_id = add_event(
                 screen_kind, "spoken", state["speaker"], speak_text,
                 voice, speed, can_replay=True, shot=True)
+            playing_speaker = state["speaker"]
             gate_max = max((p for t, p in vad_history
                             if t >= gate_since), default=-1.0)
             tag = "" if screen_kind == "spoken" else f"{screen_kind}: "
