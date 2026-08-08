@@ -187,7 +187,26 @@ def run():
     assert not g8b.unchanged(frame, CHROME_BLOCKS), \
         "growth must open the gate even when chrome is watched too"
 
-    # 11. a box holding no text in either frame (dark HUD corner) neither
+    # 11. THE LATCH. The gate may DEFER an OCR call; it must never cancel
+    #     one. A wrong "unchanged" replays the previous blocks, which
+    #     describe the same boxes, which are still unchanged — nothing
+    #     inside the loop breaks that cycle. A real session sat on a
+    #     leftover nameplate box over static UI and read nothing for 47
+    #     seconds, recovering only when the capture respawned. So an
+    #     endlessly identical frame must still run OCR periodically.
+    g10 = ChangeGate()
+    make_frame(frame)
+    verdicts = [g10.unchanged(frame, BLOCKS) for _ in range(60)]
+    runs, run = [], 0
+    for v in verdicts:
+        run = run + 1 if v else 0
+        runs.append(run)
+    check_ocr = verdicts.count(False)
+    assert max(runs) <= 12, f"gate skipped {max(runs)} frames in a row"
+    assert check_ocr >= 4, \
+        f"a frozen screen must still be re-read; only {check_ocr} OCR calls"
+
+    # 12. a box holding no text in either frame (dark HUD corner) neither
     #     gates nor blocks on its own — but a frame where EVERY box is
     #     empty has nothing to compare, so it must run OCR
     g9 = ChangeGate()
