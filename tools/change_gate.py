@@ -69,6 +69,17 @@ MOVED_CAP = 20
 # A padded box this large can't be telling us about text — something in the
 # block list is wrong, so don't pretend to judge it.
 MAX_BOX_FRAC = 0.35
+# Consecutive skips before a real OCR call is forced anyway (~2s at 6fps).
+# The gate may DEFER OCR; it must never cancel it. Without this bound a
+# single wrong "unchanged" is unbounded rather than merely wasteful: the
+# stale blocks replay, they describe the same boxes, those boxes are still
+# unchanged, and the pipeline reads nothing again until something outside
+# the gate breaks the cycle. One session went 47 seconds that way, on a
+# leftover nameplate box over static UI, and only recovered when the
+# capture respawned. Two seconds of stale text is survivable; a latch is
+# not, and the cost is one OCR call per two seconds of genuinely static
+# dialogue.
+MAX_SKIP_RUN = 12
 # JPEG draft decode at 1/2 (~960px wide). Measured on real HSR captures:
 # a dialogue row keeps 139-232 pixels >= BRIGHT at 1/2 but only 2-8 at 1/4
 # — the antialiased strokes blur into the backdrop — so 1/4 would leave
@@ -84,9 +95,11 @@ class ChangeGate:
         self.prev = None          # previous frame's crops, one per block
         self.key = None           # their rectangles — a move re-baselines
         self.skips = 0            # verdicts that saved an OCR call
+        self.run = 0              # consecutive skips, bounded by MAX_SKIP_RUN
 
     def reset(self):
         self.prev = self.key = None
+        self.run = 0
 
     def _decode(self, data):
         """Complete-JPEG check + draft-mode grayscale decode, or None."""
@@ -134,6 +147,12 @@ class ChangeGate:
         """
         if not (self.enabled and blocks):
             return False
+        if self.run >= MAX_SKIP_RUN:
+            # deferred long enough — look at the screen for real, and keep
+            # the baseline so the next frame can still be compared
+            self.run = 0
+            self.prev = self.key = None
+            return False
         try:
             with open(path, "rb") as f:
                 data = f.read()
@@ -152,14 +171,18 @@ class ChangeGate:
         prev_boxes, prev_crops = self.key, self.prev
         self.key, self.prev = boxes, crops
         if not boxes or prev_boxes != boxes:
+            self.run = 0
             return False          # first frame, or the layout moved
         judged = 0
         for prev, cur in zip(prev_crops, crops):
             verdict = self._box_verdict(prev, cur)
             if verdict == "differs":
+                self.run = 0
                 return False
             judged += verdict == "same"
         if not judged:
+            self.run = 0
             return False          # every box was empty — nothing was compared
         self.skips += 1
+        self.run += 1
         return True

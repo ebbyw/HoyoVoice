@@ -1382,7 +1382,13 @@ def main():
             # Narrow the gate to the blocks this line was built from. Handed
             # every block on the frame it watches the HUD and the UID too,
             # which sit over open world — see tools/change_gate.py.
-            latest_ocr["text_blocks"] = state.get("boxes") or None
+            # ONLY when there is a line: a screen with no dialogue can still
+            # leave a lone nameplate-shaped block behind, and narrowing onto
+            # that one box pointed the gate at a scrap of static UI, which
+            # then reported "unchanged" for as long as it sat there. With no
+            # line to watch, watch everything and let the gate fail open.
+            latest_ocr["text_blocks"] = (state.get("boxes")
+                                         if state["dialogue"] else None)
 
             # Choice prompts. A LONE option is read aloud: with nothing to
             # choose between, the game isn't offering a menu so much as
