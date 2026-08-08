@@ -118,7 +118,7 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
 </div>
 
 <h2>Log <button id="toggleLog" onclick="toggleLog()">Hide</button>
-<button onclick="post('/api/clearlog',{})">Clear</button>
+<button onclick="post('/api/clearlog',{})" title="Empty the log and forget the recent-lines window, so replayed content is read again instead of being skipped as a repeat">Clear</button>
 <button onclick="window.location='/log.txt'" title="Download this session's decisions + console log as a text file">⤓ Download log</button></h2>
 <table id="log"><thead><tr><th>time</th><th>speaker</th><th>line</th><th>voice</th><th>action</th><th></th></tr></thead><tbody></tbody></table>
 

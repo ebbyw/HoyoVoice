@@ -32,6 +32,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Changed
 
+- **Clear now empties the dedupe window too, not just the log.** The recent-lines window outlives a restart for 10 minutes on purpose — a crash mid-scene shouldn't re-read the line still on screen — but that also means restarting *into* the same content inside the TTL has those lines silently skipped as repeats, with nothing in the dashboard to reset. Clear is what you reach for when you want what follows read as new, so it now forgets the window and rewrites `spoken_cache.json` (the per-speaker voiced history in it is kept — that's a different thing, and it takes real evidence to rebuild). The line already on screen is not re-read: it has already fired, so Clear can't make the app start talking at you.
+
 - **Paimon is now respelled `Pie-mahn` (`pˈImˈɑn`), not `Pah-ee-mahn` (`pˈɑˈimˈɑn`).** The old form spelled the diphthong out as two syllables; this one is the way the games say it. Hyphenated rather than spaced: `Pie mahn` phonemizes to the same sounds but as two words (`pˈI mˈɑn`), which puts a word break in the middle of the name.
 
 ## [0.8.0] - 2026-08-08
