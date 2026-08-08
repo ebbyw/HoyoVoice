@@ -6,6 +6,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-08
+
 ### Added
 
 - **`tools/pronounce_names.py` — spoken forms for both games' casts, and the rosters to check them against.** Kokoro phonemizes English spelling rules, so Chinese and Japanese names fail in a specific, predictable way: pinyin x reads as /z/ ("Xiao" → `zˈIəˌO`, "ZY-ah-oh"), q as /k/ ("Qiqi" → `kˈɪki`), zh as /ʒ/ ("Zhongli" → `ʒˈɑŋɡli`), and a final -e vanishes ("Shenhe" → `ʃˈɛnh`). The script fetches the live Genshin (119) and Star Rail (84) rosters, holds a respelling for the 66 names the phonemizer gets wrong, and prints every one with its reading before and after so the table can be *audited* rather than trusted; `--write` merges it into `voices.json`, `--custom-words` also feeds both rosters to the OCR vocabulary. Names it already says correctly ("Ningguang", "Hu Tao", "Yao Guang") deliberately have no entry.
