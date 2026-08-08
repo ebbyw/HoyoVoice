@@ -18,11 +18,19 @@ Caveat: recordings mux OUR TTS into the audio bed (+8dB), so the gate
 windows right after an original spoken line accordingly.
 """
 import os
+import sys
 import threading
 import time
 from pathlib import Path
 
-from hv_platform.win32 import OcrDaemon      # same daemon, runs anywhere
+# The OCR daemon is the one piece a replay runs for real, so it has to be
+# the HOST's: both speak the same protocol, but the Windows one needs
+# rapidocr/winsdk and simply dies on macOS, respawning in a loop until the
+# replay ends with no text read at all.
+if sys.platform == "darwin":
+    from hv_platform.darwin import OcrDaemon
+else:
+    from hv_platform.win32 import OcrDaemon
 
 REPLAY_DIR = Path(os.environ.get("HOYOVOICE_REPLAY_DIR", "/tmp/hv_replay"))
 SYNTH_MS = int(os.environ.get("HOYOVOICE_SYNTH_MS", "900"))
