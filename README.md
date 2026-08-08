@@ -99,7 +99,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 
 - **Change gate** — OCR is the expensive step, and the frame file is rewritten continuously whether or not anything on screen changed. Before each call the pixels under the last read's text are compared against the previous frame; if none of them moved, that read is replayed instead of paying for a new one. `ocr saved` in the dashboard counts the calls skipped, and `settings.change_gate: false` turns it off.
 - **Text stabilization** — a line must OCR identically on consecutive frames, with extra patience while text is still growing, and a short tolerance for frames where the detector loses the line entirely. Where the engine reports confidence, a read it vouches for settles sooner and a visibly shaky one has to earn an extra sighting.
-- **Sentence streaming** — the typewriter pauses at sentence boundaries, so a finished sentence is spoken at that pause rather than waiting for the whole line; the remainder follows once it renders, after the first part finishes.
+- **Sentence streaming** — a sentence is spoken as soon as it finishes typing, not when the line does. The typewriter pauses at sentence boundaries, and even when it doesn't, a line that is still growing past a closed sentence is read up to that boundary; the remainder follows once it renders, after the first part finishes. Ellipses and abbreviations ("Mr.") are not boundaries, and a line that has stopped changing is always spoken whole.
 - **Two-tier VAD gate** — a strong speech spike *or* ~¼s of sustained moderate speech marks a line as voiced; short soft lines ("Which king?") are caught.
 - **Center-energy detector** — game VO is mixed to the stereo center; a mid-channel burst with flat sides (plus a minimum speechiness) catches robot/vocoder voices the speech model can't recognize.
 - **Per-speaker voiced prior** — once a character has consistently turned out to be voiced, much weaker audio evidence is enough to stay quiet for them. Some voiceover is quiet enough to sit below any threshold that could be used safely, and for a character with a real voice, silence is the better error. Self-correcting: lines HoyoVoice does speak for them count against the prior.
@@ -108,7 +108,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 - **OCR repair** — the game font's I/l confusion, dropped apostrophes ("youre" → "you're"), decorative glyphs, and spelled-out interjections ("shh" → "shush") are all fixed before synthesis.
   - *macOS:* Apple Vision is fed a custom vocabulary built from your casting and `settings.custom_words`.
   - *Windows:* RapidOCR reads with an English-trained recognition model (`models\rec_en.onnx`, downloaded by `setup.ps1`). Without it RapidOCR falls back to its bundled Chinese-trained model, which drops spaces — so punctuation spacing is still restored and fused word pairs are still split ("mercyis" → "mercy is"), with capitalised tokens protected so game proper nouns survive. Where several reads of one line disagree, the one that scans as the most real words is the one spoken.
-- **Pronunciations** — `settings.pronunciations` substitutes spoken forms at synthesis only ("Wishpower" → "Wish power"); logs keep the real spelling.
+- **Pronunciations** — `settings.pronunciations` substitutes spoken forms at synthesis only ("Wishpower" → "Wish power"); logs, dedupe and casting keep the real spelling. Ships with 69 character names Kokoro reads wrong, because it applies English spelling rules to pinyin and romaji: x becomes /z/ ("Xiao" → "ZY-ah-oh"), q becomes /k/ ("Qiqi" → "KIH-kee"), zh becomes /ʒ/, and a final -e disappears ("Shenhe" → "shenh"). `python tools/pronounce_names.py` prints what the synthesizer says for every name with and without its entry, checked against the same phonemizer Kokoro uses; `--write` merges the table into your `voices.json` and `--custom-words` also feeds both games' full rosters to the OCR vocabulary. Matching is case-insensitive so OCR case jitter can't miss a name — for a name that is *also* an ordinary word ("Gaming", and any entry you add for Jade, Sunday, Hook, Blade, Archer, Robin), list it in `settings.pronunciations_exact` and only the capitalised spelling is respelled.
 - **Sentiment pacing** — positive/exclamatory lines read slightly faster, somber ones slower (±~10%).
 - **Choice prompts** — a *lone* option is read aloud (with nothing to choose between, the game is putting words in the player character's mouth rather than offering a menu), always after the line it sits above and only into a gap in the talking. It's cast under the player character's name for the current game — `Traveler` in Genshin, `Trailblazer` in Star Rail — so it appears in Casting like anyone else and you can give it whatever voice you want; `settings.choice_speaker` overrides the name. Two or more options are a menu, so they are logged and left unspoken. Either way the prompt appears in the dashboard log, including when it went unread.
 
@@ -140,6 +140,31 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 
 Everything above is editable live from the dashboard. Kokoro ships ~50 voices (`af_*`/`am_*` American, `bf_*`/`bm_*` British); `af_nicole` is broken in the packaged model. OCR misreads within ~80% similarity of a known name snap to it; names in quotes are distinct characters from the narrator.
 
+### Adding your own voice actors
+
+Casting is per character, and every character is one entry in `voices.json`. There are three levels to this: assigning voices (the everyday case), widening the menu of voices to assign from, and replacing the TTS engine entirely.
+
+**From the dashboard (do it this way).** A character appears in **Casting** the moment OCR reads their nameplate, already auto-cast with a distinct voice from a gender-guessed pool and marked `(auto)`. Pick a different voice from their dropdown and they are re-cast immediately — HoyoVoice re-reads their last line in the new voice so you can audition it in context. To cast someone before they first speak, type their **exact** nameplate spelling into **Add cast**, choose a voice, and hit Add; matching is fuzzy to ~80%, so near-misses still land, but a wrong name silently creates a second character. The **muted** checkbox means *never speak for this character* — use it for characters whose real VO the detector can't hear. ✕ deletes an entry, including bogus ones OCR invented. The **Test TTS** box speaks any text in any voice, which is the fastest way to compare candidates before assigning one.
+
+**By hand, in `voices.json`.** Same thing, plus `speed` (1.0 is normal; ~0.85–1.15 is the useful range before it sounds processed):
+
+```jsonc
+"characters": {
+  "Rin Tohsaka": {"voice": "af_heart", "speed": 1.05},
+  "Reporting Furb": {"voice": "am_puck", "speed": 1.0}
+}
+```
+
+`defaults` sets the fallback voices — `narrator` is used for true narration, lore cards, loading-screen blurbs and system notices, and `female`/`male` seed auto-casting. `always_voiced` is the muted list. `settings.overlay_speaker` and `settings.choice_speaker` name the character that floating host bubbles and lone choice prompts are cast as, so those get voices the same way everyone else does.
+
+> Edit the file with the app **stopped** (`./hoyovoice.sh stop` / `python hoyovoice.py stop`). It is read once at startup and written back on every casting change, so hand-edits made while it's running are overwritten.
+
+**Widening the voice menu.** The dashboard offers 28 English voices — `VOICE_CATALOG` in `tools/webui.py` — but the packaged Kokoro model actually carries ~54, including Spanish (`ef_`/`em_`), French (`ff_`), Hindi (`hf_`/`hm_`), Italian (`if_`/`im_`), Japanese (`jf_`/`jm_`), Portuguese (`pf_`/`pm_`) and Mandarin (`zf_`/`zm_`) voices. They synthesize English text fine, but through the American English phonemizer — you get a different-sounding *speaker*, not a language switch, and the TTS log notes the mismatch. On macOS they're the `.safetensors` files under `~/.cache/huggingface/hub/models--prince-canuma--Kokoro-82M/snapshots/*/voices/`; on Windows they're all inside `models\voices-v1.0.bin`.
+
+To use one, add its ID to `VOICE_CATALOG`. That list is also the dashboard's validation gate: a voice outside it is rejected by the cast and test endpoints, and a character carrying one still *speaks* correctly but their dropdown renders with nothing selected, so touching it reassigns them. To put a voice into the auto-cast rotation as well, add it to the matching pool in `VOICE_POOLS` (`live.py`).
+
+**Genuinely new voices** — your own recordings, a Kokoro voice pack from elsewhere, a different engine — are not a config change. Synthesis is one class per platform: `Tts` in `hv_platform/darwin.py` (MLX) and `hv_platform/win32.py` (ONNX). Both expose `synth(text, voice, speed)` and must return mono float32 at 24 kHz; everything upstream only ever passes the voice ID through from `voices.json`, so a new engine that honors that contract needs no changes anywhere else. Kokoro can't clone a voice from samples — that's a different model, and swapping it in means accepting its latency, since the whole pipeline is built around a line being spoken within about a second of settling.
+
 ## Games
 
 Reading a screen means knowing where that game draws its nameplate, its dialogue, its choice list, and the chrome that says "this is story, not a menu". Those bands live in `tools/profiles/`, one profile per game; everything else in the pipeline is game-agnostic.
@@ -168,6 +193,7 @@ Calibrating a screen type takes captures, not guesswork: every logged event save
 | `tools/vad.py` | Silero VAD onnx wrapper (torch-free) |
 | `tools/webui.py` | Dashboard (Flask, single page) + `VERSION` |
 | `tools/replay.py` | Replay a recording through the real pipeline (see below) |
+| `tools/pronounce_names.py` | Character-name spoken forms + roster fetch; audits them against Kokoro's phonemizer |
 | `voices.json` | Casting + settings |
 | `setup.sh` / `setup.ps1` | One-time install (macOS / Windows) |
 | `hoyovoice.sh` / `hoyovoice.py` | start / stop / status / log / restart (macOS shell / cross-platform) |
