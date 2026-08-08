@@ -47,6 +47,11 @@ class Profile:
 
     name = "base"
     label = "Base"
+    # What this game calls the player character. Dialogue options are the
+    # player's own words but carry no nameplate, so they are cast under this
+    # name — which puts a row in Casting like any other character, instead
+    # of falling to the narrator with nothing to assign a voice to.
+    PLAYER_NAME = "Player"
 
     # Screen types this game HAS. A detector whose type isn't listed
     # returns None without looking at the frame, so a game that has no

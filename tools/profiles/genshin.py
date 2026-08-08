@@ -40,6 +40,7 @@ from .base import Profile, in_region, split_camel
 class Genshin(Profile):
     name = "genshin"
     label = "Genshin Impact"
+    PLAYER_NAME = "Traveler"
     # Only screens whose geometry has been checked against real frames.
     # Choice prompts did not occur in the calibration capture; they stay off
     # rather than guessed at, because a wrong band does not fail quietly —
