@@ -154,6 +154,20 @@ VAD_SOFT_THRESHOLD = 0.12
 VAD_SOFT_HITS = 3
 SOFT_GATE_MIN_VOICED = 3      # observations before the prior is trusted
 SOFT_GATE_RATIO = 0.75
+# The same prior, pointed the other way, and only ever used to decide
+# whether to CUT our own playback. A speaker the game has never once been
+# heard to voice — across sessions, the history outlives a restart — is a
+# speaker whose lines the player is relying on us for, and a scene with the
+# voice acting off has nothing but music and effects to offer the VAD.
+# Measured on rec_20260808_161001: 400s, 47 lines, and every speech-like
+# stretch in the capture was our own playback — yet one line was cut 0.8s in
+# on three 32ms chunks peaking at 0.66. Sustained speech (or a decisive
+# spike) may still take the line; a blip may not.
+# Three, the same count the soft prior asks for in the other direction: a
+# scene with the voice acting off declares itself in its first few lines,
+# and waiting longer leaves the opening of every session on the old bar.
+FIRM_GATE_MIN_SPOKEN = 3      # lines seen unvoiced before the prior is trusted
+VAD_FIRM_HITS = 6             # ~192ms of confident speech
 # settings.late_yield: false stops HoyoVoice cutting its own playback when
 # it thinks the game has started talking over it. Worth having as a switch
 # rather than only a threshold: in a scene with no voice acting at all,
@@ -394,6 +408,13 @@ def usually_voiced(speaker):
     return v >= SOFT_GATE_MIN_VOICED and v >= SOFT_GATE_RATIO * (v + s)
 
 
+def never_voiced(speaker):
+    """True once a speaker has a consistent record of the game NOT voicing
+    them — every line so far has been ours to read."""
+    v, s = voiced_history.get(speaker, (0, 0))
+    return v == 0 and s >= FIRM_GATE_MIN_SPOKEN
+
+
 def vad_evidence(since, soft=False):
     """(strong hits, weak hits, peak) in the VAD history since `since`.
 
@@ -413,10 +434,14 @@ def vad_evidence(since, soft=False):
     return strong, weak, peak
 
 
-def is_voiced(since, soft=False):
-    """soft: this speaker is usually voiced, so accept weaker evidence."""
+def is_voiced(since, soft=False, firm=False):
+    """soft: this speaker is usually voiced, so accept weaker evidence.
+    firm: the game has never been heard to voice them, and this evidence
+    would cut a line we are already reading — demand sustained speech."""
     weak_hits = VAD_SOFT_HITS if soft else VAD_WEAK_HITS
     strong, weak, peak = vad_evidence(since, soft)
+    if firm:
+        return strong >= VAD_FIRM_HITS or peak >= VAD_PEAK
     return (strong >= VAD_MIN_HITS or peak >= VAD_PEAK
             or weak >= weak_hits)
 
@@ -478,7 +503,13 @@ _INTERJECTIONS = [
 # "EN-no", "AY-ah". Spelling the stammer as a syllable fixes it. Only when
 # the letter matches the word it precedes, so "X-ray", "T-shirt" and "e-mail"
 # are left alone.
-_STUTTER = re.compile(r"\b([A-Za-z])-([A-Za-z])")
+#
+# The dash can be an EM dash: Genshin writes "A—Ahh!" that way and the
+# hyphen-only pattern walked straight past it, so the lone "A" was read as
+# the letter. Any of the dashes count, and all of them are respelled to a
+# plain hyphen. A spaced dash (" — ", the punctuation kind) can't match:
+# the letter and the dash have to be adjacent.
+_STUTTER = re.compile(r"\b([A-Za-z])[-‐‑–—]([A-Za-z])")
 # E/I/O already read as sounds rather than names ("I-I'm" → ˌIˌIm), and every
 # respelling tried for them was worse. A and U are not: "A-" is "AY", "U-" is
 # "YOU".
@@ -1744,10 +1775,20 @@ def main():
             # the whole feature exists to avoid.
             yield_soft = (usually_voiced(playing_speaker)
                           if playing_speaker else False)
+            # ...and the same prior pointed the other way. A character the
+            # game has never once been heard to voice is one whose lines the
+            # player is relying on us for, and in a scene with the voice
+            # acting off the VAD has nothing but music and effects to score:
+            # a Paimon line was cut 0.8s in on three 32ms chunks peaking at
+            # 0.66, in a session whose capture contained no game speech at
+            # all. Sustained speech may still take the line; a blip may not.
+            yield_firm = bool(not yield_soft and playing_speaker
+                              and never_voiced(playing_speaker))
             if (speech.playing and speech.t_play
                     and not speech.qr_playing
                     and LATE_YIELD
-                    and is_voiced(speech.t_play + 0.2, soft=yield_soft)):
+                    and is_voiced(speech.t_play + 0.2, soft=yield_soft,
+                                  firm=yield_firm)):
                 # read the evidence BEFORE stopping — stop() clears t_play
                 t_play = speech.t_play
                 s, w, pk = vad_evidence(t_play + 0.2, soft=yield_soft)
@@ -1761,7 +1802,8 @@ def main():
                 # short reads exactly like a correct one otherwise
                 print(f"[yielded to late VO — {time.monotonic() - t_play:.1f}s in,"
                       f" peak {pk:.2f}, strong {s}, weak {w}"
-                      f"{', soft' if yield_soft else ''}]", flush=True)
+                      f"{', soft' if yield_soft else ''}"
+                      f"{', firm' if yield_firm else ''}]", flush=True)
 
             if not observing["on"]:
                 candidate, candidate_count = None, 0
