@@ -93,6 +93,16 @@ STABLE_READS = 2
 # settled line reads at 0.98+, a mid-fade / half-rendered one visibly lower.
 CONF_TRUSTED = 0.97           # skip the sentence-streaming cushion read
 CONF_SHAKY = 0.85             # earn one extra sighting before speaking
+# Punctuation that ends a rendered line — used both to decide the typewriter
+# has stopped and to find a streamable sentence boundary inside a line.
+LINE_END = (".", "!", "?", "…", '"', "”", "’", ")")
+# MID-LINE STREAMING: when the typewriter is still typing past a finished
+# sentence, speak that sentence NOW instead of waiting out the whole line —
+# the remainder arrives later as an extension. Guards: the head must be worth
+# a separate utterance, and enough must be typed past the boundary to prove
+# the line really is still growing (not just OCR dropping a final period).
+STREAM_HEAD_MIN = 12          # normalized chars in the speakable prefix
+STREAM_TAIL_MIN = 3           # chars visible past the sentence end
 # consecutive frames where the detector loses an on-screen line before we
 # give up on the candidate (~0.5s at 6fps). OCR misses are common on bright
 # backgrounds; without this, a miss discards all accumulated stability.
@@ -522,6 +532,24 @@ def fix_ocr_text(s):
     return re.sub(r"  +", " ", s).strip()
 
 
+def spoken_form(text):
+    """Apply settings.pronunciations — what the TTS hears, not what we log.
+
+    Kokoro phonemizes English spelling rules, so pinyin and romaji names come
+    out wrong in predictable ways ("Xiao" → "ZY-ah-oh"); the respellings live
+    in voices.json, audited by tools/pronounce_names.py. Matching is
+    case-insensitive so OCR case jitter can't miss a name — a name that is
+    ALSO an ordinary English word ("Gaming") goes in
+    settings.pronunciations_exact, or every "gaming" in prose is respelled too.
+    """
+    settings = VOICES.get("settings", {})
+    exact = set(settings.get("pronunciations_exact", []))
+    for word, spoken in settings.get("pronunciations", {}).items():
+        text = re.sub(rf"\b{re.escape(word)}\b", spoken, text,
+                      flags=0 if word in exact else re.IGNORECASE)
+    return text
+
+
 def center_burst(t_line):
     """(mid_delta_dB, side_delta_dB): energy rise after the line appeared vs
     the pre-line baseline. VO shows as mid rising with side staying flat."""
@@ -544,6 +572,37 @@ def center_burst(t_line):
 
 def normalize_text(s):
     return "".join(c for c in s.lower() if c.isalnum())
+
+
+# A sentence end is terminal punctuation (plus any closing quote/bracket)
+# followed by whitespace and the start of a new sentence. "3.5" fails the
+# lookahead, "Mr. Ito" is caught by _ABBREV. "…" is deliberately NOT a
+# boundary: in these games it is a pause the typewriter runs straight
+# through, so splitting there would chop one spoken thought in half.
+_SENT_END = re.compile(r'[.!?]["”’)]?(?=\s+["“‘(]?[A-Z0-9])')
+_ABBREV = {"mr", "mrs", "ms", "dr", "st", "sr", "jr", "vs", "etc", "no"}
+_ABBREV_RE = re.compile(r"([A-Za-z']+)[.!?]$")
+
+
+def stream_prefix(s):
+    """Longest complete-sentence prefix of a line still being typed, or None.
+
+    HSR/Genshin type a line out over a second or more; waiting for the last
+    character means the read always lags the game. Once a sentence inside the
+    line has closed we can speak that much immediately — the rest is spoken
+    afterwards through the extension path, which diffs against what we said.
+    """
+    best = None
+    for m in _SENT_END.finditer(s):
+        head = s[:m.end()]
+        if len(s[m.end():].strip()) < STREAM_TAIL_MIN:
+            continue                       # nothing typed past the boundary
+        abbr = _ABBREV_RE.search(head.rstrip())
+        if abbr and abbr.group(1).lower() in _ABBREV:
+            continue
+        if len(normalize_text(head)) >= STREAM_HEAD_MIN:
+            best = head.rstrip()
+    return best
 
 
 def similar_speaker(a, b):
@@ -690,12 +749,7 @@ class Speech:
         self.t_play = None
 
     def synth(self, text, voice, base_speed=1.0):
-        # spoken-form substitutions (settings.pronunciations) — logs and
-        # dedupe keep the real spelling; only the TTS hears these
-        for word, spoken in VOICES.get("settings", {}).get(
-                "pronunciations", {}).items():
-            text = re.sub(rf"\b{re.escape(word)}\b", spoken, text,
-                          flags=re.IGNORECASE)
+        text = spoken_form(text)
         speed = round(base_speed * self.sentiment_speed(text), 3)
         t0 = time.time()
         audio = self.tts.synth(text, voice, speed)
@@ -1143,6 +1197,7 @@ def main():
     fired_norm = None           # line already pushed through the gate once
     unstable_count = 0
     miss_streak = 0             # consecutive frames the detector lost the line
+    last_raw_norm = None        # previous frame's UNCLIPPED read (growth check)
     candidate_variants = []     # every raw read of the current line
     last_mtime = 0.0
     last_frame_change = time.monotonic()
@@ -1622,6 +1677,21 @@ def main():
             state["speaker"] = normalize_speaker(state["speaker"])
             state["dialogue"] = fix_ocr_text(state["dialogue"])
             conf = state.get("conf", 1.0)   # 1.0 = engine has no confidences
+            # MID-LINE STREAMING: only while the raw read is actually GROWING
+            # frame over frame. Clipping a static line would be a trap — its
+            # text never changes again, so the tail would never arrive as an
+            # extension and the second half would be lost.
+            raw_norm = normalize_text(state["dialogue"])
+            typing = (last_raw_norm is not None and raw_norm != last_raw_norm
+                      and raw_norm.startswith(last_raw_norm))
+            last_raw_norm = raw_norm
+            if typing and not state["dialogue"].rstrip().endswith(LINE_END):
+                head = stream_prefix(state["dialogue"])
+                if head:
+                    # the clipped head repeats identically while the rest is
+                    # typed, so it stabilizes in STABLE_READS frames (~0.3s)
+                    # instead of waiting out the patient mid-sentence hold
+                    state["dialogue"] = head
             key = (state["speaker"], normalize_text(state["dialogue"]))
             same_text = candidate is not None and key[1] == candidate[1]
             # a strict prefix is the typewriter growing, not jitter
@@ -1681,8 +1751,7 @@ def main():
                 candidate, candidate_count = key, 1
             # a line ending mid-sentence is probably still typing its next
             # visual row — hold a few extra reads so we speak it whole
-            complete = state["dialogue"].rstrip().endswith(
-                (".", "!", "?", "…", '"', "”", "’", ")"))
+            complete = state["dialogue"].rstrip().endswith(LINE_END)
             if complete and not candidate_growing:
                 required = STABLE_READS
             elif complete:

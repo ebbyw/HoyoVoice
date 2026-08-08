@@ -6,6 +6,24 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **`tools/pronounce_names.py` — spoken forms for both games' casts, and the rosters to check them against.** Kokoro phonemizes English spelling rules, so Chinese and Japanese names fail in a specific, predictable way: pinyin x reads as /z/ ("Xiao" → `zˈIəˌO`, "ZY-ah-oh"), q as /k/ ("Qiqi" → `kˈɪki`), zh as /ʒ/ ("Zhongli" → `ʒˈɑŋɡli`), and a final -e vanishes ("Shenhe" → `ʃˈɛnh`). The script fetches the live Genshin (119) and Star Rail (84) rosters, holds a respelling for the 66 names the phonemizer gets wrong, and prints every one with its reading before and after so the table can be *audited* rather than trusted; `--write` merges it into `voices.json`, `--custom-words` also feeds both rosters to the OCR vocabulary. Names it already says correctly ("Ningguang", "Hu Tao", "Yao Guang") deliberately have no entry.
+
+  A name that is also an ordinary English word needs `settings.pronunciations_exact`. Matching is case-insensitive so OCR case jitter can't miss a name, which means the "Gaming" entry would also respell "gaming" in ordinary prose — listing the name there matches the capitalised spelling only. The same trap is waiting for Jade, Sunday, Hook, Blade, Archer, Robin and March 7th, all of which are Star Rail characters.
+
+  Respellings, not IPA. misaki accepts inline phonemes, but the Windows backend (kokoro-onnx) doesn't, and markup that only works on one platform is worse than an approximation that works on both. Each respelling was checked against the same g2p Kokoro runs, which has three traps worth knowing: a hyphen chunk is its own word, so a chunk-final "eh" reads /eɪ/ ("Freh-mee-nay" → "FRAY-mee-nay", fixed as "Frem-ee-nay"); an unreadable initial cluster is spelled out letter by letter ("Shway" → "S-H-way", so shw/chw/hw/lw are avoided); and "ge" is soft, so Gepard needs "Ghep-ard" to keep its hard g.
+
+- **README: "Adding your own voice actors."** The casting section documented the *shape* of `voices.json` but not how to actually cast someone, so the three levels of it now have a section each: assigning voices from the dashboard (auto-cast, Add cast, the audition-on-assign behaviour, muted, the Test TTS box) and by hand — including the trap that the file is read once at startup and written back on every casting change, so hand-edits made while the app is running are overwritten; widening the menu past the 28 English voices in `VOICE_CATALOG`, since the packaged Kokoro model carries ~54 and the rest speak English text through the American phonemizer (verified — a different-sounding speaker, not a language switch), plus what breaks if a voice is used without being added to the catalog; and the fact that a genuinely new voice is an engine change, with the `synth(text, voice, speed)` → mono float32 @ 24 kHz contract the two `Tts` classes hold.
+
+### Changed
+
+- **Reading now starts when the first sentence finishes typing, not when the line does.** Sentence streaming only fired when the typewriter happened to *pause* on a sentence end — the read waited out a full-line hold (`STABLE_READS + 4`, ~1s at 6fps) whenever the next sentence had already started rendering, which is most multi-sentence lines. A line whose text is still growing frame over frame is now clipped to its longest closed sentence, and the clipped head repeats identically while the rest types, so it stabilizes in the normal two reads (~0.3s) instead. The remainder is spoken afterwards through the existing extension path, which diffs against what was already said.
+
+  Two guards keep it from chopping a single thought in half. The clip only applies while the raw read is actually *growing* — clipping a static line would be a trap, because its text never changes again, so the tail would never arrive as an extension and half the line would be lost (OCR does drop a final period). And a boundary is terminal punctuation followed by the start of a new sentence, so "3.50 mora" and "Mr. Ito" don't qualify; "…" is deliberately excluded, since in these games it is a pause the typewriter runs straight through. `tools/test_stream_prefix.py` pins both directions. Verified against a recorded HSR scene: same lines covered, each one's decision reached a sentence earlier.
+
+- **Names Kokoro read wrong now have spoken forms — including 66 character names.** Paimon came out "PAY-mun" (`pˈAmən`) and is respelled `Pah-ee-mahn` → `pˈɑˈimˈɑn`; Reignbow came out "ree-INE-bow" (`ɹˌiˈInbO`) → `Rainbow`; Ishtar came out "ISH-tar" (`ˈɪʃtˌɑɹ`) → `Esh-taar`. `settings.pronunciations` applies at synthesis only, so logs, dedupe and casting keep the real spellings — and the substitution is case-insensitive and word-bounded, so possessives ("Ishtar's") carry through.
+
 ## [0.7.3] - 2026-08-08
 
 ### Fixed
