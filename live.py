@@ -445,13 +445,45 @@ _CONTRACTIONS = {
 }
 _CONTRACTION_RE = re.compile(
     r"\b(" + "|".join(_CONTRACTIONS) + r")\b", re.IGNORECASE)
-# interjections that get spelled letter-by-letter → nearest real word
+# Interjections the phonemizer spells letter-by-letter, or reads as the wrong
+# vowel → the nearest spelling it says correctly. Checked with
+# tools/pronounce_names.py, which runs the same phonemizer Kokoro does:
+#   Shh   ˌɛsˌAʧˈAʧ ("S-H-H")  → shush  ʃˈʊʃ
+#   Hmph  ˌAʧˌɛmpˌiˈAʧ         → humph  hˈʌmf
+#   Tsk   tˈəsk ("tuhsk")      → tisk   tˈɪsk
+#   Uhm   ˈum ("oom")          → um     ˈʌm
+#   Ugh   ˈʌh on macOS, ˈʌɡ on Windows → ug ˈʌɡ on both
+#   Aah   fine, but Aaah is ˈææə       → ah     ˈɑ
+# "Pfft" is deliberately absent: it phonemizes to ˈft, a short puff that is
+# roughly the right noise, and the "pfff" respelling this list used to carry
+# came out as "P-E-F-E-F" — worse than leaving it alone.
 _INTERJECTIONS = [
     (re.compile(r"\bshh+\b", re.IGNORECASE), "shush"),
     (re.compile(r"\bhmph+\b", re.IGNORECASE), "humph"),
     (re.compile(r"\btsk\b", re.IGNORECASE), "tisk"),
-    (re.compile(r"\bpff+t?\b", re.IGNORECASE), "pfff"),
+    (re.compile(r"\buh+m+\b", re.IGNORECASE), "um"),
+    (re.compile(r"\bugh+\b", re.IGNORECASE), "ug"),
+    (re.compile(r"\ba+h+\b", re.IGNORECASE), "ah"),
 ]
+
+# A stammer is written as a repeated initial — "W-what", "N-no", "A-aah" —
+# and the phonemizer reads that lone letter as its NAME: "DOUBLE-YOU-what",
+# "EN-no", "AY-ah". Spelling the stammer as a syllable fixes it. Only when
+# the letter matches the word it precedes, so "X-ray", "T-shirt" and "e-mail"
+# are left alone.
+_STUTTER = re.compile(r"\b([A-Za-z])-([A-Za-z])")
+# E/I/O already read as sounds rather than names ("I-I'm" → ˌIˌIm), and every
+# respelling tried for them was worse. A and U are not: "A-" is "AY", "U-" is
+# "YOU".
+_STUTTER_KEEP = "eio"
+_STUTTER_TAIL = {"a": "h", "u": "h"}
+
+
+def _unstutter(m):
+    lead, nxt = m.group(1), m.group(2)
+    if lead.lower() != nxt.lower() or lead.lower() in _STUTTER_KEEP:
+        return m.group(0)
+    return f"{lead}{_STUTTER_TAIL.get(lead.lower(), 'uh')}-{nxt}"
 
 
 # RapidOCR's default recognition model is Chinese-trained, and Chinese
@@ -564,8 +596,6 @@ def fix_ocr_text(s):
         lambda m: (_CONTRACTIONS[m.group(0).lower()].capitalize()
                    if m.group(0)[0].isupper()
                    else _CONTRACTIONS[m.group(0).lower()]), s)
-    for pat, rep in _INTERJECTIONS:
-        s = pat.sub(_keep_case(rep), s)
     # user lexicon for proper nouns OCR keeps mangling ("lason" → "Iason")
     for wrong, right in VOICES.get("settings", {}).get("text_fixes", {}).items():
         s = re.sub(rf"\b{re.escape(wrong)}\b", right, s, flags=re.IGNORECASE)
@@ -581,13 +611,20 @@ def spoken_form(text):
     case-insensitive so OCR case jitter can't miss a name — a name that is
     ALSO an ordinary English word ("Gaming") goes in
     settings.pronunciations_exact, or every "gaming" in prose is respelled too.
+
+    Interjections and stammers are respelled here for the same reason and by
+    the same rule: it is what the line SOUNDS like, not what it says, so the
+    log, dedupe and casting all keep "Shh" and "W-what" as written. The
+    "synth heard:" line in the log is where the respelling shows up.
     """
     settings = VOICES.get("settings", {})
     exact = set(settings.get("pronunciations_exact", []))
     for word, spoken in settings.get("pronunciations", {}).items():
         text = re.sub(rf"\b{re.escape(word)}\b", spoken, text,
                       flags=0 if word in exact else re.IGNORECASE)
-    return text
+    for pat, rep in _INTERJECTIONS:
+        text = pat.sub(_keep_case(rep), text)
+    return _STUTTER.sub(_unstutter, text)
 
 
 # what mark_stage_directions() leaves behind, and the extensions that make a
