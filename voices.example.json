@@ -49,7 +49,7 @@
       "Mavuika": "Mah-vooee-kah",
       "Mualani": "Moo-ah-lah-nee",
       "Nilou": "Nee-loo",
-      "Paimon": "Pah-ee-mahn",
+      "Paimon": "Pie-mahn",
       "Qingque": "Ching-chueh",
       "Qiqi": "Chee-chee",
       "Reignbow": "Rainbow",
@@ -84,6 +84,7 @@
     "choice_speaker": null,
     "video_device": "ShadowCast 3",
     "audio_device": "ShadowCast 3",
+    "output_device": "",
     "pronunciations_exact": [
       "Gaming"
     ],

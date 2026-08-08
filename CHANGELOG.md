@@ -6,6 +6,20 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **Pick which speakers HoyoVoice talks through (Windows).** Playback went to the Windows default output, so on a machine with two sets of speakers the only way to move the reads was to move the whole system — game audio and everything else with them. The dashboard's device row now has a third picker, **speaks to**: any output device, or **System default** to keep following Windows. It's persisted as `settings.output_device` ("" = system default), and it only affects our own speech — capture is untouched, so the setting applies to the next line with no restart, and unlike a video/audio swap it's allowed mid-recording.
+
+  The picker stores a device *name*, never an index: PortAudio indices shift as devices come and go (an index has already, once, turned into a webcam). Resolution is shared with the existing input matching — WASAPI's view of a device is preferred, because sounddevice lists each physical device once per host API and MME truncates names at ~31 chars ("Headphones (Arctis Nova Pro Wire"), so an exact-name match against the wrong host API's list silently fails. The resolved index is cached across lines (querying the device table per line is slow), re-resolved at once when the setting changes, and after a miss re-checked only every 10s — a headset that's off shouldn't print the same complaint under every spoken line.
+
+  **A missing device never costs you a line.** If the saved name doesn't resolve, or the stream refuses to open (device asleep, or held in exclusive mode), the line is spoken on the system default and the log says why, with the outputs it could see. The dashboard also keeps a chosen-but-missing device listed as "(not found)" rather than quietly resetting the setting to System default on the next Apply. `tools/test_output_device.py` covers all of it against a fake sounddevice — host-API preference, "" meaning default, the cache, both failure paths, and the dashboard round trip — so it runs on either platform with no sound card.
+
+  macOS plays through `afplay`, which has no device selection, so that backend reports no output list and the picker shows System default alone (route per-app from Sound settings there). Backends now take the live devices dict in `create_player(devices)` and `list_devices()` returns a third list; see `hv_platform/base.py`.
+
+### Changed
+
+- **Paimon is now respelled `Pie-mahn` (`pˈImˈɑn`), not `Pah-ee-mahn` (`pˈɑˈimˈɑn`).** The old form spelled the diphthong out as two syllables; this one is the way the games say it. Hyphenated rather than spaced: `Pie mahn` phonemizes to the same sounds but as two words (`pˈI mˈɑn`), which puts a word break in the middle of the name.
+
 ## [0.8.0] - 2026-08-08
 
 ### Added

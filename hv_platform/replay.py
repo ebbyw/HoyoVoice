@@ -52,7 +52,7 @@ def _maybe_finish():
 
 
 def list_devices():
-    return ["replay"], ["replay"]
+    return ["replay"], ["replay"], []
 
 
 class VideoCapture:
@@ -167,7 +167,8 @@ class Tts:
 class Player:
     """Tracks a playback deadline instead of making sound."""
 
-    def __init__(self):
+    def __init__(self, devices=None):
+        self.devices = devices if devices is not None else {}
         self.deadline = 0.0
 
     def play(self, wav_path, audio=None, samplerate=24000):
@@ -200,5 +201,5 @@ def create_tts():
     return Tts()
 
 
-def create_player():
-    return Player()
+def create_player(devices=None):
+    return Player(devices)

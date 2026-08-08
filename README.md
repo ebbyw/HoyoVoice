@@ -71,7 +71,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 ## The dashboard
 
 - **Status & controls** — Pause/Resume observation (feed preview blanks while paused), live analytics (VAD health, spoken/skipped/yielded counts, synth/OCR timings, lines per minute).
-- **Device pickers** — choose any connected video/audio device; Apply hot-swaps capture and persists the choice.
+- **Device pickers** — choose any connected video/audio device; Apply hot-swaps capture and persists the choice. **speaks to** picks which output device HoyoVoice talks through (Windows), so its reads can go to your headset while the game keeps the desktop speakers, or the other way round — leave it on **System default** to follow whatever Windows is set to. It applies to the next line, without restarting capture, so it's safe to change mid-session or mid-recording. (macOS plays on the system default; route per-app from Sound settings.)
 - **Casting** — every speaker the OCR meets appears here, and each new character is **auto-cast** with a distinct voice from a gender-guessed pool (marked "(auto)" until you choose). Assign a voice (instantly re-reads their last line so you can audition), tick **muted** for characters whose real VO the detector can't hear (creature voices), ✕ deletes bogus entries. **Add cast** pre-assigns a voice to a character before they first appear.
 - **Test box** — type anything, pick a voice, hear it.
 - **Add voice file** — import a Kokoro voice pack (`.pt`, `.safetensors`, `.npy`, `.npz`, `.bin`). It's verified by actually synthesizing with it, auditioned on the spot, and then castable like any built-in voice; ✕ removes one. See [Adding your own voice actors](#adding-your-own-voice-actors).
@@ -128,6 +128,8 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
                                             // (default: Traveler/Trailblazer)
     "video_device": "ShadowCast 3",
     "audio_device": "ShadowCast 3",
+    "output_device": "",                    // where WE speak; "" = whatever
+                                            // the OS default output is
     "text_fixes": {"lason": "Iason"},       // proper nouns OCR keeps mangling
     "pronunciations": {"Wishpower": "Wish power"},  // spoken form only
     "custom_words": ["Wishpower", "Planarcadia"],   // OCR vocabulary hints
@@ -230,6 +232,7 @@ That runs the actual OCR daemon, classifier, stabilization, dedupe, VAD gate and
 - **You hear VO but the VAD never sees speech (max stays 0.00 at a healthy dB):** your console negotiated surround over the passthrough chain, and game dialogue lives in the center channel — the card's 2-channel USB audio only gets front L/R. Set the console's audio output to stereo (PS5: Settings → Sound → Audio Output → Linear PCM, Number of Channels 2.0).
 - **A menu/board screen gets narrated:** file an issue with the log tail and a screenshot — screen detectors are cheap to add. Every logged event also saves the raw OCR blocks to `captures/shots/<id>.json`, which is what a fix needs.
 - **Capture device busy:** close OBS/QuickTime; the card allows one client.
+- **Nothing comes out of the device you picked in "speaks to":** the console log says which output it resolved (`[audio] output → …`) and lists what it can see when a saved name no longer matches — a device that's off or asleep drops off that list, and HoyoVoice keeps talking on the system default until it's back.
 - **Windows: lines are slow to appear or misread.** Check the startup log for the OCR engine: `engine: rapid (directml, …)` is the good path (~115 ms/frame). If it says `windows`, DirectML didn't install — rerun `setup.ps1`, or `.venv\Scripts\pip install onnxruntime-directml`. The built-in Windows engine is only a fallback and misreads small game fonts. Force a choice with the `HOYOVOICE_OCR_ENGINE` environment variable (`auto`, `rapid`, `windows`).
 
   The line above it should read `[ocrd_win] rec model: rec_en.onnx`. Without it RapidOCR is recognising English with its bundled Chinese-trained model, which fuses words ("fora", "RinTohsaka") — rerun `setup.ps1`, or point `HOYOVOICE_REC_MODEL` and `HOYOVOICE_REC_KEYS` at the model and its dictionary.
