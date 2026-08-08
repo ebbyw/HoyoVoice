@@ -84,6 +84,7 @@
     "choice_speaker": null,
     "video_device": "ShadowCast 3",
     "audio_device": "ShadowCast 3",
+    "output_device": "",
     "pronunciations_exact": [
       "Gaming"
     ],

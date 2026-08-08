@@ -71,10 +71,13 @@ REC_DIR = {"path": Path(VOICES.get("settings", {}).get(
 CLIPS = STATE / "captures" / "rec_clips"    # temp TTS clips, cleaned after mux
 
 # Devices BY NAME — indices can shift (index 0 once became the Mac webcam!)
-# Both selectable from the dashboard; persisted in voices.json settings.
+# All three selectable from the dashboard; persisted in voices.json settings.
+# "output" is where OUR speech goes: "" means whatever the OS default is, so
+# a second set of speakers can take the reads without moving the whole system.
 DEVICES = {
     "video": VOICES.get("settings", {}).get("video_device", "ShadowCast 3"),
     "audio": VOICES.get("settings", {}).get("audio_device", "ShadowCast 3"),
+    "output": VOICES.get("settings", {}).get("output_device", ""),
 }
 
 
@@ -806,7 +809,7 @@ class Speech:
         import soundfile as sf
         self.np, self.sf = np, sf
         self.tts = backend.create_tts()
-        self.player = backend.create_player()
+        self.player = backend.create_player(DEVICES)
         self.sia = SentimentIntensityAnalyzer()
         self.t_play = None
         self._qr = False
@@ -1362,20 +1365,37 @@ def main():
             handle_commands(speech)
             now = time.monotonic()
 
-            if device_request["want"] is not None and not recording["on"]:
-                want, device_request["want"] = device_request["want"], None
-                DEVICES.update({k: v for k, v in want.items() if v})
-                VOICES.setdefault("settings", {}).update(
-                    video_device=DEVICES["video"],
-                    audio_device=DEVICES["audio"])
-                VOICES_PATH.write_text(
-                    json.dumps(VOICES, indent=2, ensure_ascii=False))
-                print(f"[devices] video={DEVICES['video']} "
-                      f"audio={DEVICES['audio']}", flush=True)
-                with video_lock:        # waits out an in-flight swap
-                    video.restart()
-                audio_cap.restart()
-                last_frame_change = time.monotonic()
+            if device_request["want"] is not None:
+                want = device_request["want"]
+                # The output device is only where OUR speech goes — nothing
+                # to restart, so it lands immediately (and safely mid-
+                # recording, unlike a capture swap). "" = system default,
+                # which is a real choice: don't drop it as empty.
+                out = want.pop("output", None)
+                if out is not None:
+                    DEVICES["output"] = out
+                    VOICES.setdefault("settings", {})["output_device"] = out
+                    VOICES_PATH.write_text(
+                        json.dumps(VOICES, indent=2, ensure_ascii=False))
+                    print(f"[devices] output={out or 'system default'}",
+                          flush=True)
+                capture = {k: v for k, v in want.items() if v}
+                if not capture:
+                    device_request["want"] = None
+                elif not recording["on"]:
+                    device_request["want"] = None
+                    DEVICES.update(capture)
+                    VOICES.setdefault("settings", {}).update(
+                        video_device=DEVICES["video"],
+                        audio_device=DEVICES["audio"])
+                    VOICES_PATH.write_text(
+                        json.dumps(VOICES, indent=2, ensure_ascii=False))
+                    print(f"[devices] video={DEVICES['video']} "
+                          f"audio={DEVICES['audio']}", flush=True)
+                    with video_lock:    # waits out an in-flight swap
+                        video.restart()
+                    audio_cap.restart()
+                    last_frame_change = time.monotonic()
 
             if record_request["want"] is not None:
                 want, record_request["want"] = record_request["want"], None

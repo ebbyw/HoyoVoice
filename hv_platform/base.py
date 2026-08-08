@@ -2,19 +2,23 @@
 
 A backend is a module providing these factory functions:
 
-    list_devices() -> (video_names: [str], audio_names: [str])
+    list_devices() -> (video_names, audio_names, output_names) : [str] x3
         Names shown in the dashboard pickers. Audio names must be the
-        names the backend's AudioCapture accepts (they may come from a
-        different enumerator than the video names).
+        names the backend's AudioCapture accepts, output names the ones
+        its Player accepts (they may come from different enumerators than
+        the video names). An empty output list means the backend can only
+        play on the system default; the picker then offers just that.
 
     create_video_capture(devices: dict, frame_path: Path, sample_fps: int)
         -> VideoCapture
     create_audio_capture(devices: dict, pcm_path: Path) -> AudioCapture
-        Both receive the live DEVICES dict {"video": name, "audio": name}
-        and must re-read it on every (re)start so dashboard hot-swaps work.
+    create_player(devices: dict) -> Player
+        All three receive the live DEVICES dict
+        {"video": name, "audio": name, "output": name} and must re-read it
+        on every (re)start / play so dashboard hot-swaps work. An empty
+        "output" means the system default.
     create_ocr(root: Path, custom_words: Path) -> OcrDaemon
     create_tts() -> Tts
-    create_player() -> Player
 
 Shared data contracts (identical on every platform — the orchestrator,
 VAD tail-reader, and recording mux all depend on them):
