@@ -178,14 +178,25 @@ def run():
         make_frame(frame, text=grown, daylight=True, chrome=True)
         assert g8.unchanged(frame, BLOCKS)                # settled again
 
-    #     and the fallback path (no line yet, so every block is watched)
-    #     must reach the same verdict on growth — never a stale replay
+    #     and with chrome in the watch set as well, growth must still open
+    #     it — a wider crop must not dilute the verdict
     g8b = ChangeGate()
     make_frame(frame, text=typing[0], daylight=True, chrome=True)
     g8b.unchanged(frame, CHROME_BLOCKS)
     make_frame(frame, text=typing[1], daylight=True, chrome=True)
     assert not g8b.unchanged(frame, CHROME_BLOCKS), \
         "growth must open the gate even when chrome is watched too"
+
+    #     A line APPEARING where there was none is the case the gate cannot
+    #     see — it only looks where text already was — so live.py must not
+    #     gate at all until a line is on screen. Pinned here because the
+    #     fallback that broke this (watch every block when there is no line)
+    #     looked strictly safer and measured 10 stale verdicts in 1650
+    #     frames of real dialogue.
+    g8c = ChangeGate()
+    assert not g8c.unchanged(frame, None), \
+        "no line on screen means no gating — OCR every frame"
+    assert g8c.skips == 0
 
     # 11. THE LATCH. The gate may DEFER an OCR call; it must never cancel
     #     one. A wrong "unchanged" replays the previous blocks, which

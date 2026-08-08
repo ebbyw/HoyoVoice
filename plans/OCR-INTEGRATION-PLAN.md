@@ -10,6 +10,27 @@ Ground rules: every phase lands as its own branch → main, validated through `t
 
 Before touching anything, capture numbers to beat, from replay runs over the regression corpus: `stats["ocr_ms"]` distribution, per-recording count of fusion-class defects (grep the transcript diff for splits `repair_runons` had to make — each one is a rec-model miss), time-from-first-read-to-spoken per line (stabilization latency), and lost-frame rate. Store the numbers in this file under a Baseline heading so later phases diff against them.
 
+### Baseline — measured 2026-08-07, after the fact
+
+This was skipped at the time and reconstructed afterwards, which changed what it can say. There is no "before" recording of Star Rail through the pre-branch code, so the corpus is instead a single Genshin conversation captured on the branch (`rec_20260807_223122.mp4`, 6m01s, 27 lines, Natlan world quest — Leyla and Paimon, no voice acting in the scene). Both sides replay the *same* file, so the comparison is like-for-like even though the absolute numbers are not the ones the plan imagined.
+
+**Method.** `tools/replay.py` over frames 85–360s (the dialogue, excluding boot and loading), once against this branch and once against a worktree at plain `0.7.2`, same `voices.json`, wall-clock paced. Each line's spoken time is taken from when the decision printed. Gate behaviour is measured separately by running every frame through OCR as ground truth alongside the gate, and counting verdicts where "unchanged" hid a real change.
+
+| | 0.7.2 | branch |
+|---|---|---|
+| lines spoken | 23 | 23 (identical text, line for line) |
+| time-to-spoken, mean | — | **−0.12s** |
+| time-to-spoken, median | — | −0.13s |
+| best / worst line | — | −0.30s / +0.20s |
+| OCR calls on 1650 frames | 1650 | **1274** (376 skipped, 23%) |
+| stale gate verdicts | n/a | 4 in 1650 frames (0.2%) |
+
+**Reading the numbers.** The confidence work (Phase 3) is worth about 120ms per line — real and consistent in sign (19 of 23 lines faster), but far smaller than the phase's framing implied, and small enough that it would be invisible by ear. The honest claim is "no slower, slightly faster, and no lines lost", not a latency win worth advertising.
+
+The 23% skip rate is well under Phase 2's ≥60% target. That target assumed the gate could skip freely on static dialogue; two safety limits since imposed cost most of it — OCR is forced every 12 frames so a wrong verdict can't latch, and the gate is off entirely until a line is on screen, because a line *appearing* is invisible to something that only watches where text already was. Both were paid for by real defects, so the target is the thing that should move, not the limits.
+
+**Caveats worth keeping attached to these numbers.** Measured on macOS, so OCR is Apple Vision: `ocr_ms` and the Windows rec-model fusion counts (Phase 1) are not measurable here and are not in the table. The replay's audio bed contains the original session's TTS, so its VAD gate decisions and yields are artifacts — equal on both sides, and the reason lines-spoken agrees despite the yields. One conversation is not a corpus; treat the direction as established and the magnitude as approximate.
+
 ## Phase 1 — PP-OCRv5 English rec model (Windows) — small, do first
 
 `tools/ocrd_win.py`: let RapidOCR take a rec model override — `HOYOVOICE_REC_MODEL` env var or a `models/` path checked at startup — pointing at `en_PP-OCRv5_mobile_rec` in ONNX. Detector stays stock, so box geometry, the bottom-left-origin normalization, and `_flatten_background` are untouched; classify.py sees identical coordinates with better text. `setup.ps1` gains an optional model download step (HF: PaddlePaddle/en_PP-OCRv5_mobile_rec; ONNX conversions exist under monkt/paddleocr-onnx — verify opset compatibility with our pinned onnxruntime + DirectML first).
