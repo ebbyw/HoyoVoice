@@ -1,8 +1,13 @@
 """Pins the spoken-form substitution — what the TTS hears vs. what we log.
 
-The case rule is the part that can bite silently: matching is loose so OCR
-case jitter can't miss a name, which means a name that is also an ordinary
-word would be respelled in ordinary prose. Run directly or under pytest:
+Names, interjections and stammers all go through this one path, because all
+three are about what a line SOUNDS like rather than what it says: the log,
+dedupe and casting keep "Shh" and "W-what" as the game wrote them.
+
+Two rules bite silently. Name matching is loose so OCR case jitter can't miss
+one, which means a name that is also an ordinary word would be respelled in
+ordinary prose. And a stammer repair keys on the initial matching the word
+after it, or it eats "X-ray" and "T-shirt". Run directly or under pytest:
 
     python tools/test_pronunciations.py
 """
@@ -24,6 +29,36 @@ CASES = [
     # pronunciations_exact: the character, not the pastime
     ("Gaming brought the soup.", "Gah-ming brought the soup."),
     ("I spent all night gaming.", "I spent all night gaming."),
+
+    # Interjections: the phonemizer spells these letter-by-letter, or picks
+    # the wrong vowel. Same path as a respelling, for the same reason.
+    ("Shh! Someone's coming.", "Shush! Someone's coming."),
+    ("Tsk. Typical.", "Tisk. Typical."),
+    ("Uhm, I'm not sure.", "Um, I'm not sure."),
+    ("Uhmm... maybe.", "Um... maybe."),
+    ("Ugh, this is heavy.", "Ug, this is heavy."),
+    ("Aaah, that feels better.", "Ah, that feels better."),
+    # "Pfft" is ˈft on its own, which is roughly the right noise. The "pfff"
+    # respelling this list used to carry came out as "P-E-F-E-F".
+    ("Pfft. As if.", "Pfft. As if."),
+
+    # Stammers: a lone initial is read as the LETTER'S NAME —
+    # "DOUBLE-YOU-what", "EN-no", "AY-ah" — unless it is spelled as a
+    # syllable.
+    ("W-what are you doing?", "Wuh-what are you doing?"),
+    ("N-no, I won't.", "Nuh-no, I won't."),
+    ("A-aah! Get away!", "Ah-ah! Get away!"),
+    ("b-but why", "buh-but why"),
+    # E/I/O already read as sounds, and every respelling tried was worse
+    ("I-I don't know.", "I-I don't know."),
+    ("O-okay then.", "O-okay then."),
+    # not stammers: the letter doesn't match the word it precedes
+    ("He bought a T-shirt.", "He bought a T-shirt."),
+    ("The X-ray came back clear.", "The X-ray came back clear."),
+    # (no name here on purpose: asserting a NEW table entry would fail every
+    # install that hasn't re-run pronounce_names.py --write, and voices.json
+    # is the user's file — a pull never updates it)
+    ("Send an e-mail before we go.", "Send an e-mail before we go."),
 ]
 
 
