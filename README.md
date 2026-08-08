@@ -30,7 +30,7 @@ Every stage above is platform-native, selected at startup by `hv_platform/`:
 |---|---|---|
 | Video | ffmpeg + AVFoundation | ffmpeg + DirectShow |
 | Audio | sox + CoreAudio | in-process WASAPI (`sounddevice`) |
-| OCR | Apple Vision (`tools/ocrd`) | RapidOCR on DirectML, or built-in Windows OCR (`tools/ocrd_win.py`) |
+| OCR | Apple Vision (`tools/ocrd`) | RapidOCR on DirectML (English rec model), or built-in Windows OCR (`tools/ocrd_win.py`) |
 | TTS | Kokoro-82M on MLX (GPU) | Kokoro-82M on ONNX Runtime |
 | Playback | `afplay` | `sounddevice` |
 
@@ -43,7 +43,7 @@ You'll also need:
 - A UVC HDMI capture card (built with a Genki ShadowCast 3; any UVC device should work — even a webcam pointed at a screen, selectable in the dashboard)
 - A console or device running the game (on PS5, **disable HDCP** in Settings → System → HDMI or you'll capture black)
 - macOS: Homebrew, Xcode Command Line Tools (`xcode-select --install`), Python 3.13 (`brew install python@3.13`)
-- Windows: winget (ships with Windows) — `setup.ps1` installs ffmpeg and Python itself. Any GPU is strongly recommended: `setup.ps1` installs DirectML, which runs the accurate OCR engine at ~150ms/frame instead of ~4s on CPU (without it the app falls back to the built-in Windows OCR, which misreads small game fonts).
+- Windows: winget (ships with Windows) — `setup.ps1` installs ffmpeg and Python itself. Any GPU is strongly recommended: `setup.ps1` installs DirectML, which runs the accurate OCR engine at ~115ms/frame instead of ~4s on CPU (without it the app falls back to the built-in Windows OCR, which misreads small game fonts). `setup.ps1` also fetches an English recognition model (~8 MB) into `models\`.
 - ~2 GB of disk for models and the Python environment; the game feed itself never leaves your machine
 
 ## Quick start
@@ -97,7 +97,8 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 
 ## How it stays out of the way
 
-- **Text stabilization** — a line must OCR identically on consecutive frames, with extra patience while text is still growing, and a short tolerance for frames where the detector loses the line entirely.
+- **Change gate** — OCR is the expensive step, and the frame file is rewritten continuously whether or not anything on screen changed. Before each call the pixels under the last read's text are compared against the previous frame; if none of them moved, that read is replayed instead of paying for a new one. `ocr saved` in the dashboard counts the calls skipped, and `settings.change_gate: false` turns it off.
+- **Text stabilization** — a line must OCR identically on consecutive frames, with extra patience while text is still growing, and a short tolerance for frames where the detector loses the line entirely. Where the engine reports confidence, a read it vouches for settles sooner and a visibly shaky one has to earn an extra sighting.
 - **Sentence streaming** — the typewriter pauses at sentence boundaries, so a finished sentence is spoken at that pause rather than waiting for the whole line; the remainder follows once it renders, after the first part finishes.
 - **Two-tier VAD gate** — a strong speech spike *or* ~¼s of sustained moderate speech marks a line as voiced; short soft lines ("Which king?") are caught.
 - **Center-energy detector** — game VO is mixed to the stereo center; a mid-channel burst with flat sides (plus a minimum speechiness) catches robot/vocoder voices the speech model can't recognize.
@@ -106,7 +107,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 - **Sliding dedupe window** — a line only counts as a repeat if it's within the last 3 messages (fuzzy-matched, so OCR jitter like "l"/"I" can't re-trigger it); replaying a quest re-voices everything.
 - **OCR repair** — the game font's I/l confusion, dropped apostrophes ("youre" → "you're"), decorative glyphs, and spelled-out interjections ("shh" → "shush") are all fixed before synthesis.
   - *macOS:* Apple Vision is fed a custom vocabulary built from your casting and `settings.custom_words`.
-  - *Windows:* the recognition model is Chinese-trained and drops spaces, so punctuation spacing is restored and fused word pairs are split ("mercyis" → "mercy is"); capitalised tokens are protected so game proper nouns survive. Where several reads of one line disagree, the one that scans as the most real words is the one spoken.
+  - *Windows:* RapidOCR reads with an English-trained recognition model (`models\rec_en.onnx`, downloaded by `setup.ps1`). Without it RapidOCR falls back to its bundled Chinese-trained model, which drops spaces — so punctuation spacing is still restored and fused word pairs are still split ("mercyis" → "mercy is"), with capitalised tokens protected so game proper nouns survive. Where several reads of one line disagree, the one that scans as the most real words is the one spoken.
 - **Pronunciations** — `settings.pronunciations` substitutes spoken forms at synthesis only ("Wishpower" → "Wish power"); logs keep the real spelling.
 - **Sentiment pacing** — positive/exclamatory lines read slightly faster, somber ones slower (±~10%).
 - **Choice prompts** — a *lone* option is read aloud (with nothing to choose between, the game is putting words in the player character's mouth rather than offering a menu), always after the line it sits above and only into a gap in the talking; `settings.choice_speaker` gives it a voice, otherwise the narrator reads it. Two or more options are a menu, so they are logged and left unspoken. Either way the prompt appears in the dashboard log, including when it went unread.
@@ -128,6 +129,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
     "text_fixes": {"lason": "Iason"},       // proper nouns OCR keeps mangling
     "pronunciations": {"Wishpower": "Wish power"},  // spoken form only
     "custom_words": ["Wishpower", "Planarcadia"],   // OCR vocabulary hints
+    "change_gate": true,                    // skip OCR while the text is static
     "dashboard_bind": "127.0.0.1"           // "0.0.0.0" to reach the dashboard
   }                                         // from other machines you trust —
                                             // it has no authentication
@@ -191,7 +193,11 @@ That runs the actual OCR daemon, classifier, stabilization, dedupe, VAD gate and
 - **You hear VO but the VAD never sees speech (max stays 0.00 at a healthy dB):** your console negotiated surround over the passthrough chain, and game dialogue lives in the center channel — the card's 2-channel USB audio only gets front L/R. Set the console's audio output to stereo (PS5: Settings → Sound → Audio Output → Linear PCM, Number of Channels 2.0).
 - **A menu/board screen gets narrated:** file an issue with the log tail and a screenshot — screen detectors are cheap to add. Every logged event also saves the raw OCR blocks to `captures/shots/<id>.json`, which is what a fix needs.
 - **Capture device busy:** close OBS/QuickTime; the card allows one client.
-- **Windows: lines are slow to appear or misread.** Check the startup log for the OCR engine: `engine: rapid (directml, …)` is the good path (~150 ms/frame). If it says `windows`, DirectML didn't install — rerun `setup.ps1`, or `.venv\Scripts\pip install onnxruntime-directml`. The built-in Windows engine is only a fallback and misreads small game fonts. Force a choice with the `HOYOVOICE_OCR_ENGINE` environment variable (`auto`, `rapid`, `windows`).
+- **Windows: lines are slow to appear or misread.** Check the startup log for the OCR engine: `engine: rapid (directml, …)` is the good path (~115 ms/frame). If it says `windows`, DirectML didn't install — rerun `setup.ps1`, or `.venv\Scripts\pip install onnxruntime-directml`. The built-in Windows engine is only a fallback and misreads small game fonts. Force a choice with the `HOYOVOICE_OCR_ENGINE` environment variable (`auto`, `rapid`, `windows`).
+
+  The line above it should read `[ocrd_win] rec model: rec_en.onnx`. Without it RapidOCR is recognising English with its bundled Chinese-trained model, which fuses words ("fora", "RinTohsaka") — rerun `setup.ps1`, or point `HOYOVOICE_REC_MODEL` and `HOYOVOICE_REC_KEYS` at the model and its dictionary.
+
+- **Words are being spoken half-typed, or the log looks like it stopped reading.** The change gate skips OCR while the text region is unchanged, so a bug there shows up as either stale text or no savings. `ocr saved` in the dashboard metrics is the count of skipped calls: zero on static dialogue means it is failing open on every frame, and lines cut mid-word mean it is skipping when it shouldn't. `settings.change_gate: false` turns it off, which is the fastest way to tell whether it is involved at all.
 - **Windows: dashboard won't load / app won't start.** An orphaned instance is holding port 8470 — `python hoyovoice.py stop`, then check Task Manager for stray `python.exe` / `ffmpeg.exe`.
 
 ## Contributing / releases
