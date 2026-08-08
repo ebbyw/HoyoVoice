@@ -52,6 +52,9 @@ ROSTERS = {
 # listed: "Ningguang", "Hu Tao" and "Yao Guang" already come out right, and an
 # entry that changes nothing is a line of config to maintain for free.
 FIXES = {
+    # --- NPCs: the rosters list PLAYABLE characters only, so the companion
+    # who talks more than anyone else in Genshin isn't in either fetch ---
+    "Paimon": "Pah-ee-mahn",
     # --- Genshin: pinyin ---
     "Baizhu": "Bye-joo",
     "Beidou": "Bay-doe",
