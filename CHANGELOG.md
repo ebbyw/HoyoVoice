@@ -28,6 +28,12 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 - **Windows OCR reads English at the source.** RapidOCR's bundled recognition model is Chinese-trained; on English game text it drops spaces ("Everythingis going smoothlymy nobleKing.", "RinTohsaka") and the pipeline repaired the damage statistically after the fact. `tools/ocrd_win.py` now loads an English-trained recognition model (en_PP-OCRv5_mobile_rec, ONNX) when present — `setup.ps1` downloads it to `models\` (~8 MB), `HOYOVOICE_REC_MODEL`/`HOYOVOICE_REC_KEYS` override the path, and deleting the files falls back to the bundled model. Detection is untouched, so box geometry and every classify decision stay put. Measured over an 81-shot corpus: fusion-class defects 333 → 144, 22 frames of nameplate fixes ("MysteriousGoldy" → "Mysterious Goldy", "Sparxile" → "Sparxie"), two frames where a dropped nameplate came back, three info screens that had been misread as loading/dialogue now classify as reader panels with clean text, zero regressions.
 
+## [0.7.2] - 2026-08-07
+
+### Fixed
+
+- **A spoken choice option had no speaker to cast.** It fell through to the narrator and logged with an em dash where the name goes, so there was no Casting row and no way to give the player character a voice of their own. Options are now cast under the player character's name for the active game — `Traveler` in Genshin, `Trailblazer` in Star Rail, `Player` otherwise — which auto-casts on first use and appears in Casting like any other character. `settings.choice_speaker` still overrides the name (for a Traveler you've named Aether, say).
+
 ## [0.7.1] - 2026-08-07
 
 ### Changed

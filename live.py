@@ -1443,7 +1443,14 @@ def main():
                 # our own voice is idle and the game's has stopped — the line
                 # under it may be voiced even when the option is not
                 text = fix_ocr_text(pending_choice["text"])
-                spk = VOICES.get("settings", {}).get("choice_speaker")
+                # The option is the player character's own words, and the
+                # game gives it no nameplate. Cast it under their name —
+                # Traveler, Trailblazer — so it gets a Casting row with a
+                # voice to change, rather than falling to the narrator and
+                # showing up in the log with no speaker at all.
+                spk = normalize_speaker(
+                    VOICES.get("settings", {}).get("choice_speaker")
+                    or screens.PLAYER_NAME)
                 voice, base_speed = pick_voice(spk)
                 audio, speed, _ = speech.synth(text, voice, base_speed)
                 speech.play(audio)          # not qr: a late VO should cut it
