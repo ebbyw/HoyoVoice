@@ -2,6 +2,7 @@
   "characters": {},
   "always_voiced": [],
   "settings": {
+    "game": "auto",
     "recordings_dir": "~/Videos",
     "dashboard_bind": "127.0.0.1",
     "text_fixes": {},

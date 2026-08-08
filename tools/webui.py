@@ -15,7 +15,9 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_from_directory
 
-VERSION = "0.6.1"
+from profiles import PROFILES, profile_choices
+
+VERSION = "0.7.0"
 # single source of truth (hoyovoice.py reads it); env override lets
 # tools/replay.py run beside a live instance without a port collision
 DASHBOARD_PORT = int(os.environ.get("HOYOVOICE_PORT", "8470"))
@@ -41,6 +43,7 @@ body{font:14px -apple-system,sans-serif;background:#14151a;color:#e8e8ec;margin:
 h1{font-size:18px;margin:0 0 12px}h2{font-size:14px;color:#9aa;margin:18px 0 6px}
 table{border-collapse:collapse;width:100%}td,th{padding:4px 8px;text-align:left;border-bottom:1px solid #26272e;vertical-align:top}
 .act-spoken{color:#7ec97e}.act-skip{color:#888}.act-yield{color:#d9a441}.act-always{color:#888}
+.act-choice{color:#8ab4f8}
 select,input,button{background:#1e2027;color:#e8e8ec;border:1px solid #33353d;border-radius:6px;padding:4px 8px}
 button{cursor:pointer}button:hover{border-color:#7ec97e}
 .pill{display:inline-block;background:#1e2027;border-radius:10px;padding:2px 10px;margin:2px 6px 2px 0;font-size:12px}
@@ -88,6 +91,10 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
       <span class="muted">audio</span> <select id="audDev"></select>
       <button onclick="applyDev()">Apply</button>
     </div>
+    <div style="margin-bottom:6px">
+      <span class="muted">game</span> <select id="gameSel" onchange="setGame()"></select>
+      <span class="muted" id="gameActive"></span>
+    </div>
     <a href="/live.jpg" target="_blank"><img id="preview" style="width:100%;border-radius:8px;border:1px solid #26272e"></a>
     <div id="previewOff" style="display:none;width:100%;aspect-ratio:16/9;border-radius:8px;border:1px solid #26272e;background:#0c0d10;color:#e0605e;align-items:center;justify-content:center;font-size:15px">feed paused</div>
     <div style="margin-top:6px"><span class="muted">recordings save to</span>
@@ -105,6 +112,7 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
 let hidden=false, observing=true, recOn=false, lastCastFp='';
 function toggleRecord(){post('/api/record',{on:!recOn});}
 function setRecDir(){post('/api/recdir',{dir:document.getElementById('recDir').value});}
+function setGame(){post('/api/game',{game:document.getElementById('gameSel').value});}
 function applyDev(){post('/api/device',{video:document.getElementById('vidDev').value,
   audio:document.getElementById('audDev').value});}
 async function loadDevices(){
@@ -158,6 +166,13 @@ async function tick(){
     const st=document.getElementById('status');
     st.textContent=(observing?'· live · ':'· PAUSED · ')+s.metrics.uptime;
     st.className=observing?'live':'paused';
+    const gs=document.getElementById('gameSel');
+    if(!gs.options.length)
+      gs.innerHTML=s.game.choices.map(g=>'<option value="'+g[0]+'">'+esc(g[1])+'</option>').join('');
+    if(document.activeElement!==gs) gs.value=s.game.setting;
+    // in auto mode the detected game is what actually matters — show it
+    document.getElementById('gameActive').textContent=
+      s.game.setting==='auto'?'· reading as '+s.game.active:'';
     recOn=s.recording;
     const rb=document.getElementById('recordBtn');
     rb.textContent=recOn?'⏹ Stop recording':'⏺ Record';
@@ -253,6 +268,8 @@ def start_webui(shared, port=DASHBOARD_PORT):
             f"{shared['recording']['on']}",
             f"devices     video={shared['devices']['video']!r} "
             f"audio={shared['devices']['audio']!r}",
+            f"game        {'auto' if shared['game'].auto else 'fixed'} — "
+            f"reading as {shared['game'].profile.label}",
             "",
             "ANALYTICS",
             "  " + "   ".join(f"{k}={v}" for k, v in m.items()),
@@ -307,6 +324,12 @@ def start_webui(shared, port=DASHBOARD_PORT):
             "metrics": shared["metrics_fn"](),
             "observing": shared["observing"]["on"],
             "recording": shared["recording"]["on"],
+            "game": {
+                "setting": "auto" if shared["game"].auto
+                           else shared["game"].profile.name,
+                "active": shared["game"].profile.label,
+                "choices": profile_choices(),
+            },
             "rec_dir": str(shared["rec_dir"]["path"]),
             "recordings": sorted(
                 ({"name": p.name, "mb": round(p.stat().st_size / 1e6, 1)}
@@ -318,6 +341,13 @@ def start_webui(shared, port=DASHBOARD_PORT):
                          and p.name == Path(shared["recording"]["raw"]).name)),
                 key=lambda r: r["name"], reverse=True),
         })
+
+    @app.post("/api/game")
+    def game():
+        g = (request.get_json().get("game") or "").lower()
+        if g == "auto" or g in PROFILES:
+            shared["commands"].put(("game", g))
+        return jsonify(ok=True)
 
     @app.post("/api/record")
     def record():

@@ -31,11 +31,8 @@ ROOT = Path(__file__).resolve().parent
 # disposable so replays can't touch real casting or dedupe state.
 STATE = Path(os.environ.get("HOYOVOICE_STATE_DIR", str(ROOT)))
 sys.path.insert(0, str(ROOT / "tools"))
-from classify import (classify, classify_chat, classify_infoscreen,  # noqa: E402
-                      classify_loading, classify_lore_screen,
-                      classify_narration, classify_overlay,
-                      classify_quickread, has_continue_hint,
-                      narration_self_certain, split_camel)
+from profiles import (ProfileSelector, narration_self_certain,  # noqa: E402
+                      split_camel)
 from vad import CHUNK, SileroVAD  # noqa: E402
 from webui import start_webui  # noqa: E402
 from hv_platform import get_backend  # noqa: E402
@@ -74,6 +71,19 @@ DEVICES = {
 
 
 list_devices = backend.list_devices
+
+
+def _game_switched(p):
+    print(f"[game] layout profile → {p.label}", flush=True)
+    add_event(f"game detected: {p.label}", "always")
+
+
+# Which game's screen layout to read. settings.game: "auto" (default),
+# "hsr", "genshin" — see tools/profiles/. Auto starts on the default
+# profile and switches only on chrome unique to another game.
+game = ProfileSelector(VOICES.get("settings", {}).get("game", "auto"),
+                       on_switch=_game_switched)
+
 SAMPLE_FPS = 6
 STABLE_READS = 2
 # consecutive frames where the detector loses an on-screen line before we
@@ -829,6 +839,11 @@ def handle_commands(speech):
         elif cmd[0] == "clearlog":
             events.clear()
             print("[log cleared]", flush=True)
+        elif cmd[0] == "game":
+            p = game.set_setting(cmd[1])
+            VOICES.setdefault("settings", {})["game"] = cmd[1]
+            VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+            print(f"[game] {cmd[1]} (reading as {p.label})", flush=True)
         elif cmd[0] == "observe":
             observing["on"] = cmd[1]
             if not cmd[1]:
@@ -876,7 +891,7 @@ def main():
                         "rec_dir": REC_DIR,
                         # written by the launcher (repo root), not STATE
                         "log_path": str(ROOT / "live.log"),
-                        "recording": recording,
+                        "recording": recording, "game": game,
                         "devices": DEVICES, "list_devices_fn": list_devices})
     print(f"dashboard: http://127.0.0.1:{port}", flush=True)
 
@@ -908,6 +923,8 @@ def main():
     candidate_t0 = 0.0          # when the current line was FIRST seen on screen
     last_dup_logged = None
     last_unknown_logged = None
+    choice_prev = ""            # last frame's options (settle check)
+    choice_logged = None        # last prompt written to the log
     last_spoken_norm = None     # suppresses repeat-logs for the live line
     fired_norm = None           # line already pushed through the gate once
     unstable_count = 0
@@ -933,6 +950,8 @@ def main():
             return m[0]
         chat_senders.append(name)
         return name
+    print(f"game: {'auto-detect' if game.auto else 'fixed'} — reading as "
+          f"{game.profile.label}", flush=True)
     print("live — watching feed + listening for VO", flush=True)
 
     try:
@@ -1071,12 +1090,16 @@ def main():
                 lost_frames["n"] += 1
                 continue
 
+            # which game's layout to read this frame with (sticky; only
+            # switches on sustained chrome from another game)
+            screens = game.observe(blocks)
+
             # --- Reading-mode screens (Quick Read books, info/profile
             # screens, message/group-chat panels): incremental reading ---
-            qr = classify_quickread(blocks)
+            qr = screens.classify_quickread(blocks)
             if qr is None:
-                qr = classify_infoscreen(blocks)
-            chat = None if qr is not None else classify_chat(blocks)
+                qr = screens.classify_infoscreen(blocks)
+            chat = None if qr is not None else screens.classify_chat(blocks)
             if qr is not None or chat is not None:
                 qr_absent = 0
                 reader_closed = False
@@ -1176,12 +1199,30 @@ def main():
             if qr is not None or chat is not None:
                 continue
 
-            state = classify(blocks)
-            loading = classify_loading(blocks)
-            # chrome-free lore/loading cards (title + prose, no Continue
+            state = screens.classify(blocks)
+
+            # Choice prompts are LOGGED, never spoken. The options are not
+            # reliably one kind of text: sometimes they're a menu the player
+            # picks from, sometimes they're the player character's own lines
+            # about to be said aloud. Reading them would be right half the
+            # time and wrong the other half, and wrong here means talking
+            # over the scene. Logged before the branches below so the
+            # options show up even when the line itself is skipped.
+            # Requires the same read twice: the option list renders at once
+            # rather than typing, but OCR still jitters the first sighting.
+            opts_norm = normalize_text(" ".join(state["choices"]))
+            if (opts_norm and opts_norm == choice_prev
+                    and not same_line(opts_norm, choice_logged)):
+                choice_logged = opts_norm
+                add_event("choice prompt (not read)", "choice", None,
+                          " · ".join(state["choices"]), shot=True)
+            choice_prev = opts_norm
+
+            loading = screens.classify_loading(blocks)
+            # chrome-free lore/loading cards (title + prose, no story-chrome
             # hint, no UID strip, no HUD) — classify() sees the title as a
             # nameplate, so without this they're skipped as unknown speakers
-            lore = None if loading else classify_lore_screen(blocks)
+            lore = None if loading else screens.classify_lore_screen(blocks)
             if lore and normalize_speaker(lore[0]) in VOICES["characters"]:
                 lore = None       # a cast member really is speaking
             # what KIND of screen this line came from — surfaced in the log
@@ -1198,19 +1239,19 @@ def main():
                          "dialogue": f"{split_camel(title)}. {body}"}
                 screen_kind = "lore card"
             elif not state["dialogue"]:
-                overlay = classify_overlay(blocks)
-                narration = classify_narration(blocks)
+                overlay = screens.classify_overlay(blocks)
+                narration = screens.classify_narration(blocks)
                 if overlay:
                     # floating host bubble — voice set by settings.overlay_speaker
                     state = {"speaker": VOICES.get("settings", {}).get(
                                  "overlay_speaker"),
                              "dialogue": overlay, "choices": []}
                     screen_kind = "overlay"
-                elif narration and (has_continue_hint(blocks)
+                elif narration and (screens.trusts_dialogue(blocks)
                                     or frame_is_dark()
                                     or narration_self_certain(narration)):
-                    # narration requires the Continue hint — menu banners
-                    # and event-hub screens must not be narrated
+                    # narration requires the game's story chrome — menu
+                    # banners and event-hub screens must not be narrated
                     state = {"speaker": None, "dialogue": narration, "choices": []}
                     screen_kind = "narration"
                 else:
@@ -1225,13 +1266,14 @@ def main():
                         candidate, candidate_count = None, 0
                     continue
             else:
-                # dialogue from an UNKNOWN speaker needs the Continue hint;
-                # boards/menus fake the layout but show Confirm/other hints
+                # dialogue from an UNKNOWN speaker needs the game's story
+                # chrome (HSR's Continue hint, Genshin's Auto toggle);
+                # boards/menus fake the layout but show other hints
                 spk = normalize_speaker(state["speaker"])
                 known = (spk in VOICES["characters"]
                          or (spk or "").lower() == "narrator"
                          or spk in VOICES.get("always_voiced", []))
-                if not known and not has_continue_hint(blocks):
+                if not known and not screens.trusts_dialogue(blocks):
                     # visible in the log (once per line): silent drops here
                     # made missing-speaker/missing-hint issues undiagnosable.
                     # Keyed on TEXT ONLY — the speaker read jitters too
@@ -1239,7 +1281,7 @@ def main():
                     utext = normalize_text(state["dialogue"])
                     if utext and not same_line(utext, last_unknown_logged):
                         last_unknown_logged = utext
-                        add_event("skipped (unknown speaker, no Continue hint)",
+                        add_event("skipped (unknown speaker, no story chrome)",
                                   "skip", spk, state["dialogue"], shot=True)
                     candidate, candidate_count = None, 0
                     continue
