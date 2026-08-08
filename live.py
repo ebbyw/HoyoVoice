@@ -128,6 +128,10 @@ DEDUP_WINDOW = 3              # a line repeats only if it's within the last N me
 # that prior is meant to accumulate.
 SPOKEN_CACHE_TTL = 600
 SHORT_LINE = 15               # short lines (normalized chars) may echo across speakers
+SILENCE = 0.012               # below this amplitude is padding, not speech
+# Silence spliced between sentences. The trim keeps ~33ms of Kokoro's own
+# padding either side, so the audible pause is roughly this plus 66ms.
+SENTENCE_GAP = 0.08
 
 VAD_THRESHOLD = 0.5
 VAD_LOOKBACK = 2.0
@@ -624,6 +628,35 @@ def speech_parts(text):
     return parts
 
 
+def sentences(text):
+    """A line split at sentence ends, punctuation kept.
+
+    Kokoro predicts prosody for a whole utterance in one pass, so a long line
+    degrades its own opening: "Huh?! You… You're Paimon, travel companion of
+    the great hero Ebby!" hisses through the interjection and into the word
+    after it, while "Huh?!" and the rest of the line each come out clean
+    synthesized alone. Measured by bisection against the failing line — it is
+    not the "!?", not the ellipsis, and not the name's respelling, all of
+    which A/B'd identical. Short utterances survive; long ones don't.
+
+    "…" is deliberately not a boundary, exactly as in stream_prefix(): in
+    these games it's a pause the typewriter runs straight through, and
+    splitting there would chop one spoken thought in half.
+    """
+    out, at = [], 0
+    for m in _SENT_END.finditer(text):
+        head = text[at:m.end()]
+        abbr = _ABBREV_RE.search(head.rstrip())
+        if abbr and abbr.group(1).lower() in _ABBREV:
+            continue                       # "Mr. Ito" is not two sentences
+        out.append(head.strip())
+        at = m.end()
+    tail = text[at:].strip()
+    if tail:
+        out.append(tail)
+    return out or [text]
+
+
 def tts_text(text):
     """The whole TTS-side transform of a line, flattened back to one string
     for logs: respellings, and stage directions with a sound file shown as
@@ -936,16 +969,42 @@ class Speech:
                 self._effects[path] = None
         return self._effects[path]
 
+    def trim(self, audio, lead=800):
+        """Kokoro's silence padding off both ends. Cheap on its own, but the
+        point is control: a spliced line's pauses should be the ones we chose,
+        not two clips' padding back to back."""
+        if audio is None or not len(audio):
+            return audio
+        loud = self.np.where(self.np.abs(audio) > SILENCE)[0]
+        if not len(loud):
+            return audio
+        return audio[max(loud[0] - lead, 0):loud[-1] + lead * 2]
+
+    def join(self, pieces):
+        """Splice synthesized pieces with a sentence-length pause between
+        them. One piece is the common case and passes through untouched."""
+        if not pieces:
+            return None
+        if len(pieces) == 1:
+            return pieces[0]
+        gap = self.np.zeros(int(24000 * SENTENCE_GAP), dtype="float32")
+        return self.np.concatenate(
+            [x for p in pieces for x in (p, gap)][:-1])
+
     def synth(self, text, voice, base_speed=1.0):
         # sentiment reads the line as written — spoken_form respells names
         # into nonsense words, which is not what a sentiment model should see
         speed = round(base_speed * self.sentiment_speed(text), 3)
         t0 = time.time()
-        pieces = [self.effect(val) if kind == "play"
-                  else self.tts.synth(val, voice, speed)
-                  for kind, val in speech_parts(spoken_form(text))]
+        pieces = []
+        for kind, val in speech_parts(spoken_form(text)):
+            if kind == "play":
+                pieces.append(self.effect(val))
+            else:
+                pieces += [self.trim(self.tts.synth(s, voice, speed))
+                           for s in sentences(val)]
         pieces = [p for p in pieces if p is not None and len(p)]
-        audio = self.np.concatenate(pieces) if pieces else None
+        audio = self.join(pieces)
         synth_ms = int((time.time() - t0) * 1000)
         if audio is not None:
             stats["synth_ms"].append(synth_ms)
@@ -957,9 +1016,7 @@ class Speech:
         self.stop()
         self._qr = qr
         # trim Kokoro's silence padding: snappier starts, tight handoffs
-        loud = self.np.where(self.np.abs(audio) > 0.012)[0]
-        if len(loud):
-            audio = audio[max(loud[0] - 800, 0):loud[-1] + 1600]
+        audio = self.trim(audio)
         self.sf.write(WAV, audio, 24000)
         self.player.play(WAV, audio, 24000)
         self.t_play = time.monotonic()
