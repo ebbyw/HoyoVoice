@@ -96,6 +96,39 @@ def read_frame_bytes(path, tries=12):
     return None
 
 
+def _rec_override():
+    """Optional recognition-model swap → {} or RapidOCR kwargs.
+
+    The bundled rec model is Chinese-trained; its known failure mode on
+    English game text is dropped spaces and word fusions ("fora"), which
+    live.py then has to repair statistically. An English-trained rec model
+    (en_PP-OCRv5_mobile_rec, converted to ONNX) fixes that at the source.
+    Detection is untouched, so box geometry and classify.py behavior are
+    identical.
+
+    Resolution order: HOYOVOICE_REC_MODEL (+ HOYOVOICE_REC_KEYS) env vars,
+    else models/rec_en.onnx + models/rec_en_dict.txt in the repo root
+    (setup.ps1 downloads them there). A rec model decoded with the wrong
+    character dict reads garbage, so the override applies only when BOTH
+    files exist — otherwise the bundled default stays and we say why."""
+    model = os.environ.get("HOYOVOICE_REC_MODEL")
+    keys = os.environ.get("HOYOVOICE_REC_KEYS")
+    if not model:
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        model = os.path.join(root, "models", "rec_en.onnx")
+        keys = keys or os.path.join(root, "models", "rec_en_dict.txt")
+        if not os.path.exists(model):
+            return {}
+    elif not keys:
+        keys = os.path.splitext(model)[0] + "_dict.txt"
+    missing = [p for p in (model, keys) if not os.path.exists(p)]
+    if missing:
+        print(f"[ocrd_win] rec override ignored — missing {missing}",
+              file=sys.stderr, flush=True)
+        return {}
+    return {"rec_model_path": model, "rec_keys_path": keys}
+
+
 class RapidEngine:
     """RapidOCR (ONNX). Uses DirectML when available — on a gaming PC this
     is the difference between ~4s and a fraction of a second per frame,
@@ -106,16 +139,21 @@ class RapidEngine:
         from PIL import Image
         self.Image = Image
         self.mode = "cpu"
+        kw = _rec_override()
+        if kw:
+            print(f"[ocrd_win] rec model: "
+                  f"{os.path.basename(kw['rec_model_path'])}",
+                  file=sys.stderr, flush=True)
         if directml_available():
             try:
                 self.ocr = RapidOCR(det_use_dml=True, cls_use_dml=True,
-                                    rec_use_dml=True)
+                                    rec_use_dml=True, **kw)
                 self.mode = "directml"
                 return
             except Exception as e:
                 print(f"[ocrd_win] DirectML init failed ({e}) — using CPU",
                       file=sys.stderr, flush=True)
-        self.ocr = RapidOCR()
+        self.ocr = RapidOCR(**kw)
 
     def recognize(self, path):
         data = read_frame_bytes(path)

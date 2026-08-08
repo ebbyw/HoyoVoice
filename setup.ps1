@@ -87,6 +87,19 @@ if (-not (Test-Path "models\voices-v1.0.bin")) {
     Invoke-WebRequest -Uri "$kokoroBase/voices-v1.0.bin" -OutFile "models\voices-v1.0.bin"
 }
 
+# English recognition model (en_PP-OCRv5_mobile_rec, ONNX, ~8 MB). The rec
+# model bundled with RapidOCR is Chinese-trained and fuses English words
+# ("fora"); this one restores spaces at the source. ocrd_win.py picks it up
+# from models\ automatically; delete the files to fall back.
+Write-Host "== downloading English OCR recognition model (~8 MB)"
+$recBase = "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english"
+if (-not (Test-Path "models\rec_en.onnx")) {
+    Invoke-WebRequest -Uri "$recBase/rec.onnx" -OutFile "models\rec_en.onnx"
+}
+if (-not (Test-Path "models\rec_en_dict.txt")) {
+    Invoke-WebRequest -Uri "$recBase/dict.txt" -OutFile "models\rec_en_dict.txt"
+}
+
 New-Item -ItemType Directory -Force -Path "captures", "tts_out" | Out-Null
 if (-not (Test-Path "voices.json")) { Copy-Item "voices.example.json" "voices.json" }
 
