@@ -1237,7 +1237,7 @@ def video_swapping():
     return t is not None and t.is_alive()
 
 
-def handle_commands(speech):
+def handle_commands(speech, recent_lines):
     """Dashboard actions: assign voice (+re-read), replay event, test speech."""
     while not commands.empty():
         cmd = commands.get_nowait()
@@ -1335,8 +1335,21 @@ def handle_commands(speech):
                 voice_import.update(state="ok", voice=None,
                                     msg=f"removed {voice_id}")
         elif cmd[0] == "clearlog":
+            # The dedupe window goes with it. It outlives a restart on
+            # purpose, so a crash mid-scene doesn't re-read the line still on
+            # screen — but that also means replaying a quest inside the TTL
+            # is silently skipped as a repeat, and Clear is what you reach for
+            # when you want the next lines read as if they were new. The line
+            # ALREADY on screen is not re-read: `fired_norm` still holds it,
+            # so pressing Clear can't make the app start talking at you.
             events.clear()
-            print("[log cleared]", flush=True)
+            n = len(recent_lines)
+            recent_lines.clear()
+            SPOKEN_CACHE.write_text(json.dumps(
+                {"window": [], "saved_at": time.time(),
+                 "voiced_history": voiced_history}))
+            print(f"[log cleared — dedupe window of {n} cleared too]",
+                  flush=True)
         elif cmd[0] == "game":
             p = game.set_setting(cmd[1])
             VOICES.setdefault("settings", {})["game"] = cmd[1]
@@ -1470,7 +1483,7 @@ def main():
     try:
         while True:
             time.sleep(0.03)
-            handle_commands(speech)
+            handle_commands(speech, recent_lines)
             now = time.monotonic()
 
             if device_request["want"] is not None:
