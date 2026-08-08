@@ -628,6 +628,31 @@ def speech_parts(text):
     return parts
 
 
+# The health/legal notice both games show at startup. Matched on content, not
+# position: it renders as a chrome-free title + prose card, which is exactly
+# what a real lore card looks like, so nothing structural tells them apart.
+# Several markers rather than one, because a single OCR slip shouldn't hand
+# you the whole wall of text read aloud — and it is a wall, ~150 words.
+# Kept short deliberately: "epilepticseizures" loses to one l/I slip inside a
+# word, which fix_ocr_text only repairs for standalone letters. "epilep" does
+# not, and nothing in either game's script says it.
+#
+# All medical, none from the title. "beforeplaying" would catch "READ BEFORE
+# PLAYING" too, but it also catches "Read the notice before playing" — and
+# silently eating a real line is a worse failure than reading a four-word
+# title, which is all the title alone would ever cost.
+_NOTICE_MARKERS = (
+    "epilep", "consultyourphysician", "seekmedicalattention",
+    "immediatelystopplaying",
+)
+
+
+def boot_notice(text):
+    """True for the epilepsy/health warning shown before the title screen."""
+    n = normalize_text(text)
+    return any(m in n for m in _NOTICE_MARKERS)
+
+
 def sentences(text):
     """A line split at sentence ends, punctuation kept.
 
@@ -1491,6 +1516,7 @@ def main():
     candidate_t0 = 0.0          # when the current line was FIRST seen on screen
     last_dup_logged = None
     last_unknown_logged = None
+    last_notice_logged = None
     choice_prev = ""            # last frame's options (settle check)
     choice_logged = None        # last prompt written to the log
     pending_choice = None       # lone option waiting for the line below it
@@ -1994,6 +2020,17 @@ def main():
             miss_streak = 0          # a real read: the line is on screen
             state["speaker"] = normalize_speaker(state["speaker"])
             state["dialogue"] = fix_ocr_text(state["dialogue"])
+            # BEFORE streaming: the health warning is long enough that the
+            # first sentence would be spoken while the rest is still being
+            # matched, and there is no taking that back.
+            if boot_notice(state["dialogue"]):
+                ntext = normalize_text(state["dialogue"])
+                if not same_line(ntext, last_notice_logged):
+                    last_notice_logged = ntext
+                    add_event("skipped (legal notice)", "skip", None,
+                              state["dialogue"], shot=True)
+                candidate, candidate_count = None, 0
+                continue
             conf = state.get("conf", 1.0)   # 1.0 = engine has no confidences
             # MID-LINE STREAMING: only while the raw read is actually GROWING
             # frame over frame. Clipping a static line would be a trap — its
