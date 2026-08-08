@@ -101,6 +101,8 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
     <div style="margin-bottom:6px">
       <span class="muted">video</span> <select id="vidDev"></select>
       <span class="muted">audio</span> <select id="audDev"></select>
+      <span class="muted" title="Where HoyoVoice speaks. Leave on System default to follow Windows.">speaks to</span>
+      <select id="outDev"></select>
       <button onclick="applyDev()">Apply</button>
     </div>
     <div style="margin-bottom:6px">
@@ -127,14 +129,27 @@ function toggleRecord(){post('/api/record',{on:!recOn});}
 function setRecDir(){post('/api/recdir',{dir:document.getElementById('recDir').value});}
 function setGame(){post('/api/game',{game:document.getElementById('gameSel').value});}
 function applyDev(){post('/api/device',{video:document.getElementById('vidDev').value,
-  audio:document.getElementById('audDev').value});}
+  audio:document.getElementById('audDev').value,
+  output:document.getElementById('outDev').value});}
 async function loadDevices(){
   try{
     const d=await (await fetch('/api/devices')).json();
+    const esc1=x=>x.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
     const fill=(id,list,cur)=>{document.getElementById(id).innerHTML=
-      list.map(x=>'<option'+(x===cur?' selected':'')+'>'+x.replace(/</g,'&lt;')+'</option>').join('');};
+      list.map(x=>'<option'+(x===cur?' selected':'')+'>'+esc1(x)+'</option>').join('');};
     fill('vidDev',d.video,d.current_video);
     fill('audDev',d.audio,d.current_audio);
+    // "" is a real option here: follow whatever Windows is set to
+    const cur=d.current_output||'';
+    let outs=d.output||[];
+    // keep a chosen-but-missing device listed (unplugged headset) — dropping
+    // it would silently reset the setting on the next Apply
+    if(cur&&!outs.includes(cur)) outs=[cur+' (not found)'].concat(outs);
+    document.getElementById('outDev').innerHTML=
+      '<option value=""'+(cur?'':' selected')+'>System default</option>'+
+      outs.map(x=>{const v=x.endsWith(' (not found)')?cur:x;
+        return '<option value="'+esc1(v)+'"'+(v===cur?' selected':'')+
+          '>'+esc1(x)+'</option>';}).join('');
   }catch(e){}
 }
 loadDevices();
@@ -327,7 +342,8 @@ def start_webui(shared, port=DASHBOARD_PORT):
             f"observing   {shared['observing']['on']}   recording "
             f"{shared['recording']['on']}",
             f"devices     video={shared['devices']['video']!r} "
-            f"audio={shared['devices']['audio']!r}",
+            f"audio={shared['devices']['audio']!r} "
+            f"output={shared['devices'].get('output') or 'system default'!r}",
             f"game        {'auto' if shared['game'].auto else 'fixed'} — "
             f"reading as {shared['game'].profile.label}",
             "",
@@ -418,17 +434,21 @@ def start_webui(shared, port=DASHBOARD_PORT):
 
     @app.get("/api/devices")
     def devices():
-        vid, aud = shared["list_devices_fn"]()
-        return jsonify(video=vid, audio=aud,
+        vid, aud, out = shared["list_devices_fn"]()
+        return jsonify(video=vid, audio=aud, output=out,
                        current_video=shared["devices"]["video"],
-                       current_audio=shared["devices"]["audio"])
+                       current_audio=shared["devices"]["audio"],
+                       current_output=shared["devices"].get("output", ""))
 
     @app.post("/api/device")
     def device():
         d = request.get_json()
-        shared["commands"].put(("setdevice",
-                                {"video": d.get("video"),
-                                 "audio": d.get("audio")}))
+        # output: "" is the system default, a real choice — pass it through,
+        # unlike a blank video/audio name, which live.py ignores
+        want = {"video": d.get("video"), "audio": d.get("audio")}
+        if d.get("output") is not None:
+            want["output"] = d["output"]
+        shared["commands"].put(("setdevice", want))
         return jsonify(ok=True)
 
     @app.post("/api/recdir")

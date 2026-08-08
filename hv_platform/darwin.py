@@ -30,7 +30,10 @@ def list_devices():
             vid.append(m.group(1))
         elif m and section == "a":
             aud.append(m.group(1))
-    return vid, aud
+    # No output list: afplay always plays on the system default output, so
+    # the dashboard offers only that (macOS routes per-app from Audio MIDI
+    # Setup / Sound settings instead).
+    return vid, aud, []
 
 
 class VideoCapture:
@@ -169,9 +172,11 @@ class Tts:
 
 
 class Player:
-    """afplay subprocess playback."""
+    """afplay subprocess playback, always on the system default output
+    (afplay has no device selection — devices["output"] is ignored here)."""
 
-    def __init__(self):
+    def __init__(self, devices=None):
+        self.devices = devices if devices is not None else {}
         self.proc = None
 
     def play(self, wav_path, audio=None, samplerate=24000):
@@ -205,5 +210,5 @@ def create_tts():
     return Tts()
 
 
-def create_player():
-    return Player()
+def create_player(devices=None):
+    return Player(devices)

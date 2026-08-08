@@ -54,7 +54,7 @@ ROSTERS = {
 FIXES = {
     # --- NPCs: the rosters list PLAYABLE characters only, so the companion
     # who talks more than anyone else in Genshin isn't in either fetch ---
-    "Paimon": "Pah-ee-mahn",
+    "Paimon": "Pie-mahn",
     # --- Genshin: pinyin ---
     "Baizhu": "Bye-joo",
     "Beidou": "Bay-doe",
