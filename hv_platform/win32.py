@@ -130,35 +130,66 @@ def _list_dshow_video():
     return vid
 
 
-def _list_wasapi_inputs():
-    """Audio inputs come from sounddevice (that's what AudioCapture opens),
-    preferring the WASAPI host API's view of each device."""
-    sd = _sd()
-    names, seen = [], set()
+def _wasapi_hostapi(sd):
     try:
-        hostapis = list(sd.query_hostapis())
-        wasapi = next((i for i, h in enumerate(hostapis)
-                       if "wasapi" in h["name"].lower()), None)
+        return next((i for i, h in enumerate(sd.query_hostapis())
+                     if "wasapi" in h["name"].lower()), None)
     except Exception:
-        wasapi = None
-    for dev in sd.query_devices():
-        if dev["max_input_channels"] < 1:
-            continue
+        return None
+
+
+def _ranked_devices(output=False):
+    """Every input (or output) device, WASAPI entries first: sounddevice
+    lists each physical device once per host API, and MME truncates names to
+    ~31 chars ('Digital Audio Interface (Shado…'), which breaks matching."""
+    sd = _sd()
+    key = "max_output_channels" if output else "max_input_channels"
+    wasapi = _wasapi_hostapi(sd)
+    devs = [(i, d) for i, d in enumerate(sd.query_devices()) if d[key] >= 1]
+    return ([(i, d) for i, d in devs if d["hostapi"] == wasapi]
+            + [(i, d) for i, d in devs if d["hostapi"] != wasapi])
+
+
+def _match_device(want, output=False):
+    """Resolve a saved device NAME to a (index, info) pair — exact match
+    first, then substring. (None, None) when nothing matches."""
+    want = (want or "").strip().lower()
+    if not want:
+        return None, None
+    ranked = _ranked_devices(output)
+    for idx, dev in ranked:
+        if dev["name"].strip().lower() == want:
+            return idx, dev
+    for idx, dev in ranked:
+        if want in dev["name"].strip().lower():
+            return idx, dev
+    return None, None
+
+
+def _list_names(output=False):
+    """Device names for the dashboard pickers: WASAPI's view of each device
+    only, so one physical device isn't listed once per host API. These are
+    the names _match_device() has to accept back."""
+    sd = _sd()
+    wasapi = _wasapi_hostapi(sd)
+    ranked = _ranked_devices(output)
+    names, seen = [], set()
+    for _, dev in ranked:
         if wasapi is not None and dev["hostapi"] != wasapi:
             continue
         if dev["name"] not in seen:
             seen.add(dev["name"])
             names.append(dev["name"])
     if not names:                       # fall back to every host API
-        for dev in sd.query_devices():
-            if dev["max_input_channels"] >= 1 and dev["name"] not in seen:
+        for _, dev in ranked:
+            if dev["name"] not in seen:
                 seen.add(dev["name"])
                 names.append(dev["name"])
     return names
 
 
 def list_devices():
-    return _list_dshow_video(), _list_wasapi_inputs()
+    return _list_dshow_video(), _list_names(), _list_names(output=True)
 
 
 class VideoCapture:
@@ -234,30 +265,13 @@ class AudioCapture:
         self._last_want = None
 
     def _find_device(self):
-        """Match by name, preferring WASAPI entries: sounddevice lists each
-        physical device once per host API, and MME truncates names to ~31
-        chars ('Digital Audio Interface (Shado…'), which breaks matching."""
-        sd = _sd()
-        want = (self.devices["audio"] or "").strip().lower()
-        try:
-            wasapi = next((i for i, h in enumerate(sd.query_hostapis())
-                           if "wasapi" in h["name"].lower()), None)
-        except Exception:
-            wasapi = None
-        inputs = [(i, d) for i, d in enumerate(sd.query_devices())
-                  if d["max_input_channels"] >= 1]
-        ranked = ([(i, d) for i, d in inputs if d["hostapi"] == wasapi]
-                  + [(i, d) for i, d in inputs if d["hostapi"] != wasapi])
-        for idx, dev in ranked:
-            if dev["name"].strip().lower() == want:
-                return idx, dev
-        for idx, dev in ranked:
-            if want and want in dev["name"].strip().lower():
-                return idx, dev
+        idx, dev = _match_device(self.devices["audio"])
+        if idx is not None:
+            return idx, dev
         print(f"[audio] no input matches {self.devices['audio']!r}. "
               "Available inputs:", flush=True)
-        for idx, dev in ranked:
-            print(f"[audio]   {dev['name']!r}", flush=True)
+        for _, d in _ranked_devices():
+            print(f"[audio]   {d['name']!r}", flush=True)
         return None, None
 
     def restart(self):
@@ -478,19 +492,70 @@ class Tts:
 
 
 class Player:
-    """sounddevice playback on the default output. sd.play/sd.stop keep a
-    module-level stream; all calls happen on the orchestrator thread."""
+    """sounddevice playback on devices["output"] ("" = system default).
+    sd.play/sd.stop keep a module-level stream; all calls happen on the
+    orchestrator thread."""
 
-    def __init__(self):
+    def __init__(self, devices=None):
         self.sd = _sd()
+        self.devices = devices if devices is not None else {}
         self._started = False
         self._deadline = 0.0
+        self._last_want = None           # name we last resolved
+        self._index = None               # its device index (None = default)
+        self._ok = True                  # last resolve found the device
+        self._next_retry = 0.0
+
+    # After a miss, keep speaking through the system default and re-check
+    # only this often: query_devices() costs real time, and re-resolving on
+    # every line would print the same complaint under every spoken line.
+    RETRY_COOLDOWN = 10.0
+
+    def _output_index(self):
+        """Resolve the dashboard's output NAME to an index. Cached, because
+        query_devices() is slow and indices shift when devices come and go —
+        a dashboard change re-resolves at once, a failure after a cooldown."""
+        want = (self.devices.get("output") or "").strip()
+        if want == self._last_want:
+            if self._ok:
+                return self._index
+            if time.monotonic() < self._next_retry:
+                return None              # system default until the cooldown
+        self._last_want = want
+        self._index = None
+        self._ok = True
+        if want:
+            idx, dev = _match_device(want, output=True)
+            if idx is None:
+                self._ok = False
+                self._next_retry = time.monotonic() + self.RETRY_COOLDOWN
+                print(f"[audio] no output matches {want!r} — using the "
+                      "system default. Available outputs:", flush=True)
+                for _, d in _ranked_devices(output=True):
+                    print(f"[audio]   {d['name']!r}", flush=True)
+            else:
+                self._index = idx
+                print(f"[audio] output → {dev['name']!r}", flush=True)
+        else:
+            print("[audio] output → system default", flush=True)
+        return self._index
 
     def play(self, wav_path, audio=None, samplerate=24000):
         if audio is None:
             import soundfile as sf
             audio, samplerate = sf.read(str(wav_path), dtype="float32")
-        self.sd.play(audio, samplerate)
+        idx = self._output_index()
+        try:
+            self.sd.play(audio, samplerate, device=idx)
+        except Exception as exc:
+            # device unplugged / exclusive-mode grab: fall back to the system
+            # default rather than losing the line entirely
+            print(f"[audio] output {self._last_want!r} failed ({exc}) — "
+                  "falling back to the system default", flush=True)
+            self._index = None
+            self._ok = False
+            self._next_retry = time.monotonic() + self.RETRY_COOLDOWN
+            self.sd.play(audio, samplerate)
         self._started = True
         # We know exactly how long this audio runs. PortAudio reports a
         # stream INACTIVE as soon as the callback has handed over the last
@@ -537,5 +602,5 @@ def create_tts():
     return Tts()
 
 
-def create_player():
-    return Player()
+def create_player(devices=None):
+    return Player(devices)
