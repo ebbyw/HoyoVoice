@@ -444,8 +444,26 @@ class Tts:
         models = Path(__file__).resolve().parent.parent / "models"
         self.kokoro = Kokoro(str(models / self.MODEL),
                              str(models / self.VOICES))
+        self.custom = {}                  # voice id → style array
+
+    def register_voice(self, voice_id, path):
+        """Installed voice packs: the packaged voices live inside
+        voices-v1.0.bin (a read-only npz), so a new one can't be added to
+        them — but kokoro-onnx's create() takes a style array as readily as
+        a name, so the array is kept here and passed through instead."""
+        try:
+            import voicepack
+        except ImportError:      # imported outside live.py, which adds tools/
+            sys.path.insert(
+                0, str(Path(__file__).resolve().parent.parent / "tools"))
+            import voicepack
+        self.custom[voice_id] = voicepack.normalize(voicepack.read(path))
+
+    def forget_voice(self, voice_id):
+        self.custom.pop(voice_id, None)
 
     def synth(self, text, voice, speed):
+        voice = self.custom.get(voice, voice)
         samples, sr = self.kokoro.create(text, voice=voice, speed=speed,
                                          lang="en-us")
         if samples is None or len(samples) == 0:

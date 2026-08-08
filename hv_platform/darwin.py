@@ -147,8 +147,19 @@ class Tts:
         import numpy as np
         self.np = np
         self.model = load_model("prince-canuma/Kokoro-82M")
+        self.custom = {}                  # voice id → .safetensors path
+
+    def register_voice(self, voice_id, path):
+        """Installed voice packs: mlx-audio loads a voice straight from a
+        path when it ends in .safetensors, so the id only has to be swapped
+        for the path on the way into generate()."""
+        self.custom[voice_id] = str(path)
+
+    def forget_voice(self, voice_id):
+        self.custom.pop(voice_id, None)
 
     def synth(self, text, voice, speed):
+        voice = self.custom.get(voice, voice)
         segs = [self.np.array(r.audio) for r in
                 self.model.generate(text, voice=voice, speed=speed,
                                     lang_code="a")]
