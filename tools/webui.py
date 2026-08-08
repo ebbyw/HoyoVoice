@@ -85,6 +85,17 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
       <select id="sayVoice"></select>
       <button onclick="say()">Speak</button>
     </div>
+    <div style="margin-top:8px">
+      <span class="muted">Add voice file</span>
+      <input type="file" id="voiceFile" accept=".pt,.pth,.safetensors,.npy,.npz,.bin"
+             style="max-width:190px" title="a Kokoro voice pack: .pt, .safetensors, .npy, .npz or .bin">
+      <input id="voiceName" placeholder="name (optional)" size="12" autocomplete="off">
+      <input id="voiceKey" placeholder="voice in pack" size="10" autocomplete="off"
+             title="only for a file holding several voices — the name of the one you want">
+      <button onclick="addVoice()">Add &amp; verify</button>
+      <span id="voiceMsg" class="muted"></span>
+      <div id="customVoices" class="muted" style="margin-top:4px"></div>
+    </div>
   </div>
   <div>
     <div style="margin-bottom:6px">
@@ -111,6 +122,7 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
 
 <script>
 let hidden=false, observing=true, recOn=false, lastCastFp='';
+let lastVoicesFp='', lastVoiceMsg='';
 function toggleRecord(){post('/api/record',{on:!recOn});}
 function setRecDir(){post('/api/recdir',{dir:document.getElementById('recDir').value});}
 function setGame(){post('/api/game',{game:document.getElementById('gameSel').value});}
@@ -142,6 +154,22 @@ function addChar(){const n=document.getElementById('newChar').value.trim();
   document.getElementById('newChar').value='';
   lastCastFp='';}
 function replay(id){post('/api/replay',{id:id});}
+function addVoice(){
+  const f=document.getElementById('voiceFile');
+  const fd=new FormData();
+  if(f.files.length) fd.append('file',f.files[0]);
+  else{const p=prompt('Path to a voice-pack file on this machine:'); if(!p) return; fd.append('path',p);}
+  fd.append('name',document.getElementById('voiceName').value.trim());
+  fd.append('key',document.getElementById('voiceKey').value.trim());
+  const msg=document.getElementById('voiceMsg');
+  msg.textContent='uploading…'; msg.className='muted';
+  fetch('/api/addvoice',{method:'POST',body:fd})
+    .then(r=>{if(!r.ok) throw new Error(r.status===413?'that file is too large':'upload failed');
+              f.value='';})
+    .catch(e=>{msg.textContent=e.message; msg.className='paused';});
+}
+function delVoice(v){if(confirm('Remove '+v+'? Characters cast to it are re-cast to a built-in voice.'))
+  post('/api/delvoice',{voice:v});}
 function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML;}
 document.addEventListener('change',e=>{
   const t=e.target;
@@ -208,10 +236,22 @@ async function tick(){
         if(!(ch in s.characters)&&!s.unknown.includes(ch)) rows+=row(ch,'',false,false);
       document.querySelector('#casting tbody').innerHTML=rows;
     }
+    const voicesFp=s.voices.join(',');
     for(const id of ['sayVoice','newVoice']){
       const el=document.getElementById(id);
-      if(!el.options.length) el.innerHTML=opts('af_heart');
+      // rebuilt when a voice is installed or removed; the current pick survives
+      if(!el.options.length||voicesFp!==lastVoicesFp) el.innerHTML=opts(el.value||'af_heart');
     }
+    if(voicesFp!==lastVoicesFp){lastVoicesFp=voicesFp; lastCastFp='';}
+    const vi=s.voice_import||{};
+    const vmsg=document.getElementById('voiceMsg');
+    if(vi.msg!==lastVoiceMsg){lastVoiceMsg=vi.msg;
+      vmsg.textContent=vi.msg||'';
+      vmsg.className=vi.state==='error'?'paused':(vi.state==='ok'?'live':'muted');}
+    document.getElementById('customVoices').innerHTML=s.custom_voices.length
+      ?'installed: '+s.custom_voices.map(v=>'<span class="pill">'+esc(v)+
+        ' <a href="#" onclick="delVoice(\\''+esc(v)+'\\');return false" title="remove">✕</a></span>').join('')
+      :'';
     // log refreshes every poll; held while a screenshot preview is open
     // or while the user is selecting text to copy
     const sel=window.getSelection();
@@ -235,6 +275,13 @@ tick();
 def start_webui(shared, port=DASHBOARD_PORT):
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     app = Flask("hoyovoice")
+    # a Kokoro voice pack is ~0.5 MB; this only has to stop a misdropped
+    # model file from being buffered into memory before anyone looks at it
+    app.config["MAX_CONTENT_LENGTH"] = 64 << 20
+
+    def catalog():
+        """Voices that may be cast: the packaged ones plus installed packs."""
+        return VOICE_CATALOG + sorted(shared["voices"].get("custom_voices", {}))
 
     @app.get("/")
     def index():
@@ -333,7 +380,9 @@ def start_webui(shared, port=DASHBOARD_PORT):
             "characters": shared["voices"]["characters"],
             "always_voiced": shared["voices"].get("always_voiced", []),
             "unknown": sorted(shared["unknown"]),
-            "voices": VOICE_CATALOG,
+            "voices": catalog(),
+            "custom_voices": sorted(shared["voices"].get("custom_voices", {})),
+            "voice_import": dict(shared["voice_import"]),
             "metrics": shared["metrics_fn"](),
             "observing": shared["observing"]["on"],
             "recording": shared["recording"]["on"],
@@ -392,8 +441,52 @@ def start_webui(shared, port=DASHBOARD_PORT):
     @app.post("/api/assign")
     def assign():
         d = request.get_json()
-        if d.get("character") and d.get("voice") in VOICE_CATALOG:
+        if d.get("character") and d.get("voice") in catalog():
             shared["commands"].put(("assign", d["character"], d["voice"]))
+        return jsonify(ok=True)
+
+    @app.post("/api/addvoice")
+    def addvoice():
+        """Take a voice-pack file and hand it to the orchestrator to verify.
+
+        Two ways in, because a dashboard reached from another machine and
+        one open on the machine running the game want different things: a
+        browser upload (multipart), or a path typed into the box, which
+        skips the copy when the file is already sitting on this disk.
+
+        Only queues the work. Verification needs the TTS engine, which
+        lives on the orchestrator thread — the result comes back through
+        /api/state.
+        """
+        name = (request.form.get("name") or "").strip() or None
+        key = (request.form.get("key") or "").strip() or None
+        upload = request.files.get("file")
+        if upload and upload.filename:
+            dest_dir = Path(shared["uploads_dir"])
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            # the browser supplies this name; keep only a leaf filename, and
+            # only the suffix is load-bearing (it picks the reader)
+            safe = re.sub(r"[^A-Za-z0-9._-]", "_",
+                          Path(upload.filename).name)[-64:] or "upload"
+            src = dest_dir / safe
+            upload.save(src)
+            name = name or Path(upload.filename).stem
+        else:
+            typed = (request.form.get("path") or "").strip()
+            if not typed:
+                return jsonify(ok=False, error="no file"), 400
+            src = Path(typed).expanduser()
+        shared["voice_import"].update(
+            state="busy", voice=None,
+            msg=f"verifying {Path(src).name}…")
+        shared["commands"].put(("addvoice", str(src), name, key))
+        return jsonify(ok=True)
+
+    @app.post("/api/delvoice")
+    def delvoice():
+        v = (request.get_json() or {}).get("voice")
+        if v in shared["voices"].get("custom_voices", {}):
+            shared["commands"].put(("delvoice", v))
         return jsonify(ok=True)
 
     @app.post("/api/mute")
@@ -418,7 +511,7 @@ def start_webui(shared, port=DASHBOARD_PORT):
     @app.post("/api/say")
     def say():
         d = request.get_json()
-        if d.get("text") and d.get("voice") in VOICE_CATALOG:
+        if d.get("text") and d.get("voice") in catalog():
             shared["commands"].put(("say", d["text"], d["voice"]))
         return jsonify(ok=True)
 
