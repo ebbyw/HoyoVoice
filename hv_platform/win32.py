@@ -503,8 +503,10 @@ class Player:
         self._deadline = 0.0
         self._last_want = None           # name we last resolved
         self._index = None               # its device index (None = default)
+        self._dev = None                 # its query_devices() entry
         self._ok = True                  # last resolve found the device
         self._next_retry = 0.0
+        self._step = 0                   # which rung of the format ladder works
 
     # After a miss, keep speaking through the system default and re-check
     # only this often: query_devices() costs real time, and re-resolving on
@@ -523,7 +525,9 @@ class Player:
                 return None              # system default until the cooldown
         self._last_want = want
         self._index = None
+        self._dev = None
         self._ok = True
+        self._step = 0
         if want:
             idx, dev = _match_device(want, output=True)
             if idx is None:
@@ -535,27 +539,96 @@ class Player:
                     print(f"[audio]   {d['name']!r}", flush=True)
             else:
                 self._index = idx
+                self._dev = dev
                 print(f"[audio] output → {dev['name']!r}", flush=True)
         else:
             print("[audio] output → system default", flush=True)
         return self._index
+
+    def _ladder(self, audio, samplerate):
+        """Ways to hand 24 kHz mono TTS to a CHOSEN device, best first.
+
+        The system default reaches us through whichever host API PortAudio
+        defaults to, which resamples happily. A named WASAPI endpoint does
+        not: in shared mode the stream has to match the endpoint's mix
+        format, so 24 kHz mono is rejected outright (-9997 invalid sample
+        rate / -9998 invalid channel count) unless auto-convert is on. That
+        rejection is exactly what "I picked the other speakers and it still
+        comes out of the default ones" looks like, since the failure path
+        falls back to the default. Same ladder shape as AudioCapture, which
+        hit this first: auto-convert, plain, then convert it ourselves.
+        """
+        dev = self._dev or {}
+        rungs = []
+        is_wasapi = False
+        try:
+            is_wasapi = "wasapi" in self.sd.query_hostapis(
+                dev.get("hostapi", -1))["name"].lower()
+        except Exception:
+            pass
+        as_is = lambda: (audio, samplerate)            # noqa: E731
+        if is_wasapi:
+            try:
+                rungs.append(("wasapi auto-convert", as_is,
+                              self.sd.WasapiSettings(auto_convert=True)))
+            except (AttributeError, TypeError):
+                pass
+        rungs.append(("as-is", as_is, None))
+        native = int(dev.get("default_samplerate") or 0)
+        ch = int(dev.get("max_output_channels") or 0)
+        if native and (native != samplerate or ch >= 2):
+
+            def convert():
+                """Only ever called on the rung that's actually used — the
+                resample is per-line work, and the first two rungs skip it."""
+                import numpy as np
+                data = np.asarray(audio, dtype=np.float32)
+                if native != samplerate:   # linear resample: it's speech, and
+                    n = int(len(data) * native / samplerate)  # the alternative
+                    data = np.interp(      # is silence
+                        np.linspace(0, len(data) - 1, n),
+                        np.arange(len(data)), data).astype(np.float32)
+                if ch >= 2:
+                    data = np.column_stack([data] * 2)
+                return data, native
+
+            rungs.append((f"converted to {native} Hz"
+                          + (" stereo" if ch >= 2 else ""), convert, None))
+        return rungs
 
     def play(self, wav_path, audio=None, samplerate=24000):
         if audio is None:
             import soundfile as sf
             audio, samplerate = sf.read(str(wav_path), dtype="float32")
         idx = self._output_index()
-        try:
-            self.sd.play(audio, samplerate, device=idx)
-        except Exception as exc:
-            # device unplugged / exclusive-mode grab: fall back to the system
-            # default rather than losing the line entirely
-            print(f"[audio] output {self._last_want!r} failed ({exc}) — "
-                  "falling back to the system default", flush=True)
-            self._index = None
-            self._ok = False
-            self._next_retry = time.monotonic() + self.RETRY_COOLDOWN
+        if idx is None:
             self.sd.play(audio, samplerate)
+        else:
+            rungs = self._ladder(audio, samplerate)
+            err = None
+            # start from the rung that worked last time — the first line
+            # pays for the search, the rest of the session doesn't
+            for step in range(min(self._step, len(rungs) - 1), len(rungs)):
+                label, make, extra = rungs[step]
+                try:
+                    data, rate = make()
+                    self.sd.play(data, rate, device=idx, extra_settings=extra)
+                except Exception as e:
+                    err = e
+                    continue
+                if step != self._step:
+                    print(f"[audio] output format: {label}", flush=True)
+                    self._step = step
+                break
+            else:
+                # device unplugged / asleep / held in exclusive mode: fall
+                # back to the system default rather than losing the line
+                print(f"[audio] output {self._last_want!r} failed ({err}) — "
+                      "falling back to the system default", flush=True)
+                self._index = None
+                self._ok = False
+                self._next_retry = time.monotonic() + self.RETRY_COOLDOWN
+                self.sd.play(audio, samplerate)
         self._started = True
         # We know exactly how long this audio runs. PortAudio reports a
         # stream INACTIVE as soon as the callback has handed over the last
