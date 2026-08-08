@@ -27,3 +27,6 @@ hoyovoice.pid
 
 # historical planning docs (kept locally, not tracked)
 archive/
+
+# Claude Code worktrees and local session state
+.claude/worktrees/
