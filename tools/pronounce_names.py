@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Character-name pronunciations for the TTS, and the roster to check them against.
+"""Character-name and lore-term pronunciations for the TTS, and the roster to
+check the names against.
 
     python tools/pronounce_names.py                  # audit: what Kokoro says now vs. with the fix
     python tools/pronounce_names.py --write          # merge FIXES into voices.json
@@ -124,15 +125,24 @@ FIXES = {
     # --- Star Rail: everywhere else ---
     "Aglaea": "Ah-glay-uh",
     "Anaxa": "Ah-nak-sah",
-    # unhyphenated on purpose: "aa-shah" phonemizes to ˈɑˌɑʃˌɑ, an extra
-    # syllable, and "Ah-shah" splits the two engines (misaki ˌɑʃˈɑ, espeak
-    # ˈɑːʃˈɑː). "Ahshaa" is ˈɑʃɑ on both.
-    "Asha": "Ahshaa",
     "Asta": "Ass-tuh",
     "Castorice": "Castor-ess",
     "Gepard": "Ghep-ard",
     "Himeko": "Hee-meh-koh",
     "Seele": "See-luh",
+}
+
+# Lore terms — not people, so no roster lists them and the coverage report
+# below can't check them. They reach the synthesizer through exactly the same
+# settings.pronunciations map, and they're worth shipping for the same reason:
+# an invented word is precisely what English spelling rules mangle. They also
+# go into the OCR vocabulary under --custom-words, since a word the recognizer
+# has never seen is the one it fuses into its neighbour.
+TERMS = {
+    # unhyphenated on purpose: "aa-shah" phonemizes to ˈɑˌɑʃˌɑ, an extra
+    # syllable, and "Ah-shah" splits the two engines (misaki ˌɑʃˈɑ, espeak
+    # ˈɑːʃˈɑː). "Ahshaa" is ˈɑʃɑ on both.
+    "Asha": "Ahshaa",
 }
 
 # Names that are also ordinary English words. Matching is case-insensitive by
@@ -183,6 +193,9 @@ def audit(rosters, g2p):
         tag = " [exact case]" if name in EXACT else ""
         print(f"{name:26} {phonemes(g2p, name):26} {spoken:28} "
               f"{phonemes(g2p, spoken)}{tag}")
+    for term, spoken in sorted(TERMS.items()):
+        print(f"{term:26} {phonemes(g2p, term):26} {spoken:28} "
+              f"{phonemes(g2p, spoken)} [term]")
     for game, names in rosters.items():
         # substitution is word-bounded, so "Himeko • Nova" is already covered
         # by the "Himeko" entry — don't report it as missing
@@ -214,8 +227,9 @@ def check(path, sample):
           "since before then")
     print(f"  {len(pron)} pronunciations, {len(exact)} exact-case, "
           f"{len(settings.get('custom_words', []))} OCR words")
-    absent = [n for n in FIXES if n not in pron]
-    stale = [n for n, v in FIXES.items() if n in pron and pron[n] != v]
+    shipped = {**FIXES, **TERMS}
+    absent = [n for n in shipped if n not in pron]
+    stale = [n for n, v in shipped.items() if n in pron and pron[n] != v]
     if absent:
         print(f"  MISSING {len(absent)}: {', '.join(absent[:8])}"
               f"{' …' if len(absent) > 8 else ''}")
@@ -223,7 +237,7 @@ def check(path, sample):
     if stale:
         print(f"  differs from the table (yours wins): {', '.join(stale)}")
     if not absent and not stale:
-        print("  every name in the table is present")
+        print("  every name and term in the table is present")
     out = sample
     for word, spoken in pron.items():
         out = re.sub(rf"\b{re.escape(word)}\b", spoken, out,
@@ -236,7 +250,7 @@ def merge(path, rosters, custom_words):
     cfg = json.loads(path.read_text())
     settings = cfg.setdefault("settings", {})
     pron = settings.setdefault("pronunciations", {})
-    added = {k: v for k, v in FIXES.items() if pron.get(k) != v}
+    added = {k: v for k, v in {**FIXES, **TERMS}.items() if pron.get(k) != v}
     pron.update(added)                       # hand-written entries win nothing
     settings["pronunciations"] = dict(sorted(pron.items()))
     settings["pronunciations_exact"] = sorted(
@@ -252,6 +266,7 @@ def merge(path, rosters, custom_words):
                 # "Herta" and "March", not "The", "7th", "LV.999" or "Dr."
                 cw.update(w for w in name.split()
                           if PLAIN_WORD.fullmatch(w) and w.lower() not in STOP)
+        cw.update(TERMS)          # invented words are what OCR fuses worst
         settings["custom_words"] = sorted(w for w in cw if len(w) > 1)
         words = len(settings["custom_words"]) - before
     path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
