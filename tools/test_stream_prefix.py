@@ -1,4 +1,5 @@
-"""Pins mid-line streaming — the rule that decides how early a line is read.
+"""Pins the two rules built on sentence boundaries: how early a line is read,
+and how a settled line is split for synthesis.
 
 Both failure directions are expensive: clip too eagerly and one spoken
 thought is chopped in half (or a decimal is read as a sentence end); clip
@@ -35,8 +36,34 @@ HOLDS = [
 ]
 
 
+# (settled line, the utterances synthesized separately). Kokoro degrades its
+# own opening on a long line, so each sentence is synthesized alone and
+# spliced — a single-sentence line must come back as one piece, or every
+# ordinary line pays for an extra synth call it doesn't need.
+SPLITS = [
+    ("Huh!? You… You're Paimon, travel companion of the great hero Ebby!",
+     ["Huh!?", "You… You're Paimon, travel companion of the great hero Ebby!"]),
+    ("Hello, you two. Is something the matter?",
+     ["Hello, you two.", "Is something the matter?"]),
+    # one sentence: one piece, no splice
+    ("Is something the matter?", ["Is something the matter?"]),
+    ("It costs 3.50 mora.", ["It costs 3.50 mora."]),
+    ("Mr. Ito said so.", ["Mr. Ito said so."]),
+    # "…" is a pause inside one thought, never a boundary
+    ("Hmm… I really don't know.", ["Hmm… I really don't know."]),
+    # trailing fragment (line still mid-sentence) rides along as its own piece
+    ("Fine. But wait", ["Fine.", "But wait"]),
+    ("", [""]),
+]
+
+
 def main():
     bad = 0
+    for line, want in SPLITS:
+        got = live.sentences(line)
+        if got != want:
+            print(f"FAIL split {line!r}: want {want}, got {got}")
+            bad += 1
     for line, want in STREAMS:
         got = live.stream_prefix(line)
         if got != want:
@@ -47,8 +74,8 @@ def main():
         if got is not None:
             print(f"FAIL hold {line!r}: clipped to {got!r}")
             bad += 1
-    print(f"{len(STREAMS) + len(HOLDS) - bad}/"
-          f"{len(STREAMS) + len(HOLDS)} ok")
+    total = len(SPLITS) + len(STREAMS) + len(HOLDS)
+    print(f"{total - bad}/{total} ok")
     return 1 if bad else 0
 
 
