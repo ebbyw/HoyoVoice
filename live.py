@@ -131,6 +131,19 @@ SOFT_GATE_RATIO = 0.75
 # are always enough; only a sub-half-second grunt that ends before OCR sees
 # the text would slip through, and the mid-play yield covers late starts.
 VAD_LINE_MARGIN = 0.0
+# How far back to listen for game VO before reading a choice option. The
+# option shares the screen with a line the game may be voicing — including
+# a line we deliberately stayed quiet for — so the read waits out the VO
+# instead of landing on top of it.
+CHOICE_VO_LOOKBACK = 1.0
+# Give up on a held option after this long. Normally it is released the
+# moment the line under it clears the gate, or dropped when the next line
+# fires; this only catches the case where that line never gets there.
+CHOICE_PENDING_TTL = 20.0
+# Once the line under it has cleared the gate, the option waits for a gap
+# in the talking. If the scene runs on without one for this long, the read
+# would arrive as an interruption several beats late — drop it instead.
+CHOICE_STALE_AFTER = 8.0
 
 vad_history = deque(maxlen=400)
 vad_lag = {"s": 0.0}          # how far the VAD tail-reader trails the live edge
@@ -925,6 +938,7 @@ def main():
     last_unknown_logged = None
     choice_prev = ""            # last frame's options (settle check)
     choice_logged = None        # last prompt written to the log
+    pending_choice = None       # lone option waiting for the line below it
     last_spoken_norm = None     # suppresses repeat-logs for the live line
     fired_norm = None           # line already pushed through the gate once
     unstable_count = 0
@@ -1201,21 +1215,75 @@ def main():
 
             state = screens.classify(blocks)
 
-            # Choice prompts are LOGGED, never spoken. The options are not
-            # reliably one kind of text: sometimes they're a menu the player
-            # picks from, sometimes they're the player character's own lines
-            # about to be said aloud. Reading them would be right half the
-            # time and wrong the other half, and wrong here means talking
-            # over the scene. Logged before the branches below so the
-            # options show up even when the line itself is skipped.
-            # Requires the same read twice: the option list renders at once
-            # rather than typing, but OCR still jitters the first sighting.
-            opts_norm = normalize_text(" ".join(state["choices"]))
-            if (opts_norm and opts_norm == choice_prev
-                    and not same_line(opts_norm, choice_logged)):
+            # Choice prompts. A LONE option is read aloud: with nothing to
+            # choose between, the game isn't offering a menu so much as
+            # putting words in the player character's mouth, and it reads as
+            # part of the scene. Two or more ARE a menu — reading those would
+            # narrate a UI — so they're logged and left unspoken.
+            #
+            # Either way it takes the same read twice: the option list renders
+            # all at once rather than typing, but OCR still jitters the first
+            # sighting. Handled before the branches below so a prompt is
+            # logged even when the line under it is skipped.
+            opts = state["choices"]
+            opts_norm = normalize_text(" ".join(opts))
+            settled = bool(opts_norm) and opts_norm == choice_prev
+            fresh = settled and not same_line(opts_norm, choice_logged)
+            if fresh and len(opts) > 1:
                 choice_logged = opts_norm
                 add_event("choice prompt (not read)", "choice", None,
-                          " · ".join(state["choices"]), shot=True)
+                          " · ".join(opts), shot=True)
+            elif fresh:
+                # Held, not read yet: it has to land AFTER the line it sits
+                # above, and it beats that line onto the screen — the bubble
+                # appears whole while the line is still typing. Remember
+                # which line that is; the read waits for it.
+                pending_choice = {"text": opts[0], "armed": False,
+                                  "line": normalize_text(state["dialogue"]),
+                                  "t": time.monotonic()}
+            if pending_choice:
+                # ARMED once the line below has been through the gate —
+                # `fired_norm` covers it whether it was spoken, deduped or
+                # skipped as voiced. Deliberately NOT conditional on the
+                # option still being on screen: the player often clicks
+                # through while we're still reading the line under it, and
+                # dropping the option then would mean it is almost never
+                # read at a natural pace.
+                if (not pending_choice["armed"]
+                        and same_line(fired_norm, pending_choice["line"])):
+                    pending_choice["armed"] = True
+                    pending_choice["t"] = time.monotonic()
+                if time.monotonic() - pending_choice["t"] > (
+                        CHOICE_STALE_AFTER if pending_choice["armed"]
+                        else CHOICE_PENDING_TTL):
+                    # armed but never found a gap to speak in (the scene ran
+                    # on), or the line under it never cleared the gate at all
+                    add_event("choice prompt (not read — too late)", "choice",
+                              None, pending_choice["text"])
+                    choice_logged = normalize_text(pending_choice["text"])
+                    pending_choice = None
+            if (pending_choice and pending_choice["armed"]
+                    and not speech.playing
+                    and not is_voiced(time.monotonic() - CHOICE_VO_LOOKBACK)):
+                # our own voice is idle and the game's has stopped — the line
+                # under it may be voiced even when the option is not
+                text = fix_ocr_text(pending_choice["text"])
+                spk = VOICES.get("settings", {}).get("choice_speaker")
+                voice, base_speed = pick_voice(spk)
+                audio, speed, _ = speech.synth(text, voice, base_speed)
+                speech.play(audio)          # not qr: a late VO should cut it
+                stats["spoken"] += 1
+                choice_logged = normalize_text(text)
+                last_spoken_norm = normalize_text(text)
+                # into the dedupe window: picking a lone option usually makes
+                # the game say it back as a dialogue line, which would
+                # otherwise be read a second time
+                recent_lines.append({"speaker": spk, "norm": last_spoken_norm})
+                pending_choice = None
+                yield_event_id = add_event(
+                    "choice (read)", "spoken", spk, text, voice, speed,
+                    can_replay=True, shot=True)
+                print(f"[choice → {voice}] {text[:70]}", flush=True)
             choice_prev = opts_norm
 
             loading = screens.classify_loading(blocks)
