@@ -568,15 +568,6 @@ def fix_ocr_text(s):
     return re.sub(r"  +", " ", s).strip()
 
 
-# "Huh!?" reaches Kokoro as two adjacent punctuation tokens, and that pair is
-# rare enough in what it was trained on that the stop after the word collapses
-# — "Huh!? You…" comes out as one slurred blob instead of an interjection and
-# then a pause. A single mark reads cleanly. "?" wins whenever the run has
-# one, because a mixed run is a question asked with force and it's the rising
-# contour that carries the surprise; "!!" collapses to "!".
-_MIXED_TERMINAL = re.compile(r"[!?]{2,}")
-
-
 def spoken_form(text):
     """Apply settings.pronunciations — what the TTS hears, not what we log.
 
@@ -586,16 +577,13 @@ def spoken_form(text):
     case-insensitive so OCR case jitter can't miss a name — a name that is
     ALSO an ordinary English word ("Gaming") goes in
     settings.pronunciations_exact, or every "gaming" in prose is respelled too.
-
-    Mixed terminal punctuation is collapsed here too, for the same reason: it
-    is a delivery fix, and the log keeps what the game actually wrote.
     """
     settings = VOICES.get("settings", {})
     exact = set(settings.get("pronunciations_exact", []))
     for word, spoken in settings.get("pronunciations", {}).items():
         text = re.sub(rf"\b{re.escape(word)}\b", spoken, text,
                       flags=0 if word in exact else re.IGNORECASE)
-    return _MIXED_TERMINAL.sub(lambda m: "?" if "?" in m.group(0) else "!", text)
+    return text
 
 
 # what mark_stage_directions() leaves behind, and the extensions that make a
@@ -638,9 +626,9 @@ def speech_parts(text):
 
 def tts_text(text):
     """The whole TTS-side transform of a line, flattened back to one string
-    for logs: respellings, collapsed punctuation, and stage directions with
-    a sound file shown as [path] where the synthesizer is handed silence and
-    the file is spliced in instead."""
+    for logs: respellings, and stage directions with a sound file shown as
+    [path] where the synthesizer is handed silence and the file is spliced in
+    instead."""
     return " ".join(v if kind == "say" else f"[{v}]"
                     for kind, v in speech_parts(spoken_form(text)))
 
@@ -949,8 +937,8 @@ class Speech:
         return self._effects[path]
 
     def synth(self, text, voice, base_speed=1.0):
-        # sentiment reads the line as written: spoken_form respells names into
-        # nonsense words and collapses "!?", both of which it would score on
+        # sentiment reads the line as written — spoken_form respells names
+        # into nonsense words, which is not what a sentiment model should see
         speed = round(base_speed * self.sentiment_speed(text), 3)
         t0 = time.time()
         pieces = [self.effect(val) if kind == "play"
