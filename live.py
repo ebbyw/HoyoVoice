@@ -180,6 +180,13 @@ CHOICE_PENDING_TTL = 20.0
 # in the talking. If the scene runs on without one for this long, the read
 # would arrive as an interruption several beats late — drop it instead.
 CHOICE_STALE_AFTER = 8.0
+# How long to keep looking for a line under the option before giving up and
+# reading it anyway. There may be nothing to wait for: a wordless "..." (or
+# a beat with the box empty) normalizes to nothing, and the "has the line
+# below fired yet" test can never match an empty line — which held the
+# option forever and it went unread. Long enough for a typing line to show
+# up and be adopted instead.
+CHOICE_EMPTY_GRACE = 2.0
 
 vad_history = deque(maxlen=400)
 vad_lag = {"s": 0.0}          # how far the VAD tail-reader trails the live edge
@@ -803,6 +810,56 @@ def same_line(a, b, cutoff=0.9):
     if not a or not b:
         return False
     return difflib.SequenceMatcher(None, a, b).ratio() >= cutoff
+
+
+def window_verdict(new_norm, speaker, recent_lines):
+    """Judge a settled line against the recent window. Returns
+    (dup, ext_base):
+
+        dup       — jitter variant / repeat → skip
+        ext_base  — the prefix we already spoke: the line grew after we
+                    spoke a stable prefix (typewriter race), so only the
+                    remainder is new
+        neither   — a new line, speak it in full
+    """
+    ext_base = None
+    for e in recent_lines:
+        o = e["norm"]
+        same_spk = similar_speaker(e["speaker"], speaker)
+        if not (same_spk or len(new_norm) >= SHORT_LINE):
+            continue
+        # extension FIRST: with sentence streaming, a grown line's
+        # remainder can be short enough that the 0.90 fuzzy check below
+        # would classify the whole thing as a repeat and the remainder
+        # would never be spoken.
+        #
+        # Same nameplate only. A line grows by typewriter and the
+        # typewriter never changes speaker mid-line, but the window spans
+        # speakers — so Paimon's "And then?" made Leyla's "And then I
+        # blossomed into a healthy vegetable…" look like a continuation of
+        # it, and Leyla was cut off at the front. An unknown speaker on
+        # either side still counts: the plate can flicker out mid-line,
+        # and a genuine extension must not be re-read from the top.
+        ext_ok = same_spk or not e["speaker"] or not speaker
+        if ext_ok and new_norm != o and new_norm.startswith(o):
+            if len(new_norm) - len(o) < 8:   # trivial tail = jitter
+                return True, None
+            if ext_base is None or len(o) > len(ext_base):
+                ext_base = o
+            continue
+        if (difflib.SequenceMatcher(None, new_norm, o).ratio() >= 0.90
+                or new_norm in o):   # substring too: VFX flicker can
+            return True, None        # drop a row, leaving just a tail
+        if len(o) >= 30 and o in new_norm and len(new_norm) - len(o) <= 25:
+            return True, None   # long recent line wrapped in OCR ghost-junk
+        # fuzzy tail: OCR jitter re-reads the last visual row with a
+        # near-miss ("thereetoo" vs "thereatoo") that exact substring
+        # checks can't catch
+        if len(o) > len(new_norm) >= 12:
+            tail = o[-(len(new_norm) + 6):]
+            if difflib.SequenceMatcher(None, new_norm, tail).ratio() >= 0.85:
+                return True, None
+    return False, ext_base
 
 
 def normalize_speaker(speaker):
@@ -1931,10 +1988,36 @@ def main():
                 # above, and it beats that line onto the screen — the bubble
                 # appears whole while the line is still typing. Remember
                 # which line that is; the read waits for it.
+                #
+                # Marked as seen HERE, not when it is finally read. The
+                # bubble stays on screen for as long as the player takes to
+                # click it, and every one of those frames is another
+                # "settled and not seen before" — so the hold was rebuilt
+                # from scratch several times a second, resetting its arm
+                # flag and its clock. Nothing that has to survive a frame
+                # could: the read only ever landed if arming and a gap in
+                # the talking happened to fall on the same pass.
+                choice_logged = opts_norm
                 pending_choice = {"text": opts[0], "armed": False,
                                   "line": normalize_text(state["dialogue"]),
                                   "t": time.monotonic()}
             if pending_choice:
+                if not pending_choice["armed"] and not pending_choice["line"]:
+                    # NOTHING under the bubble to wait for. The line below
+                    # is a wordless "..." (or the box is empty, or OCR can't
+                    # read it) — it normalizes to nothing, and same_line()
+                    # never matches an empty string, so the wait below could
+                    # never end and the option was never read at all.
+                    # Prefer a real line if one turns up: the bubble renders
+                    # whole while the line under it is still typing, so an
+                    # empty first sighting is often just early.
+                    below = normalize_text(state["dialogue"])
+                    if below:
+                        pending_choice["line"] = below
+                    elif (time.monotonic() - pending_choice["t"]
+                            >= CHOICE_EMPTY_GRACE):
+                        pending_choice["armed"] = True
+                        pending_choice["t"] = time.monotonic()
                 # ARMED once the line below has been through the gate —
                 # `fired_norm` covers it whether it was spoken, deduped or
                 # skipped as voiced. Deliberately NOT conditional on the
@@ -2197,40 +2280,8 @@ def main():
             #   extension — line grew after we spoke a stable prefix
             #               (typewriter race) → speak only the remainder
             #   new       — speak in full
-            dup, ext_base = False, None
-            for e in recent_lines:
-                o = e["norm"]
-                same_spk = similar_speaker(e["speaker"], state["speaker"])
-                if not (same_spk or len(new_norm) >= SHORT_LINE):
-                    continue
-                # extension FIRST: with sentence streaming, a grown line's
-                # remainder can be short enough that the 0.90 fuzzy check
-                # below would classify the whole thing as a repeat and the
-                # remainder would never be spoken
-                if new_norm != o and new_norm.startswith(o):
-                    if len(new_norm) - len(o) < 8:   # trivial tail = jitter
-                        dup = True
-                        break
-                    if ext_base is None or len(o) > len(ext_base):
-                        ext_base = o
-                    continue
-                if (difflib.SequenceMatcher(None, new_norm, o).ratio() >= 0.90
-                        or new_norm in o):   # substring too: VFX flicker can
-                    dup = True               # drop a row, leaving just a tail
-                    break
-                if (len(o) >= 30 and o in new_norm
-                        and len(new_norm) - len(o) <= 25):
-                    dup = True   # long recent line wrapped in OCR ghost-junk
-                    break
-                # fuzzy tail: OCR jitter re-reads the last visual row with a
-                # near-miss ("thereetoo" vs "thereatoo") that exact substring
-                # checks can't catch
-                if len(o) > len(new_norm) >= 12:
-                    tail = o[-(len(new_norm) + 6):]
-                    if difflib.SequenceMatcher(
-                            None, new_norm, tail).ratio() >= 0.85:
-                        dup = True
-                        break
+            dup, ext_base = window_verdict(new_norm, state["speaker"],
+                                           recent_lines)
             if dup:
                 # Log only genuinely INTERESTING repeats — a line we spoke
                 # long ago coming round again. A re-read of the line still
