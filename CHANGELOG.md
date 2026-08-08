@@ -16,6 +16,10 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
   macOS plays through `afplay`, which has no device selection, so that backend reports no output list and the picker shows System default alone (route per-app from Sound settings there). Backends now take the live devices dict in `create_player(devices)` and `list_devices()` returns a third list; see `hv_platform/base.py`.
 
+### Changed
+
+- **Paimon is now respelled `Pie-mahn` (`pˈImˈɑn`), not `Pah-ee-mahn` (`pˈɑˈimˈɑn`).** The old form spelled the diphthong out as two syllables; this one is the way the games say it. Hyphenated rather than spaced: `Pie mahn` phonemizes to the same sounds but as two words (`pˈI mˈɑn`), which puts a word break in the middle of the name.
+
 ## [0.8.0] - 2026-08-08
 
 ### Added
