@@ -155,7 +155,11 @@ ENERGY_SIDE_FLAT = 2.5        # AND side must stay flat — music swells raise
 # --- shared state for the dashboard ---
 events = deque(maxlen=200)
 event_seq = {"n": 0}
-recording = {"on": False, "t0": None, "clips": [], "raw": None}
+# `parts` are the recording's video segments (a capture respawn has to open
+# a new one — see respawn_capture); `gaps` are the wall-clock windows
+# between them, which the mux cuts out of the audio so the two stay aligned.
+recording = {"on": False, "t0": None, "clips": [], "raw": None,
+             "parts": [], "gaps": []}
 record_request = {"want": None}
 device_request = {"want": None}
 unknown_speakers = set()
@@ -183,7 +187,9 @@ def frame_is_dark():
         return False
 
 
-latest_ocr = {"blocks": None}     # raw blocks of the current frame (debug)
+# raw blocks of the current frame (debug), plus the subset the last read
+# built its line from — what the change gate watches
+latest_ocr = {"blocks": None, "text_blocks": None}
 lost_frames = {"n": 0}            # frames the OCR daemon couldn't read at all
 # skips OCR while the text region is pixel-identical; see tools/change_gate.py
 # for the contract (an "unchanged" verdict replays the previous blocks — it
@@ -693,40 +699,117 @@ class Speech:
         return synth_ms, speed
 
 
-def mux_recording(raw, clips, out, s0, s1):
-    """Combine: video (ffmpeg mkv) + game audio (exact byte-slice of the
-    PCM stream between recording start/stop) + TTS clips at wall offsets."""
-    # extract the game-audio slice
+def shift_offset(t, gaps):
+    """A wall-clock offset moved onto the recorded timeline.
+
+    The video loses every capture gap; the audio stream doesn't, and the
+    mux cuts the same windows out of it. So a clip stamped in wall time
+    has to come back by everything that was removed before it. A clip that
+    started *inside* a gap collapses onto its leading edge."""
+    shift = 0.0
+    for g in gaps:
+        if t >= g["t1"]:
+            shift += g["t1"] - g["t0"]
+        elif t > g["t0"]:
+            shift += t - g["t0"]
+    return max(0.0, t - shift)
+
+
+def audio_keep_ranges(s0, s1, gaps):
+    """Byte ranges of the PCM stream that have video behind them.
+
+    The capture can die and be respawned mid-take; the audio stream never
+    stops. Pairing the whole of one with the gapped other is what made a
+    28s video carry 265s of sound, so the windows where nothing was
+    captured come out of the audio as well."""
+    keep, cursor = [], s0
+    for g in sorted(gaps, key=lambda g: g["a0"]):
+        a0, a1 = min(max(g["a0"], s0), s1), min(max(g["a1"], s0), s1)
+        if a0 > cursor:
+            keep.append((cursor, a0))
+        cursor = max(cursor, a1)
+    if s1 > cursor:
+        keep.append((cursor, s1))
+    return keep
+
+
+def concat_parts(parts):
+    """One video file out of the recording's segments, or None.
+
+    Segments come from separate ffmpeg runs with identical encoder
+    settings, so they stream-copy together; if that ever fails, the caller
+    keeps the longest single part rather than losing the take."""
+    parts = [p for p in parts if Path(p).exists() and Path(p).stat().st_size]
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return Path(parts[0])
+    listing = Path(parts[0]).with_suffix(".parts.txt")
+    listing.write_text("".join(
+        f"file '{Path(p).as_posix()}'\n" for p in parts))
+    joined = Path(str(parts[0]).replace("_raw", "_joined"))
+    ok = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "concat",
+         "-safe", "0", "-i", str(listing), "-c", "copy", "-y", str(joined)],
+        capture_output=True).returncode == 0
+    listing.unlink(missing_ok=True)
+    if ok:
+        return joined
+    joined.unlink(missing_ok=True)
+    print(f"[recording] concat of {len(parts)} segments FAILED — keeping the "
+          f"longest one", flush=True)
+    return Path(max(parts, key=lambda p: Path(p).stat().st_size))
+
+
+def mux_recording(parts, gaps, clips, out, s0, s1):
+    """Combine: video (ffmpeg mkv segments) + game audio (byte-slices of the
+    PCM stream between recording start/stop, minus any capture gaps) + TTS
+    clips at their offsets on that same timeline."""
+    raw = concat_parts(parts)
+    if raw is None:
+        add_event("recording FAILED (no video)", "yield", None, Path(out).name)
+        print(f"[recording] no usable video segment for {out}", flush=True)
+        return
+    keep = audio_keep_ranges(s0, s1, gaps)
     n = 0
     with open(AUDIO_PCM, "rb") as src, open(GAME_SLICE, "wb") as dst:
-        src.seek(s0)
-        remaining = max(s1 - s0, 0)
-        while remaining > 0:
-            b = src.read(min(1 << 20, remaining))
-            if not b:
-                break
-            dst.write(b)
-            n += len(b)
-            remaining -= len(b)
-    print(f"[recording] game audio slice: {n / AUDIO_BYTES_PER_SEC:.1f}s; "
-          f"muxing {len(clips)} TTS clips into {out}", flush=True)
+        for a0, a1 in keep:
+            src.seek(a0)
+            remaining = max(a1 - a0, 0)
+            while remaining > 0:
+                b = src.read(min(1 << 20, remaining))
+                if not b:
+                    break
+                dst.write(b)
+                n += len(b)
+                remaining -= len(b)
+    clips = [dict(c, start=shift_offset(c["start"], gaps),
+                  end=(None if c.get("end") is None
+                       else shift_offset(c["start"], gaps)
+                       + max(c["end"] - c["start"], 0.05)))
+             for c in clips]
+    dropped = (s1 - s0 - n) / AUDIO_BYTES_PER_SEC
+    print(f"[recording] game audio slice: {n / AUDIO_BYTES_PER_SEC:.1f}s"
+          + (f" ({dropped:.1f}s cut across {len(gaps)} capture gap(s))"
+             if gaps else "")
+          + f"; muxing {len(clips)} TTS clips into {out}", flush=True)
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error",
            "-i", str(raw),
            "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", str(GAME_SLICE)]
     for c in clips:
         cmd += ["-i", c["file"]]
-    parts, labels = [], []
+    filters, labels = [], []
     for i, c in enumerate(clips, 2):        # clip inputs start at index 2
         trim = (f"atrim=0:{max(c['end'] - c['start'], 0.05):.3f},"
                 if c.get("end") is not None else "")
         ms = int(c["start"] * 1000)
-        parts.append(f"[{i}:a]{trim}aresample=48000,"
-                     f"aformat=channel_layouts=stereo,"
-                     f"volume=2.5,alimiter=limit=0.95,"   # Kokoro is quiet
-                     f"adelay={ms}|{ms}[a{i}]")
+        filters.append(f"[{i}:a]{trim}aresample=48000,"
+                       f"aformat=channel_layouts=stereo,"
+                       f"volume=2.5,alimiter=limit=0.95,"  # Kokoro is quiet
+                       f"adelay={ms}|{ms}[a{i}]")
         labels.append(f"[a{i}]")
     if clips:
-        fc = (";".join(parts) + ";[1:a]" + "".join(labels)
+        fc = (";".join(filters) + ";[1:a]" + "".join(labels)
               + f"amix=inputs={len(clips) + 1}:normalize=0[out]")
         cmd += ["-filter_complex", fc, "-map", "0:v", "-map", "[out]"]
     else:
@@ -734,7 +817,8 @@ def mux_recording(raw, clips, out, s0, s1):
     cmd += ["-c:v", "copy", "-c:a", "aac", "-y", str(out)]
     ok = subprocess.run(cmd, capture_output=True).returncode == 0
     if ok:
-        Path(raw).unlink(missing_ok=True)
+        for p in {str(raw), *(str(p) for p in parts)}:
+            Path(p).unlink(missing_ok=True)
         GAME_SLICE.unlink(missing_ok=True)
         for c in clips:
             Path(c["file"]).unlink(missing_ok=True)
@@ -749,6 +833,45 @@ def mux_recording(raw, clips, out, s0, s1):
 # every restart/finalize, on the loop or off it, goes through this lock.
 video_lock = threading.Lock()
 video_swap = {"thread": None}
+
+
+def respawn_capture(video, stalled_for=0.0):
+    """Restart the capture, keeping an in-progress recording alive.
+
+    One ffmpeg owns both the capture device and the recording, so every
+    respawn ends the MKV it was writing — and a respawn that asks for no
+    recording amputates the take silently. That is what a stalled capture
+    did mid-session: video stopped at the stall, `recording["on"]` stayed
+    true, clips and the audio slice kept running on wall clock, and the
+    mux paired a 28s video with 265s of sound. The recording now continues
+    into the next segment, and the window where nothing was captured is
+    remembered — in wall time for the clip offsets, in PCM bytes for the
+    audio — so the mux can cut exactly that much out of the sound and land
+    everything after it back in sync.
+
+    `stalled_for` back-dates the gap to when frames actually stopped, not
+    to when the watchdog noticed: the audio stream ran through that whole
+    window too, and leaving it in would desync everything after it by the
+    length of the stall.
+
+    Caller must hold video_lock.
+    """
+    if not recording["on"]:
+        video.restart()
+        return
+    t0 = max(0.0, time.monotonic() - recording["t0"] - stalled_for)
+    size = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
+    # 4 bytes per stereo s16le frame — never split one, or the channels swap
+    a0 = max(0, size - int(stalled_for * AUDIO_BYTES_PER_SEC)) // 4 * 4
+    part = Path(recording["raw"].replace(
+        "_raw.mkv", f"_raw.p{len(recording['parts']) + 1}.mkv"))
+    video.restart(record_path=part)
+    recording["parts"].append(str(part))
+    recording["gaps"].append(
+        {"t0": t0, "t1": time.monotonic() - recording["t0"],
+         "a0": a0, "a1": AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0})
+    print(f"[recording] capture respawned — continuing into {part.name}",
+          flush=True)
 
 
 def swap_video_async(video, finalize_first=False, on_finalized=None):
@@ -774,7 +897,9 @@ def swap_video_async(video, finalize_first=False, on_finalized=None):
                 video.finalize(timeout=8)
             if on_finalized is not None:
                 on_finalized()
-            video.restart()
+            # normally the recording is already off here (this IS the stop
+            # path); respawn_capture keeps one alive if it isn't
+            respawn_capture(video)
 
     video_swap["thread"] = threading.Thread(target=run, daemon=True)
     video_swap["thread"].start()
@@ -930,10 +1055,11 @@ def main():
                           VOICES.get("settings", {}).get("ocr_engine", "auto"))
     ocr = backend.create_ocr(ROOT, custom_words_file())
     # settings.change_gate: false disables the pixel gate entirely;
-    # settings.change_gate_mad tunes how identical "identical" must be
+    # settings.change_gate_frac tunes what share of a box's text pixels may
+    # move before it counts as changed (lower = more suspicious = more OCR)
     gate.enabled = bool(VOICES.get("settings", {}).get("change_gate", True))
-    gate.mad = float(VOICES.get("settings", {}).get("change_gate_mad",
-                                                    gate.mad))
+    gate.frac = float(VOICES.get("settings", {}).get("change_gate_frac",
+                                                     gate.frac))
 
     candidate, candidate_count = None, 0
     candidate_growing = False
@@ -1011,13 +1137,16 @@ def main():
                             time.sleep(0.1)
                     s0 = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
                     recording.update(on=True, t0=time.monotonic(), clips=[],
-                                     raw=str(raw), s0=s0)
+                                     raw=str(raw), s0=s0, parts=[str(raw)],
+                                     gaps=[])
                     last_frame_change = time.monotonic()
                     print("[recording started]", flush=True)
                 elif not want and recording["on"]:
                     recording["on"] = False
                     s1 = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
                     raw, clips = recording["raw"], recording["clips"]
+                    parts = list(recording["parts"]) or [raw]
+                    gaps = list(recording["gaps"])
                     s0 = recording.get("s0", 0)
                     out = raw.replace("_raw.mkv", ".mp4")
                     # clean mkv close, then mux, then respawn — all off the
@@ -1028,7 +1157,7 @@ def main():
                         video, finalize_first=True,
                         on_finalized=lambda: threading.Thread(
                             target=mux_recording,
-                            args=(raw, clips, out, s0, s1),
+                            args=(parts, gaps, clips, out, s0, s1),
                             daemon=True).start())
                     last_frame_change = time.monotonic()
                     print("[recording stopped — finalizing]", flush=True)
@@ -1077,10 +1206,15 @@ def main():
                 # on top of it would fight the swap for the device.
                 last_frame_change = now
             elif now - last_frame_change > 10:
-                print("[capture stalled — respawning]", flush=True)
+                stalled = now - last_frame_change
+                print(f"[capture stalled {stalled:.0f}s — respawning]",
+                      flush=True)
                 with video_lock:
-                    video.restart()
+                    # keeps an in-progress recording going into a new
+                    # segment rather than ending it where the stall began
+                    respawn_capture(video, stalled_for=stalled)
                 last_frame_change = time.monotonic()
+                gate.reset()          # baseline belongs to the dead capture
                 continue
 
             try:
@@ -1097,7 +1231,12 @@ def main():
             # normal path instead of paying for OCR. Replaying (not
             # skipping) keeps stabilization counting, chat settle checks
             # and panel-close detection ticking exactly as before.
-            if gate.unchanged(FRAME, latest_ocr["blocks"]):
+            # watch the dialogue's own blocks where the last read produced
+            # them, and fall back to every block otherwise (reader panels,
+            # screens with no line) — the gate judges each box on its own,
+            # so an extra one costs OCR calls, never a swallowed line
+            watch = latest_ocr["text_blocks"] or latest_ocr["blocks"]
+            if gate.unchanged(FRAME, watch):
                 blocks = latest_ocr["blocks"]
             else:
                 t0 = time.time()
@@ -1106,6 +1245,7 @@ def main():
                     continue
                 stats["ocr_ms"].append(int((time.time() - t0) * 1000))
                 latest_ocr["blocks"] = blocks
+                latest_ocr["text_blocks"] = None    # until classify sets it
             if not blocks:
                 # NO blocks at all means we failed to read the frame (a torn
                 # JPEG mid-rewrite, common under recording load), not that
@@ -1225,6 +1365,10 @@ def main():
                 continue
 
             state = screens.classify(blocks)
+            # Narrow the gate to the blocks this line was built from. Handed
+            # every block on the frame it watches the HUD and the UID too,
+            # which sit over open world — see tools/change_gate.py.
+            latest_ocr["text_blocks"] = state.get("boxes") or None
 
             # Choice prompts are LOGGED, never spoken. The options are not
             # reliably one kind of text: sometimes they're a menu the player

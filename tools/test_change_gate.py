@@ -35,17 +35,31 @@ def draw_text(img, xy, text, scale=2):
 
 
 def make_frame(path, text="Some dialogue line.", bg=30, noise_seed=None,
-               extra=None, truncate=False):
+               extra=None, truncate=False, daylight=False, chrome=False):
     """Game-like frame: light text near the dialogue band over a dark,
-    optionally noisy (=animated) background."""
+    optionally noisy (=animated) background.
+
+    `daylight` fills the top two thirds with a bright sky, and `chrome`
+    adds the always-on-screen HUD and UID that a real frame carries — the
+    combination the gate got wrong on a Genshin session."""
     rng = np.random.default_rng(noise_seed if noise_seed is not None else 0)
     arr = np.full((H, W), bg, dtype=np.uint8)
     if noise_seed is not None:                  # "animated world": dark noise
         arr = np.clip(arr + rng.integers(0, 60, (H, W)), 0, 120
                       ).astype(np.uint8)
+    if daylight:
+        arr[:700] = np.clip(rng.integers(170, 255, (700, W)), 0, 255
+                            ).astype(np.uint8)
+        # both games draw dialogue on a dark translucent panel, so the rows
+        # themselves stay light-on-dark however bright the scene is — it is
+        # the CHROME (HUD, UID) that ends up over open sky
+        arr[160:300, 600:1400] = 25
     img = Image.fromarray(arr).convert("RGB")
     draw_text(img, (760, 180), "Sparxie")
     draw_text(img, (650, 230), text)
+    if chrome:
+        draw_text(img, (40, 40), "Paimon Menu")
+        draw_text(img, (1700, 1040), "UID 800000")
     if extra:
         draw_text(img, extra[0], extra[1])
     buf = io.BytesIO()
@@ -63,6 +77,16 @@ BLOCKS = [
      "x": 760 / W, "w": 80 / W, "y": 1 - 200 / H, "h": 20 / H},
     {"text": "Some dialogue line.", "confidence": 0.98,
      "x": 650 / W, "w": 400 / W, "y": 1 - 250 / H, "h": 20 / H},
+]
+
+# what the daemon actually hands live.py on a real frame: the line, plus the
+# chrome that is on screen permanently. Genshin's UID sits bottom-right, so
+# the union of these spans corner to corner.
+CHROME_BLOCKS = BLOCKS + [
+    {"text": "Paimon Menu", "confidence": 0.9,
+     "x": 40 / W, "w": 140 / W, "y": 1 - 70 / H, "h": 20 / H},
+    {"text": "UID 800000", "confidence": 0.9,
+     "x": 1700 / W, "w": 130 / W, "y": 1 - 1070 / H, "h": 20 / H},
 ]
 
 
@@ -129,6 +153,49 @@ def run():
     g7 = ChangeGate()
     assert not g7.unchanged(frame, [])
     assert not g7.unchanged(frame, None)
+
+    # 10. THE GENSHIN CASE. A bright daylit scene, and the block list
+    #     carries the permanent HUD/UID chrome as well as the line — their
+    #     union is nearly the whole screen. One more glyph of the typewriter
+    #     must still open the gate: judged as a single averaged region it
+    #     did not, the blocks replayed stale, and the line was spoken
+    #     mid-word ("…friends with the great sh").
+    #     live.py hands the gate the line's own blocks (classify's "boxes"),
+    #     so that is what this walks the typewriter through.
+    g8 = ChangeGate()
+    typing = ["I know that you are friends with the great",
+              "I know that you are friends with the great sh",
+              "I know that you are friends with the great shaman"]
+    make_frame(frame, text=typing[0], daylight=True, chrome=True)
+    g8.unchanged(frame, BLOCKS)                           # baseline
+    make_frame(frame, text=typing[0], daylight=True, chrome=True, noise_seed=3)
+    assert g8.unchanged(frame, BLOCKS), \
+        "a static line in a bright scene must still be gated"
+    for grown in typing[1:]:
+        make_frame(frame, text=grown, daylight=True, chrome=True)
+        assert not g8.unchanged(frame, BLOCKS), \
+            f"typewriter growth must open the gate: {grown!r}"
+        make_frame(frame, text=grown, daylight=True, chrome=True)
+        assert g8.unchanged(frame, BLOCKS)                # settled again
+
+    #     and the fallback path (no line yet, so every block is watched)
+    #     must reach the same verdict on growth — never a stale replay
+    g8b = ChangeGate()
+    make_frame(frame, text=typing[0], daylight=True, chrome=True)
+    g8b.unchanged(frame, CHROME_BLOCKS)
+    make_frame(frame, text=typing[1], daylight=True, chrome=True)
+    assert not g8b.unchanged(frame, CHROME_BLOCKS), \
+        "growth must open the gate even when chrome is watched too"
+
+    # 11. a box holding no text in either frame (dark HUD corner) neither
+    #     gates nor blocks on its own — but a frame where EVERY box is
+    #     empty has nothing to compare, so it must run OCR
+    g9 = ChangeGate()
+    blank = [dict(b, x=0.02, y=0.9) for b in BLOCKS[:1]]
+    make_frame(frame, text="", bg=0)
+    g9.unchanged(frame, blank)
+    assert not g9.unchanged(frame, blank), \
+        "nothing bright to compare must fail open to OCR"
 
     print("test_change_gate: all invariants hold")
 

@@ -172,12 +172,59 @@ def test_shutdown_leaves_no_orphan():
     check("kill is the last action", v.log[-1] == "kill", str(v.log))
 
 
+def test_a_stall_does_not_amputate_the_recording():
+    """A capture stall used to end the take silently: the watchdog respawned
+    with no record path, so video stopped there while clips and the audio
+    slice kept running on wall clock. One real session muxed a 28s video
+    against 265s of sound."""
+    v = FakeCapture()
+    v.restart(record_path="rec_raw.mkv")
+    live.recording.update(on=True, t0=time.monotonic() - 60,
+                          raw="rec_raw.mkv", parts=["rec_raw.mkv"], gaps=[],
+                          clips=[], s0=0)
+    try:
+        with live.video_lock:
+            live.respawn_capture(v, stalled_for=12.0)
+        check("respawn keeps recording", v.log[-1] == "restart(record=True)",
+              str(v.log))
+        check("a second segment was opened",
+              live.recording["parts"] == ["rec_raw.mkv", "rec_raw.p2.mkv"],
+              str(live.recording["parts"]))
+        gaps = live.recording["gaps"]
+        check("the gap is back-dated to the stall, not to the respawn",
+              len(gaps) == 1 and 11.9 <= gaps[0]["t1"] - gaps[0]["t0"] <= 13.0,
+              f"{gaps[0]['t1'] - gaps[0]['t0']:.1f}s" if gaps else "no gap")
+    finally:
+        live.recording.update(on=False, parts=[], gaps=[], t0=None)
+
+
+def test_gap_removal_keeps_audio_and_clips_aligned():
+    # 10s recorded, capture down from 4s to 6s. Bytes are wall seconds.
+    bps = live.AUDIO_BYTES_PER_SEC
+    gaps = [{"t0": 4.0, "t1": 6.0, "a0": 4 * bps, "a1": 6 * bps}]
+    keep = live.audio_keep_ranges(0, 10 * bps, gaps)
+    check("the dead window comes out of the audio",
+          keep == [(0, 4 * bps), (6 * bps, 10 * bps)],
+          str([(a // bps, b // bps) for a, b in keep]))
+    check("kept audio equals the recorded video length",
+          sum(b - a for a, b in keep) == 8 * bps)
+    check("a clip before the gap does not move",
+          live.shift_offset(2.0, gaps) == 2.0)
+    check("a clip after the gap moves back by its length",
+          live.shift_offset(9.0, gaps) == 7.0)
+    check("a clip inside the gap collapses onto its edge",
+          live.shift_offset(5.0, gaps) == 4.0)
+    check("no gaps means no shifting", live.shift_offset(9.0, []) == 9.0)
+
+
 if __name__ == "__main__":
     for fn in (test_loop_is_not_blocked,
                test_restart_recording_does_not_race_the_swap,
                test_stall_watchdog_is_suppressed,
                test_mux_waits_for_the_mkv_to_close,
-               test_shutdown_leaves_no_orphan):
+               test_shutdown_leaves_no_orphan,
+               test_a_stall_does_not_amputate_the_recording,
+               test_gap_removal_keeps_audio_and_clips_aligned):
         fn()
     print("\n" + ("ALL PASS" if not FAILURES else f"FAILURES: {FAILURES}"))
     raise SystemExit(1 if FAILURES else 0)

@@ -242,6 +242,14 @@ class Profile:
 
         return {"speaker": state["speaker"], "dialogue": dialogue_text,
                 "choices": options,
+                # the blocks this line was actually built from. The change
+                # gate watches these and nothing else: HUD chrome and
+                # Genshin's permanent UID sit over open world, so judging
+                # them would hand the verdict to whatever the scenery is
+                # doing, while a dialogue panel is dark and still between
+                # keystrokes.
+                "boxes": ([plate] if plate is not None else [])
+                + state["dialogue"],
                 # weakest link of the rows that made the line: a mid-fade or
                 # half-rendered read scores visibly below settled text, and
                 # live.py uses that to make shaky reads earn extra sightings.
