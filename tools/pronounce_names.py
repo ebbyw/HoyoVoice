@@ -145,6 +145,17 @@ TERMS = {
     "Asha": "Ahshaa",
     # "eign" is read as its own syllable: ɹˌiˈInbO, "ree-EYE-n-bow"
     "Reignbow": "Rainbow",
+    # The one entry here that is only wrong on ONE platform: misaki says
+    # ʃˈɑmən, espeak says ʃˈæmən ("SHAM-un", rhyming with salmon), so this
+    # reads correctly on macOS and wrong on Windows. "shahmon" is ʃˈɑmən on
+    # both — the same reading macOS already had, not a new approximation.
+    # Lowercase on purpose: it is a common noun, and a capitalised
+    # replacement mid-sentence reads as a proper noun. The plural needs its
+    # own entry because substitution is word-bounded, so \bshaman\b never
+    # matches inside "shamans"; "shamanism" has the same split if it ever
+    # turns up.
+    "shaman": "shahmon",
+    "shamans": "shahmons",
     # NOT a phonetic fix, and the one entry here that breaks this file's own
     # rule about no-ops on purpose: "Wishpower" already reads correctly as
     # wˈɪʃpWəɹ. Two stressed words rather than one compound is a delivery
@@ -274,7 +285,11 @@ def merge(path, rosters, custom_words):
                 # "Herta" and "March", not "The", "7th", "LV.999" or "Dr."
                 cw.update(w for w in name.split()
                           if PLAIN_WORD.fullmatch(w) and w.lower() not in STOP)
-        cw.update(TERMS)          # invented words are what OCR fuses worst
+        # invented words are what OCR fuses worst — but only the invented
+        # ones. A term that is an ordinary English word ("shaman") is already
+        # in the recognizer's vocabulary, and pinning it there would be a
+        # hint it doesn't need. Capitalisation is the tell.
+        cw.update(t for t in TERMS if t[:1].isupper())
         settings["custom_words"] = sorted(w for w in cw if len(w) > 1)
         words = len(settings["custom_words"]) - before
     path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
