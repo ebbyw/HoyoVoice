@@ -145,9 +145,11 @@ TERMS = {
     "Asha": "Ahshaa",
     # "eign" is read as its own syllable: ɹˌiˈInbO, "ree-EYE-n-bow"
     "Reignbow": "Rainbow",
-    # NOT a phonetic fix — "Wishpower" is already wˈɪʃpWəɹ, which is right.
-    # This is a delivery choice: two stressed words instead of a compound
-    # with one. Drop the entry to hear it as one word.
+    # NOT a phonetic fix, and the one entry here that breaks this file's own
+    # rule about no-ops on purpose: "Wishpower" already reads correctly as
+    # wˈɪʃpWəɹ. Two stressed words rather than one compound is a delivery
+    # choice, A/B'd against the compound and kept because the difference is
+    # audible. Keep it.
     "Wishpower": "Wish power",
 }
 
