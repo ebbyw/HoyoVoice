@@ -14,6 +14,7 @@ from .base import Profile, in_region
 class HSR(Profile):
     name = "hsr"
     label = "Honkai: Star Rail"
+    PLAYER_NAME = "Trailblazer"
     SCREENS = frozenset({"dialogue", "narration", "lore", "loading",
                          "overlay", "quickread", "infoscreen", "chat"})
 

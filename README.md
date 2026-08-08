@@ -91,7 +91,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 | Message / group-chat panels | Each message in its sender's cast voice, incrementally as you scroll; system notices ("… started sharing location") read by the narrator |
 | Info screens (Participant Details…) | Read top-to-bottom via the same reader |
 | Floating host bubbles (portrait, no nameplate) | Spoken as `settings.overlay_speaker` |
-| Choice prompt, one option | Read as `settings.choice_speaker` (narrator by default), after the line it sits above |
+| Choice prompt, one option | Read as the player character (`Traveler` / `Trailblazer`), after the line it sits above |
 | Choice prompt, two or more options | Logged, never spoken — that's a menu |
 | Menus, boards, HUDs | Ignored (dialogue must be centered; unknown speakers need the Continue hint) |
 
@@ -109,7 +109,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
   - *Windows:* the recognition model is Chinese-trained and drops spaces, so punctuation spacing is restored and fused word pairs are split ("mercyis" → "mercy is"); capitalised tokens are protected so game proper nouns survive. Where several reads of one line disagree, the one that scans as the most real words is the one spoken.
 - **Pronunciations** — `settings.pronunciations` substitutes spoken forms at synthesis only ("Wishpower" → "Wish power"); logs keep the real spelling.
 - **Sentiment pacing** — positive/exclamatory lines read slightly faster, somber ones slower (±~10%).
-- **Choice prompts** — a *lone* option is read aloud (with nothing to choose between, the game is putting words in the player character's mouth rather than offering a menu), always after the line it sits above and only into a gap in the talking; `settings.choice_speaker` gives it a voice, otherwise the narrator reads it. Two or more options are a menu, so they are logged and left unspoken. Either way the prompt appears in the dashboard log, including when it went unread.
+- **Choice prompts** — a *lone* option is read aloud (with nothing to choose between, the game is putting words in the player character's mouth rather than offering a menu), always after the line it sits above and only into a gap in the talking. It's cast under the player character's name for the current game — `Traveler` in Genshin, `Trailblazer` in Star Rail — so it appears in Casting like anyone else and you can give it whatever voice you want; `settings.choice_speaker` overrides the name. Two or more options are a menu, so they are logged and left unspoken. Either way the prompt appears in the dashboard log, including when it went unread.
 
 ## Casting — `voices.json`
 
@@ -122,7 +122,8 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
     "game": "auto",                         // auto | hsr | genshin
     "recordings_dir": "~/Videos",
     "overlay_speaker": "Rin Tohsaka",       // voice for floating host bubbles
-    "choice_speaker": "Traveler",           // voice for a lone choice option
+    "choice_speaker": "Aether",             // rename the player character
+                                            // (default: Traveler/Trailblazer)
     "video_device": "ShadowCast 3",
     "audio_device": "ShadowCast 3",
     "text_fixes": {"lason": "Iason"},       // proper nouns OCR keeps mangling
