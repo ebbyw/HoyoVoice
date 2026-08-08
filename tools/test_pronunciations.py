@@ -49,6 +49,13 @@ CASES = [
     ("N-no, I won't.", "Nuh-no, I won't."),
     ("A-aah! Get away!", "Ah-ah! Get away!"),
     ("b-but why", "buh-but why"),
+    # Genshin writes the stammer with an em dash. Same stammer, and the
+    # respelling normalizes the dash to a plain hyphen.
+    ("A—Ahh! Yes, uhm… Of course!", "Ah-Ah! Yes, um… Of course!"),
+    ("W—what are you doing?", "Wuh-what are you doing?"),
+    # the punctuation kind of dash is spaced, and never a stammer
+    ("The vegetable — it is the eyes of the earth.",
+     "The vegetable — it is the eyes of the earth."),
     # E/I/O already read as sounds, and every respelling tried was worse
     ("I-I don't know.", "I-I don't know."),
     ("O-okay then.", "O-okay then."),
