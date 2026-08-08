@@ -6,6 +6,14 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Changed
+
+- **A choice prompt with a single option is now read aloud.** With nothing to choose between, the game isn't offering a menu so much as putting words in the player character's mouth, and the option reads as part of the scene; two or more options are a real menu and stay logged-only, as before. `settings.choice_speaker` gives the option a voice — the Traveler, say — otherwise the narrator reads it.
+
+  Getting the order right is the whole problem: the option bubble renders complete while the line beneath it is still typing, so a naive read speaks the answer before the question. The option is therefore held until the line under it has been through the gate (spoken, deduped, or skipped as voiced), then read into the first gap where our own voice is idle and the game's has stopped — the line may be voiced even when the option is not. It is deliberately not conditional on the option still being on screen: players click through while the line is still being read, and requiring it would mean the option is almost never read at a natural pace. What bounds it instead is time — an option that finds no gap within 8 seconds is dropped rather than arriving several beats late, and logged as `choice prompt (not read — too late)`. A spoken option also joins the dedupe window, since picking a lone option usually makes the game say it straight back as a dialogue line.
+
+  Both paths verified against the calibration recording: the prompt in a stretch with a pause was read in order, after its line; the one in wall-to-wall dialogue found no gap and was logged unread.
+
 ## [0.7.0] - 2026-08-07
 
 ### Added
