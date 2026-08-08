@@ -124,6 +124,10 @@ FIXES = {
     # --- Star Rail: everywhere else ---
     "Aglaea": "Ah-glay-uh",
     "Anaxa": "Ah-nak-sah",
+    # unhyphenated on purpose: "aa-shah" phonemizes to ˈɑˌɑʃˌɑ, an extra
+    # syllable, and "Ah-shah" splits the two engines (misaki ˌɑʃˈɑ, espeak
+    # ˈɑːʃˈɑː). "Ahshaa" is ˈɑʃɑ on both.
+    "Asha": "Ahshaa",
     "Asta": "Ass-tuh",
     "Castorice": "Castor-ess",
     "Gepard": "Ghep-ard",
