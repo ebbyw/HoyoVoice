@@ -199,7 +199,11 @@ def frame_is_dark():
         from PIL import Image
         img = Image.open(FRAME).convert("L")
         img.thumbnail((48, 48))
-        px = list(img.getdata())
+        # getdata() is deprecated and goes away in Pillow 14; its replacement
+        # only exists from Pillow 11.3, so keep the old call as the fallback
+        # rather than pinning a floor the rest of the app doesn't need.
+        data = getattr(img, "get_flattened_data", None) or img.getdata
+        px = list(data())
         return sum(px) / len(px) < 28
     except Exception:
         return False
