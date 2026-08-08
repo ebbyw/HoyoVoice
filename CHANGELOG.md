@@ -6,6 +6,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-08-07
+
 ### Fixed
 
 - **A spoken choice option had no speaker to cast.** It fell through to the narrator and logged with an em dash where the name goes, so there was no Casting row and no way to give the player character a voice of their own. Options are now cast under the player character's name for the active game — `Traveler` in Genshin, `Trailblazer` in Star Rail, `Player` otherwise — which auto-casts on first use and appears in Casting like any other character. `settings.choice_speaker` still overrides the name (for a Traveler you've named Aether, say).
