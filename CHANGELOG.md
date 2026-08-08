@@ -16,6 +16,10 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
   macOS plays through `afplay`, which has no device selection, so that backend reports no output list and the picker shows System default alone (route per-app from Sound settings there). Backends now take the live devices dict in `create_player(devices)` and `list_devices()` returns a third list; see `hv_platform/base.py`.
 
+### Fixed
+
+- **A chosen output device was ignored: speech still came out of the Windows default.** The system default reaches PortAudio through a host API that resamples whatever it's given; a *named* WASAPI endpoint doesn't — in shared mode the stream has to match the endpoint's mix format, so 24 kHz mono TTS was rejected outright (`-9997 invalid sample rate`) and the "never lose a line" fallback did what it says and spoke on the default. The Player now walks the same format ladder `AudioCapture` already needed for input: WASAPI auto-convert, then the audio as-is, then resampled to the endpoint's native rate and duplicated to stereo here. The rung that works is remembered, so only the first line of a session pays for the search, and the conversion is lazy — nothing is resampled on the common path where the endpoint takes the audio directly.
+
 ### Changed
 
 - **Paimon is now respelled `Pie-mahn` (`pˈImˈɑn`), not `Pah-ee-mahn` (`pˈɑˈimˈɑn`).** The old form spelled the diphthong out as two syllables; this one is the way the games say it. Hyphenated rather than spaced: `Pie mahn` phonemizes to the same sounds but as two words (`pˈI mˈɑn`), which puts a word break in the middle of the name.

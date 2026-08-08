@@ -27,42 +27,68 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # device table: one WASAPI entry and one truncated MME entry per device,
 # exactly the shape sounddevice reports on Windows
 DEVICES = [
-    dict(name="Microphone (ShadowCast 3)", hostapi=0,
+    dict(name="Microphone (ShadowCast 3)", hostapi=0, default_samplerate=48000,
          max_input_channels=2, max_output_channels=0),
-    dict(name="Speakers (Realtek(R) Audio)", hostapi=0,
+    dict(name="Speakers (Realtek(R) Audio)", hostapi=0, default_samplerate=48000,
          max_input_channels=0, max_output_channels=2),
     dict(name="Headphones (Arctis Nova Pro Wire", hostapi=0,
+         default_samplerate=48000,
          max_input_channels=0, max_output_channels=2),
-    dict(name="Microphone (ShadowCast 3)", hostapi=1,
+    dict(name="Microphone (ShadowCast 3)", hostapi=1, default_samplerate=48000,
          max_input_channels=2, max_output_channels=0),
-    dict(name="Speakers (Realtek(R) Audio)", hostapi=1,
+    dict(name="Speakers (Realtek(R) Audio)", hostapi=1, default_samplerate=48000,
          max_input_channels=0, max_output_channels=2),
     dict(name="Headphones (Arctis Nova Pro Wireless)", hostapi=1,
+         default_samplerate=48000,
          max_input_channels=0, max_output_channels=2),
 ]
 HOSTAPIS = [dict(name="MME"), dict(name="Windows WASAPI")]
 
 
-class FakeSd(types.ModuleType):
-    """The slice of sounddevice the backend touches."""
+class WasapiSettings:
+    def __init__(self, auto_convert=False):
+        self.auto_convert = auto_convert
 
-    def __init__(self, fail_on=()):
+
+class FakeSd(types.ModuleType):
+    """The slice of sounddevice the backend touches.
+
+    `shared_mode` models the real WASAPI rule the Player exists to satisfy:
+    a named endpoint only accepts its own mix format (48 kHz stereo here)
+    unless auto-convert is on. The system default (device=None) resamples,
+    which is why a rejected stream sounds exactly like "it ignored my pick".
+    """
+
+    WasapiSettings = WasapiSettings
+
+    def __init__(self, fail_on=(), shared_mode=False, no_auto_convert=False):
         super().__init__("sounddevice")
         self.fail_on = set(fail_on)     # indices whose stream won't open
-        self.plays = []                 # device index per play() call
+        self.shared_mode = shared_mode
+        self.no_auto_convert = no_auto_convert   # PortAudio build without it
+        self.plays = []                 # (device, samplerate, channels)
         self.queries = 0                # how often the table was walked
 
     def query_devices(self):
         self.queries += 1
         return list(DEVICES)
 
-    def query_hostapis(self):
-        return list(HOSTAPIS)
+    def query_hostapis(self, index=None):
+        return HOSTAPIS[index] if index is not None else list(HOSTAPIS)
 
-    def play(self, data, samplerate, device=None):
+    def play(self, data, samplerate, device=None, extra_settings=None):
         if device in self.fail_on:
             raise RuntimeError("Error opening OutputStream: Device unavailable")
-        self.plays.append(device)
+        channels = data.shape[1] if getattr(data, "ndim", 1) > 1 else 1
+        converting = extra_settings is not None and extra_settings.auto_convert
+        if converting and self.no_auto_convert:
+            raise RuntimeError("Error opening OutputStream: "
+                               "Invalid flag [PaErrorCode -9967]")
+        if (device is not None and self.shared_mode and not converting
+                and (samplerate != 48000 or channels != 2)):
+            raise RuntimeError("Error opening OutputStream: Invalid sample "
+                               "rate [PaErrorCode -9997]")
+        self.plays.append((device, samplerate, channels))
 
     def stop(self):
         pass
@@ -113,49 +139,82 @@ check("an output name does NOT match as an input", idx is None)
 check("empty name never matches", win32._match_device("", output=True)[0] is None)
 
 # --- Player -----------------------------------------------------------
+LINE = [0.0] * 2400                      # 100 ms of 24 kHz mono TTS
+
+
+def targets(sd):
+    return [d for d, _, _ in sd.plays]
+
+
 devices = {"video": "x", "audio": "y", "output": ""}
 p = win32.Player(devices)
-p.play(None, audio=[0.0] * 2400, samplerate=24000)
-check("empty setting plays on the system default", sd.plays == [None], repr(sd.plays))
+p.play(None, audio=LINE, samplerate=24000)
+check("empty setting plays on the system default", targets(sd) == [None],
+      repr(sd.plays))
 
 devices["output"] = "Headphones (Arctis Nova Pro Wireless)"   # dashboard swap
-p.play(None, audio=[0.0] * 2400, samplerate=24000)
+p.play(None, audio=LINE, samplerate=24000)
 check("a dashboard change lands on the next line, no restart",
-      sd.plays[-1] == 5, repr(sd.plays))
+      targets(sd)[-1] == 5, repr(sd.plays))
 
 before = sd.queries
 for _ in range(5):
-    p.play(None, audio=[0.0] * 2400, samplerate=24000)
+    p.play(None, audio=LINE, samplerate=24000)
 check("resolution is cached across lines", sd.queries == before,
       f"{sd.queries - before} extra device queries")
 check("every line went to the chosen device",
-      sd.plays[-5:] == [5] * 5, repr(sd.plays[-5:]))
+      targets(sd)[-5:] == [5] * 5, repr(targets(sd)[-5:]))
+
+# --- WASAPI shared mode: the endpoint only takes its own mix format ----
+# This is the "I picked the other speakers and it still comes out of the
+# default ones" bug: the stream is rejected and the fallback is the default.
+sd = FakeSd(shared_mode=True)
+win32 = load_backend(sd)
+devices = {"video": "x", "audio": "y",
+           "output": "Headphones (Arctis Nova Pro Wireless)"}
+p = win32.Player(devices)
+p.play(None, audio=LINE, samplerate=24000)
+check("24 kHz mono reaches a WASAPI endpoint (auto-convert)",
+      targets(sd) == [5], repr(sd.plays))
+
+# same, on a PortAudio build whose WASAPI settings don't take
+sd = FakeSd(shared_mode=True, no_auto_convert=True)
+win32 = load_backend(sd)
+p = win32.Player(dict(devices))
+p.play(None, audio=LINE, samplerate=24000)
+check("without auto-convert it converts the audio itself",
+      sd.plays == [(5, 48000, 2)], repr(sd.plays))
+step = p._step
+for _ in range(3):
+    p.play(None, audio=LINE, samplerate=24000)
+check("the working format is remembered, not re-searched",
+      p._step == step and sd.plays == [(5, 48000, 2)] * 4, repr(sd.plays))
 
 # --- device gone ------------------------------------------------------
 sd = FakeSd()
 win32 = load_backend(sd)
 devices = {"video": "x", "audio": "y", "output": "Beats Studio (offline)"}
 p = win32.Player(devices)
-p.play(None, audio=[0.0] * 2400, samplerate=24000)
-check("an unknown name falls back to the system default", sd.plays == [None])
+p.play(None, audio=LINE, samplerate=24000)
+check("an unknown name falls back to the system default", targets(sd) == [None])
 before = sd.queries
-p.play(None, audio=[0.0] * 2400, samplerate=24000)
+p.play(None, audio=LINE, samplerate=24000)
 check("a miss is not re-queried on every line", sd.queries == before,
       f"{sd.queries - before} extra device queries")
 p._next_retry = 0.0                      # cooldown elapsed
-p.play(None, audio=[0.0] * 2400, samplerate=24000)
+p.play(None, audio=LINE, samplerate=24000)
 check("after the cooldown it looks again (device may be back)",
       sd.queries > before)
 
-# a resolvable device whose stream refuses to open
+# a resolvable device whose stream refuses to open, on every rung
 sd = FakeSd(fail_on={5})
 win32 = load_backend(sd)
 devices = {"video": "x", "audio": "y",
            "output": "Headphones (Arctis Nova Pro Wireless)"}
 p = win32.Player(devices)
-p.play(None, audio=[0.0] * 2400, samplerate=24000)
+p.play(None, audio=LINE, samplerate=24000)
 check("a stream that won't open still speaks, on the default",
-      sd.plays == [None], repr(sd.plays))
+      targets(sd) == [None], repr(sd.plays))
 
 
 # --- the dashboard round trip -----------------------------------------
