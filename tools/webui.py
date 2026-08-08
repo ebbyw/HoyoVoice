@@ -10,6 +10,7 @@ import re
 import socket
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -245,9 +246,21 @@ def start_webui(shared, port=DASHBOARD_PORT):
 
     @app.get("/live.jpg")
     def live():
-        resp = send_from_directory(shared["frame_dir"], "live_frame.jpg")
-        resp.headers["Cache-Control"] = "no-store"
-        return resp
+        # ffmpeg rewrites this file continuously and replaces it by rename;
+        # on Windows, opening it in the instant between the two raises
+        # PermissionError rather than returning stale bytes, which turned a
+        # dashboard preview refresh into a 500 and a Flask traceback in the
+        # log. One retry covers the rename window.
+        for attempt in range(2):
+            try:
+                resp = send_from_directory(shared["frame_dir"],
+                                           "live_frame.jpg")
+                resp.headers["Cache-Control"] = "no-store"
+                return resp
+            except PermissionError:
+                if attempt:
+                    return ("", 503)          # caller just refreshes
+                time.sleep(0.05)
 
     @app.get("/recordings/<path:name>")
     def rec(name):
