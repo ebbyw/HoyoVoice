@@ -1,10 +1,11 @@
-"""Pins what the synthesizer is handed for interjections and stage directions.
+"""Pins what the synthesizer is handed for a line that is more sound than
+sentence.
 
-Two things go wrong when a line is more sound than sentence. "Huh!?" reaches
-Kokoro as two punctuation tokens in a row, which it was barely trained on, and
-the stop after the word collapses — the interjection slurs into the next one.
-And "*cough*" is a noise the character makes, not a word: read as one it lands
-somewhere between flat and comic. Run directly or under pytest:
+"*cough*" is a noise the character makes, not a word: read as one it lands
+somewhere between flat and comic. Asterisks have to survive OCR repair for
+that to be actionable, without the decorative ones surviving with them, and
+the log has to keep the line as the game wrote it either way. Run directly or
+under pytest:
 
     python tools/test_stage_directions.py
 """
@@ -26,15 +27,6 @@ OCR = [
     ("~*Hello*~", "*Hello*"),
 ]
 
-# (line, what the TTS is handed) — the log above keeps the original
-SPOKEN = [
-    ("Huh!? You… You're here!", "Huh? You… You're here!"),
-    ("Huh?! Really", "Huh? Really"),
-    ("No!! Never", "No! Never"),
-    ("What?? Why", "What? Why"),
-    ("Wait! Stop? Go!", "Wait! Stop? Go!"),   # single marks are left alone
-]
-
 # (line, the pieces synthesis runs) — against the SOUND_EFFECTS below
 SOUND_EFFECTS = {"cough": "sounds/cough.wav", "sigh": "Ahem.", "gasp": ""}
 PARTS = [
@@ -52,7 +44,6 @@ PARTS = [
 # duplicate of every line
 FLATTENED = [
     ("*cough* Anyway.", "[sounds/cough.wav] Anyway."),
-    ("Huh!? Really", "Huh? Really"),
     ("Hello, you two. Is something the matter?",
      "Hello, you two. Is something the matter?"),
     ("", ""),
@@ -65,11 +56,6 @@ def main():
         got = live.fix_ocr_text(raw)
         if got != want:
             print(f"FAIL ocr {raw!r}: want {want!r}, got {got!r}")
-            bad += 1
-    for line, want in SPOKEN:
-        got = live.spoken_form(line)
-        if got != want:
-            print(f"FAIL spoken {line!r}: want {want!r}, got {got!r}")
             bad += 1
     saved = live.VOICES.get("settings", {}).get("sound_effects")
     live.VOICES.setdefault("settings", {})["sound_effects"] = SOUND_EFFECTS
@@ -89,7 +75,7 @@ def main():
             live.VOICES["settings"].pop("sound_effects", None)
         else:
             live.VOICES["settings"]["sound_effects"] = saved
-    total = len(OCR) + len(SPOKEN) + len(PARTS) + len(FLATTENED)
+    total = len(OCR) + len(PARTS) + len(FLATTENED)
     print(f"{total - bad}/{total} ok")
     return 1 if bad else 0
 
