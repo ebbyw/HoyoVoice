@@ -143,6 +143,12 @@ TERMS = {
     # syllable, and "Ah-shah" splits the two engines (misaki ˌɑʃˈɑ, espeak
     # ˈɑːʃˈɑː). "Ahshaa" is ˈɑʃɑ on both.
     "Asha": "Ahshaa",
+    # "eign" is read as its own syllable: ɹˌiˈInbO, "ree-EYE-n-bow"
+    "Reignbow": "Rainbow",
+    # NOT a phonetic fix — "Wishpower" is already wˈɪʃpWəɹ, which is right.
+    # This is a delivery choice: two stressed words instead of a compound
+    # with one. Drop the entry to hear it as one word.
+    "Wishpower": "Wish power",
 }
 
 # Names that are also ordinary English words. Matching is case-insensitive by
