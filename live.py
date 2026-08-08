@@ -33,6 +33,7 @@ STATE = Path(os.environ.get("HOYOVOICE_STATE_DIR", str(ROOT)))
 sys.path.insert(0, str(ROOT / "tools"))
 from profiles import (ProfileSelector, narration_self_certain,  # noqa: E402
                       split_camel)
+from change_gate import ChangeGate  # noqa: E402
 from vad import CHUNK, SileroVAD  # noqa: E402
 from webui import start_webui  # noqa: E402
 from hv_platform import get_backend  # noqa: E402
@@ -86,6 +87,12 @@ game = ProfileSelector(VOICES.get("settings", {}).get("game", "auto"),
 
 SAMPLE_FPS = 6
 STABLE_READS = 2
+# OCR confidence thresholds for stabilization (classify() reports the
+# weakest block that made the line; engines without confidences say 1.0,
+# which leaves behavior exactly as before). Measured on real captures: a
+# settled line reads at 0.98+, a mid-fade / half-rendered one visibly lower.
+CONF_TRUSTED = 0.97           # skip the sentence-streaming cushion read
+CONF_SHAKY = 0.85             # earn one extra sighting before speaking
 # consecutive frames where the detector loses an on-screen line before we
 # give up on the candidate (~0.5s at 6fps). OCR misses are common on bright
 # backgrounds; without this, a miss discards all accumulated stability.
@@ -123,6 +130,11 @@ VAD_SOFT_THRESHOLD = 0.12
 VAD_SOFT_HITS = 3
 SOFT_GATE_MIN_VOICED = 3      # observations before the prior is trusted
 SOFT_GATE_RATIO = 0.75
+# settings.late_yield: false stops HoyoVoice cutting its own playback when
+# it thinks the game has started talking over it. Worth having as a switch
+# rather than only a threshold: in a scene with no voice acting at all,
+# every yield is a false one, and this is the one-line way to prove it.
+LATE_YIELD = True
 # the gate's lookback must never reach back before the line appeared on
 # screen — otherwise the PREVIOUS speaker's VO tail counts as evidence that
 # THIS line is voiced (false skip on fast auto-advance transitions, where
@@ -161,7 +173,11 @@ ENERGY_SIDE_FLAT = 2.5        # AND side must stay flat — music swells raise
 # --- shared state for the dashboard ---
 events = deque(maxlen=200)
 event_seq = {"n": 0}
-recording = {"on": False, "t0": None, "clips": [], "raw": None}
+# `parts` are the recording's video segments — a capture respawn has to open
+# a new one (see respawn_capture) — each stamped with the wall-clock offset
+# it started at, which is what lets the mux measure the gaps between them.
+recording = {"on": False, "t0": None, "clips": [], "raw": None,
+             "parts": []}
 record_request = {"want": None}
 device_request = {"want": None}
 unknown_speakers = set()
@@ -183,14 +199,24 @@ def frame_is_dark():
         from PIL import Image
         img = Image.open(FRAME).convert("L")
         img.thumbnail((48, 48))
-        px = list(img.getdata())
+        # getdata() is deprecated and goes away in Pillow 14; its replacement
+        # only exists from Pillow 11.3, so keep the old call as the fallback
+        # rather than pinning a floor the rest of the app doesn't need.
+        data = getattr(img, "get_flattened_data", None) or img.getdata
+        px = list(data())
         return sum(px) / len(px) < 28
     except Exception:
         return False
 
 
-latest_ocr = {"blocks": None}     # raw blocks of the current frame (debug)
+# raw blocks of the current frame (debug), plus the subset the last read
+# built its line from — what the change gate watches
+latest_ocr = {"blocks": None, "text_blocks": None}
 lost_frames = {"n": 0}            # frames the OCR daemon couldn't read at all
+# skips OCR while the text region is pixel-identical; see tools/change_gate.py
+# for the contract (an "unchanged" verdict replays the previous blocks — it
+# must never skip the iteration, or stabilization counting stalls)
+gate = ChangeGate()
 
 
 def save_shot(eid):
@@ -248,6 +274,7 @@ def metrics():
         "yielded": stats["yielded"],
         "synth_avg_ms": int(sum(synth) / len(synth)) if synth else 0,
         "ocr_avg_ms": int(sum(ocr) / len(ocr)) if ocr else 0,
+        "ocr_skipped": gate.skips,
         "lost_frames": lost_frames["n"],
         "lines_per_min": round(stats["spoken"] / mins, 1),
     }
@@ -326,10 +353,13 @@ def usually_voiced(speaker):
     return v >= SOFT_GATE_MIN_VOICED and v >= SOFT_GATE_RATIO * (v + s)
 
 
-def is_voiced(since, soft=False):
-    """soft: this speaker is usually voiced, so accept weaker evidence."""
+def vad_evidence(since, soft=False):
+    """(strong hits, weak hits, peak) in the VAD history since `since`.
+
+    Split out of is_voiced so a decision can SAY what it heard: a yield
+    that cuts a line off mid-sentence is indistinguishable in the log from
+    one that was right to fire, and the two want opposite fixes."""
     weak_threshold = VAD_SOFT_THRESHOLD if soft else VAD_WEAK_THRESHOLD
-    weak_hits = VAD_SOFT_HITS if soft else VAD_WEAK_HITS
     strong = weak = 0
     peak = 0.0
     for t, p in vad_history:
@@ -339,6 +369,13 @@ def is_voiced(since, soft=False):
             if p >= weak_threshold:
                 weak += 1
             peak = max(peak, p)
+    return strong, weak, peak
+
+
+def is_voiced(since, soft=False):
+    """soft: this speaker is usually voiced, so accept weaker evidence."""
+    weak_hits = VAD_SOFT_HITS if soft else VAD_WEAK_HITS
+    strong, weak, peak = vad_evidence(since, soft)
     return (strong >= VAD_MIN_HITS or peak >= VAD_PEAK
             or weak >= weak_hits)
 
@@ -694,40 +731,160 @@ class Speech:
         return synth_ms, speed
 
 
-def mux_recording(raw, clips, out, s0, s1):
-    """Combine: video (ffmpeg mkv) + game audio (exact byte-slice of the
-    PCM stream between recording start/stop) + TTS clips at wall offsets."""
-    # extract the game-audio slice
+def shift_offset(t, gaps):
+    """A wall-clock offset moved onto the recorded timeline.
+
+    The video loses every capture gap; the audio stream doesn't, and the
+    mux cuts the same windows out of it. So a clip stamped in wall time
+    has to come back by everything that was removed before it. A clip that
+    started *inside* a gap collapses onto its leading edge."""
+    shift = 0.0
+    for g in gaps:
+        if t >= g["t1"]:
+            shift += g["t1"] - g["t0"]
+        elif t > g["t0"]:
+            shift += t - g["t0"]
+    return max(0.0, t - shift)
+
+
+def probe_duration(path):
+    """Seconds of video in a file, or None if ffprobe can't say."""
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "format=duration:stream=duration",
+             "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True, text=True, timeout=20)
+        for line in r.stdout.split():
+            if line not in ("N/A", ""):
+                return float(line)
+    except (subprocess.SubprocessError, ValueError, OSError):
+        pass
+    return None
+
+
+def measure_gaps(parts, s0):
+    """Where the capture was down, measured rather than assumed.
+
+    Each part records the wall-clock offset it STARTED at. How much video
+    it then actually contains only ffprobe knows — the frame file can stop
+    updating well before the encoder does, so the stall the watchdog timed
+    is longer than the video that went missing (measured: 10.4s waited,
+    6.2s of video lost, and the 4.2s difference came straight off the sync
+    of everything after it). The gap before part i is therefore the wall
+    time between the end of part i-1's video and the start of part i."""
+    gaps, prev_end = [], None
+    for p in parts:
+        dur = probe_duration(p["file"])
+        if prev_end is not None:
+            g = max(0.0, p["t"] - prev_end)
+            if g > 0.05:
+                gaps.append({
+                    "t0": prev_end, "t1": p["t"],
+                    "a0": s0 + int(prev_end * AUDIO_BYTES_PER_SEC) // 4 * 4,
+                    "a1": s0 + int(p["t"] * AUDIO_BYTES_PER_SEC) // 4 * 4})
+        if dur is None:
+            return gaps          # can't measure further; cut nothing more
+        prev_end = p["t"] + dur
+    return gaps
+
+
+def audio_keep_ranges(s0, s1, gaps):
+    """Byte ranges of the PCM stream that have video behind them.
+
+    The capture can die and be respawned mid-take; the audio stream never
+    stops. Pairing the whole of one with the gapped other is what made a
+    28s video carry 265s of sound, so the windows where nothing was
+    captured come out of the audio as well."""
+    keep, cursor = [], s0
+    for g in sorted(gaps, key=lambda g: g["a0"]):
+        a0, a1 = min(max(g["a0"], s0), s1), min(max(g["a1"], s0), s1)
+        if a0 > cursor:
+            keep.append((cursor, a0))
+        cursor = max(cursor, a1)
+    if s1 > cursor:
+        keep.append((cursor, s1))
+    return keep
+
+
+def concat_parts(parts):
+    """One video file out of the recording's segments, or None.
+
+    Segments come from separate ffmpeg runs with identical encoder
+    settings, so they stream-copy together; if that ever fails, the caller
+    keeps the longest single part rather than losing the take."""
+    parts = [p for p in parts if Path(p).exists() and Path(p).stat().st_size]
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return Path(parts[0])
+    listing = Path(parts[0]).with_suffix(".parts.txt")
+    listing.write_text("".join(
+        f"file '{Path(p).as_posix()}'\n" for p in parts))
+    joined = Path(str(parts[0]).replace("_raw", "_joined"))
+    ok = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "concat",
+         "-safe", "0", "-i", str(listing), "-c", "copy", "-y", str(joined)],
+        capture_output=True).returncode == 0
+    listing.unlink(missing_ok=True)
+    if ok:
+        return joined
+    joined.unlink(missing_ok=True)
+    print(f"[recording] concat of {len(parts)} segments FAILED — keeping the "
+          f"longest one", flush=True)
+    return Path(max(parts, key=lambda p: Path(p).stat().st_size))
+
+
+def mux_recording(parts, clips, out, s0, s1):
+    """Combine: video (ffmpeg mkv segments) + game audio (byte-slices of the
+    PCM stream between recording start/stop, minus any capture gaps) + TTS
+    clips at their offsets on that same timeline."""
+    gaps = measure_gaps(parts, s0)
+    raw = concat_parts([p["file"] for p in parts])
+    if raw is None:
+        add_event("recording FAILED (no video)", "yield", None, Path(out).name)
+        print(f"[recording] no usable video segment for {out}", flush=True)
+        return
+    keep = audio_keep_ranges(s0, s1, gaps)
     n = 0
     with open(AUDIO_PCM, "rb") as src, open(GAME_SLICE, "wb") as dst:
-        src.seek(s0)
-        remaining = max(s1 - s0, 0)
-        while remaining > 0:
-            b = src.read(min(1 << 20, remaining))
-            if not b:
-                break
-            dst.write(b)
-            n += len(b)
-            remaining -= len(b)
-    print(f"[recording] game audio slice: {n / AUDIO_BYTES_PER_SEC:.1f}s; "
-          f"muxing {len(clips)} TTS clips into {out}", flush=True)
+        for a0, a1 in keep:
+            src.seek(a0)
+            remaining = max(a1 - a0, 0)
+            while remaining > 0:
+                b = src.read(min(1 << 20, remaining))
+                if not b:
+                    break
+                dst.write(b)
+                n += len(b)
+                remaining -= len(b)
+    clips = [dict(c, start=shift_offset(c["start"], gaps),
+                  end=(None if c.get("end") is None
+                       else shift_offset(c["start"], gaps)
+                       + max(c["end"] - c["start"], 0.05)))
+             for c in clips]
+    dropped = (s1 - s0 - n) / AUDIO_BYTES_PER_SEC
+    print(f"[recording] game audio slice: {n / AUDIO_BYTES_PER_SEC:.1f}s"
+          + (f" ({dropped:.1f}s cut across {len(gaps)} capture gap(s))"
+             if gaps else "")
+          + f"; muxing {len(clips)} TTS clips into {out}", flush=True)
     cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error",
            "-i", str(raw),
            "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", str(GAME_SLICE)]
     for c in clips:
         cmd += ["-i", c["file"]]
-    parts, labels = [], []
+    filters, labels = [], []
     for i, c in enumerate(clips, 2):        # clip inputs start at index 2
         trim = (f"atrim=0:{max(c['end'] - c['start'], 0.05):.3f},"
                 if c.get("end") is not None else "")
         ms = int(c["start"] * 1000)
-        parts.append(f"[{i}:a]{trim}aresample=48000,"
-                     f"aformat=channel_layouts=stereo,"
-                     f"volume=2.5,alimiter=limit=0.95,"   # Kokoro is quiet
-                     f"adelay={ms}|{ms}[a{i}]")
+        filters.append(f"[{i}:a]{trim}aresample=48000,"
+                       f"aformat=channel_layouts=stereo,"
+                       f"volume=2.5,alimiter=limit=0.95,"  # Kokoro is quiet
+                       f"adelay={ms}|{ms}[a{i}]")
         labels.append(f"[a{i}]")
     if clips:
-        fc = (";".join(parts) + ";[1:a]" + "".join(labels)
+        fc = (";".join(filters) + ";[1:a]" + "".join(labels)
               + f"amix=inputs={len(clips) + 1}:normalize=0[out]")
         cmd += ["-filter_complex", fc, "-map", "0:v", "-map", "[out]"]
     else:
@@ -735,7 +892,8 @@ def mux_recording(raw, clips, out, s0, s1):
     cmd += ["-c:v", "copy", "-c:a", "aac", "-y", str(out)]
     ok = subprocess.run(cmd, capture_output=True).returncode == 0
     if ok:
-        Path(raw).unlink(missing_ok=True)
+        for p in {str(raw), *(p["file"] for p in parts)}:
+            Path(p).unlink(missing_ok=True)
         GAME_SLICE.unlink(missing_ok=True)
         for c in clips:
             Path(c["file"]).unlink(missing_ok=True)
@@ -750,6 +908,38 @@ def mux_recording(raw, clips, out, s0, s1):
 # every restart/finalize, on the loop or off it, goes through this lock.
 video_lock = threading.Lock()
 video_swap = {"thread": None}
+
+
+def respawn_capture(video):
+    """Restart the capture, keeping an in-progress recording alive.
+
+    One ffmpeg owns both the capture device and the recording, so every
+    respawn ends the MKV it was writing — and a respawn that asks for no
+    recording amputates the take silently. That is what a stalled capture
+    did mid-session: video stopped at the stall, `recording["on"]` stayed
+    true, clips and the audio slice kept running on wall clock, and the
+    mux paired a 28s video with 265s of sound. The recording continues
+    into the next segment instead.
+
+    All that is recorded here is WHEN each segment started, in wall time.
+    How much video was actually lost is not knowable yet and must not be
+    guessed: the first attempt inferred it from how long the watchdog had
+    been waiting, which overshot by 4.2s on a real stall — the frame file
+    stops updating before the encoder does — and everything after the gap
+    came out that far off. mux_recording measures each segment instead.
+
+    Caller must hold video_lock.
+    """
+    if not recording["on"]:
+        video.restart()
+        return
+    part = Path(recording["raw"].replace(
+        "_raw.mkv", f"_raw.p{len(recording['parts']) + 1}.mkv"))
+    video.restart(record_path=part)
+    recording["parts"].append(
+        {"file": str(part), "t": time.monotonic() - recording["t0"]})
+    print(f"[recording] capture respawned — continuing into {part.name}",
+          flush=True)
 
 
 def swap_video_async(video, finalize_first=False, on_finalized=None):
@@ -775,7 +965,9 @@ def swap_video_async(video, finalize_first=False, on_finalized=None):
                 video.finalize(timeout=8)
             if on_finalized is not None:
                 on_finalized()
-            video.restart()
+            # normally the recording is already off here (this IS the stop
+            # path); respawn_capture keeps one alive if it isn't
+            respawn_capture(video)
 
     video_swap["thread"] = threading.Thread(target=run, daemon=True)
     video_swap["thread"].start()
@@ -930,6 +1122,14 @@ def main():
     os.environ.setdefault("HOYOVOICE_OCR_ENGINE",
                           VOICES.get("settings", {}).get("ocr_engine", "auto"))
     ocr = backend.create_ocr(ROOT, custom_words_file())
+    # settings.change_gate: false disables the pixel gate entirely;
+    # settings.change_gate_frac tunes what share of a box's text pixels may
+    # move before it counts as changed (lower = more suspicious = more OCR)
+    gate.enabled = bool(VOICES.get("settings", {}).get("change_gate", True))
+    gate.frac = float(VOICES.get("settings", {}).get("change_gate_frac",
+                                                     gate.frac))
+    global LATE_YIELD
+    LATE_YIELD = bool(VOICES.get("settings", {}).get("late_yield", True))
 
     candidate, candidate_count = None, 0
     candidate_growing = False
@@ -947,6 +1147,7 @@ def main():
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
+    playing_speaker = None      # whose line is on the speakers right now
     qr_seen, qr_absent = set(), 99      # Quick Read incremental-reading state
     qr_gone_t0 = 0.0                    # when the reader panel first vanished
     chat_prev = set()                   # last frame's messages (settle check)
@@ -1008,13 +1209,16 @@ def main():
                             time.sleep(0.1)
                     s0 = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
                     recording.update(on=True, t0=time.monotonic(), clips=[],
-                                     raw=str(raw), s0=s0)
+                                     raw=str(raw), s0=s0,
+                                     parts=[{"file": str(raw), "t": 0.0}])
                     last_frame_change = time.monotonic()
                     print("[recording started]", flush=True)
                 elif not want and recording["on"]:
                     recording["on"] = False
                     s1 = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
                     raw, clips = recording["raw"], recording["clips"]
+                    parts = (list(recording["parts"])
+                             or [{"file": raw, "t": 0.0}])
                     s0 = recording.get("s0", 0)
                     out = raw.replace("_raw.mkv", ".mp4")
                     # clean mkv close, then mux, then respawn — all off the
@@ -1025,26 +1229,46 @@ def main():
                         video, finalize_first=True,
                         on_finalized=lambda: threading.Thread(
                             target=mux_recording,
-                            args=(raw, clips, out, s0, s1),
+                            args=(parts, clips, out, s0, s1),
                             daemon=True).start())
                     last_frame_change = time.monotonic()
                     print("[recording stopped — finalizing]", flush=True)
 
             # Mid-play yield. Our TTS is NOT in the capture (it plays on the
             # computer's speakers; the card hears only HDMI), so while we're
-            # talking, ANY speech evidence in the feed is game VO — use the
-            # aggressive soft thresholds unconditionally. The worst false
-            # positive merely clips our own playback.
+            # talking, speech evidence in the feed is the game's voice.
+            #
+            # It reads that evidence at the SAME sensitivity as the decision
+            # to speak in the first place, which means the per-speaker prior:
+            # for a character the game has voiced before, the softest hint is
+            # enough to stand down. Forcing the soft thresholds on regardless
+            # was justified as "the worst false positive merely clips our own
+            # playback" — but the soft floor is a VAD probability of 0.12
+            # over three 32ms chunks, which Natlan's vocal music clears
+            # comfortably, and a scene with no voice acting in it at all lost
+            # four lines to it, each cut off mid-sentence with nothing
+            # audible taking over. Clipping our own playback IS the failure
+            # the whole feature exists to avoid.
+            yield_soft = (usually_voiced(playing_speaker)
+                          if playing_speaker else False)
             if (speech.playing and speech.t_play
                     and not speech.qr_playing
-                    and is_voiced(speech.t_play + 0.2, soft=True)):
+                    and LATE_YIELD
+                    and is_voiced(speech.t_play + 0.2, soft=yield_soft)):
+                # read the evidence BEFORE stopping — stop() clears t_play
+                t_play = speech.t_play
+                s, w, pk = vad_evidence(t_play + 0.2, soft=yield_soft)
                 speech.stop()
                 stats["yielded"] += 1
                 if yield_event_id:
                     for e in events:
                         if e["id"] == yield_event_id:
                             e["action"], e["cls"] = "yielded to VO", "yield"
-                print("[yielded to late VO]", flush=True)
+                # what it heard, and how far in — a yield that cut a line
+                # short reads exactly like a correct one otherwise
+                print(f"[yielded to late VO — {time.monotonic() - t_play:.1f}s in,"
+                      f" peak {pk:.2f}, strong {s}, weak {w}"
+                      f"{', soft' if yield_soft else ''}]", flush=True)
 
             if not observing["on"]:
                 candidate, candidate_count = None, 0
@@ -1074,10 +1298,15 @@ def main():
                 # on top of it would fight the swap for the device.
                 last_frame_change = now
             elif now - last_frame_change > 10:
-                print("[capture stalled — respawning]", flush=True)
+                stalled = now - last_frame_change
+                print(f"[capture stalled {stalled:.0f}s — respawning]",
+                      flush=True)
                 with video_lock:
-                    video.restart()
+                    # keeps an in-progress recording going into a new
+                    # segment rather than ending it where the stall began
+                    respawn_capture(video)
                 last_frame_change = time.monotonic()
+                gate.reset()          # baseline belongs to the dead capture
                 continue
 
             try:
@@ -1089,12 +1318,30 @@ def main():
             last_mtime = mtime
             last_frame_change = now
 
-            t0 = time.time()
-            blocks = ocr.recognize(FRAME)
-            if blocks is None:          # daemon died; it respawned itself
-                continue
-            stats["ocr_ms"].append(int((time.time() - t0) * 1000))
-            latest_ocr["blocks"] = blocks
+            # cheap pixel gate first: while the text region is identical to
+            # the previous frame, REPLAY the previous blocks through the
+            # normal path instead of paying for OCR. Replaying (not
+            # skipping) keeps stabilization counting, chat settle checks
+            # and panel-close detection ticking exactly as before.
+            # Gate ONLY while a line is on screen, watching that line's own
+            # blocks. Falling back to every block when there was no line
+            # looked like the safe direction — more boxes, more ways to
+            # notice a change — but the gate can only see where text ALREADY
+            # was, so a line appearing on a screen that had none lands
+            # outside every box it is watching and reads as unchanged.
+            # Measured over 1650 frames of a Genshin conversation: that
+            # fallback accounted for 10 of the 17 stale verdicts, and
+            # dropping it costs 11% of the skips to remove 76% of them.
+            if gate.unchanged(FRAME, latest_ocr["text_blocks"]):
+                blocks = latest_ocr["blocks"]
+            else:
+                t0 = time.time()
+                blocks = ocr.recognize(FRAME)
+                if blocks is None:      # daemon died; it respawned itself
+                    continue
+                stats["ocr_ms"].append(int((time.time() - t0) * 1000))
+                latest_ocr["blocks"] = blocks
+                latest_ocr["text_blocks"] = None    # until classify sets it
             if not blocks:
                 # NO blocks at all means we failed to read the frame (a torn
                 # JPEG mid-rewrite, common under recording load), not that
@@ -1214,6 +1461,16 @@ def main():
                 continue
 
             state = screens.classify(blocks)
+            # Narrow the gate to the blocks this line was built from. Handed
+            # every block on the frame it watches the HUD and the UID too,
+            # which sit over open world — see tools/change_gate.py.
+            # ONLY when there is a line: a screen with no dialogue can still
+            # leave a lone nameplate-shaped block behind, and narrowing onto
+            # that one box pointed the gate at a scrap of static UI, which
+            # then reported "unchanged" for as long as it sat there. With no
+            # line to watch, watch everything and let the gate fail open.
+            latest_ocr["text_blocks"] = (state.get("boxes")
+                                         if state["dialogue"] else None)
 
             # Choice prompts. A LONE option is read aloud: with nothing to
             # choose between, the game isn't offering a menu so much as
@@ -1364,6 +1621,7 @@ def main():
             miss_streak = 0          # a real read: the line is on screen
             state["speaker"] = normalize_speaker(state["speaker"])
             state["dialogue"] = fix_ocr_text(state["dialogue"])
+            conf = state.get("conf", 1.0)   # 1.0 = engine has no confidences
             key = (state["speaker"], normalize_text(state["dialogue"]))
             same_text = candidate is not None and key[1] == candidate[1]
             # a strict prefix is the typewriter growing, not jitter
@@ -1382,7 +1640,7 @@ def main():
                            or len(key[1]) >= SHORT_LINE))
             if key == candidate:
                 candidate_count += 1
-                candidate_variants.append(state["dialogue"])
+                candidate_variants.append((state["dialogue"], conf))
             elif jitter:
                 # Same on-screen line, slightly different read (". mongrel."
                 # vs ".mongrel."). Restarting the count here made lines
@@ -1390,9 +1648,9 @@ def main():
                 # skip every few seconds. Keep counting, adopt the latest.
                 candidate = key
                 candidate_count += 1
-                candidate_variants.append(state["dialogue"])
+                candidate_variants.append((state["dialogue"], conf))
             else:
-                candidate_variants = [state["dialogue"]]
+                candidate_variants = [(state["dialogue"], conf)]
                 # if the text GREW from the previous candidate, the typewriter
                 # is mid-render (it pauses at sentence ends!) — stay patient
                 candidate_growing = (candidate is not None
@@ -1433,9 +1691,18 @@ def main():
                 # Speak what's complete now instead of waiting the patient +4;
                 # if more text follows, it arrives as growth and the extension
                 # path speaks only the remainder — after the prefix finishes.
-                required = STABLE_READS + 1
+                # A high-confidence read doesn't need the extra cushion — the
+                # cushion exists to ride out shaky mid-render reads, and the
+                # recognizer already vouches for this one.
+                required = STABLE_READS + (0 if conf >= CONF_TRUSTED else 1)
             else:
                 required = STABLE_READS + 4
+            if conf < CONF_SHAKY:
+                # mid-fade / half-rendered text scores visibly below settled
+                # text (a settled chat line reads at 0.98+; the mid-fade
+                # "started shan ing (ocation" class doesn't) — make a shaky
+                # read earn one extra sighting before it can be spoken
+                required += 1
             # `>=`, not `==`: `required` can DROP mid-count (a jittered read
             # adds the closing period, so `complete` flips and the patient
             # +4 allowance disappears). With exact equality the count sails
@@ -1452,9 +1719,13 @@ def main():
             # correct one was a 2-of-29 minority, so majority voting would
             # pick the wrong text. Score by how many tokens are real words.
             same_norm = [v for v in candidate_variants
-                         if normalize_text(v) == key[1]]
+                         if normalize_text(v[0]) == key[1]]
             if len(same_norm) > 1:
-                best = max(same_norm, key=text_quality)
+                # real-word fraction first (measured: the correct split was a
+                # 2-of-29 minority, so majority voting picks wrong); engine
+                # confidence breaks the ties word-count can't see
+                best = max(same_norm,
+                           key=lambda v: (text_quality(v[0]), v[1]))[0]
                 if best != state["dialogue"]:
                     state["dialogue"] = best
 
@@ -1636,6 +1907,7 @@ def main():
             yield_event_id = add_event(
                 screen_kind, "spoken", state["speaker"], speak_text,
                 voice, speed, can_replay=True, shot=True)
+            playing_speaker = state["speaker"]
             gate_max = max((p for t, p in vad_history
                             if t >= gate_since), default=-1.0)
             tag = "" if screen_kind == "spoken" else f"{screen_kind}: "
