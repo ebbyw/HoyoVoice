@@ -6,6 +6,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-08-08
+
 ### Fixed
 
 - **Lines were cut off mid-sentence in a scene with no voice acting in it.** The late-VO yield stops playback the moment the game starts talking over us, and it was reading the feed at the most sensitive setting the app has, unconditionally — a VAD probability of 0.12 across three 32ms chunks. Natlan's vocal music clears that comfortably. Four lines of one Genshin quest were cut off partway with nothing audible taking over, and in the recording of it the captured audio is silent for eleven seconds after the cut. The comment justifying the setting said the worst case was "merely clips our own playback", which is the failure the feature exists to prevent, not an acceptable cost of it.
@@ -16,6 +18,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
   How long that window was has to be **measured**, not inferred. The first attempt took it from how long the stall watchdog had been waiting, which sounds equivalent and isn't: the frame file stops updating before the encoder does, so a real stall that the watchdog timed at 10.4s had only lost 6.2s of video, 4.2s too much came out of the audio, and everything after the gap was 4.2s out — a recording that looks fine until the voices drift. The mux now ffprobes each segment and takes the gap as the wall time between the end of one segment's video and the start of the next. If ffprobe can't answer, nothing is cut rather than guessed. `tools/test_video_swap.py` pins the respawn, the measurement and the gap arithmetic.
 
+- **The dashboard's feed preview returned a 500 on Windows.** ffmpeg replaces `live_frame.jpg` by rename, and opening it in the instant between the two raises `PermissionError` there rather than returning stale bytes — so a preview refresh landed a Flask traceback in the session log. One retry covers the rename window; a second failure returns a 503 the dashboard simply refreshes past. Also swaps `Image.getdata()`, deprecated and removed in Pillow 14, for its replacement where the installed Pillow is new enough to have it.
+
 ### Added
 
 - **A pixel change gate skips OCR while the dialogue is static.** ffmpeg rewrites the frame file continuously, so mtime can't tell a static line from a new one — the loop paid a full OCR call per sampled frame (115ms on DirectML, a Vision call on macOS) even while text sat unchanged on screen, which is most of the time. `tools/change_gate.py` decodes the frame at half scale (~1ms) and compares the pixels under the blocks the last read built its line from, counting how many *bright* ones moved: game text is light-on-dark, so the world animating behind a static line moves dark pixels while any text change — including brand-new text — moves bright ones.
@@ -24,9 +28,11 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
   An "unchanged" verdict replays the previous blocks through the normal pipeline rather than skipping the iteration, so stabilization counting, chat settle checks and panel-close detection tick exactly as before; every ambiguous case (torn frame, moved boxes, no box with text in it) fails open to a real OCR call.
 
-  The gate may *defer* an OCR call but never cancel one, and that is a stronger guarantee than it sounds: a wrong "unchanged" replays blocks that describe the same boxes, which are still unchanged, so nothing inside the loop breaks the cycle. A session found exactly that — a screen with no dialogue left a lone nameplate-shaped block behind, the gate narrowed onto that one scrap of static UI, and the pipeline read nothing for 47 seconds until the capture respawned and broke it. Two answers: the watch set narrows only when there is actually a line (otherwise every block is watched, where the scenery keeps the gate honest), and no more than twelve frames may be skipped in a row, so any wrong verdict costs about two seconds instead of the rest of the session.
+  The gate may *defer* an OCR call but never cancel one, and that is a stronger guarantee than it sounds: a wrong "unchanged" replays blocks that describe the same boxes, which are still unchanged, so nothing inside the loop breaks the cycle. A session found exactly that — a screen with no dialogue left a lone nameplate-shaped block behind, the gate narrowed onto that one scrap of static UI, and the pipeline read nothing for 47 seconds until the capture respawned and broke it. So no more than twelve frames may be skipped in a row: any wrong verdict costs about two seconds instead of the rest of the session.
 
-  `settings.change_gate: false` disables it, `settings.change_gate_frac` tunes it, and the dashboard shows OCR calls saved. `tools/test_change_gate.py` pins twelve invariants — synthetic frames, no hardware, ~1s — including a bright scene with chrome in the block list walked through the typewriter one glyph at a time, and a frozen screen that must still be re-read.
+  It also does not run at all until there is a line on screen. Watching every block on a frame with no dialogue looked like the safe direction — more boxes, more ways to notice a change — but the gate can only see where text *already was*, so a line appearing on a screen that had none lands outside every box it is watching and reads as unchanged. Measured against ground-truth OCR over 1650 frames of a Genshin conversation, that accounted for 10 of 17 stale verdicts; waiting for a line costs 11% of the skips and removes 76% of them.
+
+  `settings.change_gate: false` disables it, `settings.change_gate_frac` tunes it, and the dashboard shows OCR calls saved. `tools/test_change_gate.py` pins thirteen invariants — synthetic frames, no hardware, ~1s — including a bright scene with chrome in the block list walked through the typewriter one glyph at a time, and a frozen screen that must still be re-read. Measured over that same recording: 23% of OCR calls skipped, with lines spoken identical to 0.7.2 and settling about 0.12s sooner (numbers and method in `plans/OCR-INTEGRATION-PLAN.md`).
 
 ### Changed
 
