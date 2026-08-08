@@ -41,6 +41,9 @@ def main():
     ap.add_argument("--duration", type=float, default=None)
     ap.add_argument("--voices", default=None,
                     help="seed casting from this voices.json (copied)")
+    ap.add_argument("--game", default=None,
+                    help="pin the layout profile (auto|hsr|genshin) instead "
+                         "of letting the recording's chrome pick it")
     ap.add_argument("--keep", action="store_true",
                     help="keep the work/state dirs for inspection")
     ap.add_argument("--synth-ms", type=int, default=900)
@@ -54,6 +57,14 @@ def main():
 
     if args.voices:
         shutil.copy(args.voices, state / "voices.json")
+    if args.game:
+        # live.py seeds voices.json from the example on first run, but the
+        # game has to be set BEFORE it starts — write the file here instead
+        src = Path(args.voices) if args.voices else ROOT / "voices.example.json"
+        cfg = json.loads(src.read_text())
+        cfg.setdefault("settings", {})["game"] = args.game
+        (state / "voices.json").write_text(json.dumps(cfg, indent=2,
+                                                      ensure_ascii=False))
 
     cut = ["-ss", str(args.start)]
     if args.duration:

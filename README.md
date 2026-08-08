@@ -107,6 +107,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
   - *Windows:* the recognition model is Chinese-trained and drops spaces, so punctuation spacing is restored and fused word pairs are split ("mercyis" → "mercy is"); capitalised tokens are protected so game proper nouns survive. Where several reads of one line disagree, the one that scans as the most real words is the one spoken.
 - **Pronunciations** — `settings.pronunciations` substitutes spoken forms at synthesis only ("Wishpower" → "Wish power"); logs keep the real spelling.
 - **Sentiment pacing** — positive/exclamatory lines read slightly faster, somber ones slower (±~10%).
+- **Choice prompts are logged, not spoken** — the options are sometimes a menu to pick from and sometimes the player character's own lines, so they appear in the dashboard log as `choice prompt (not read)` and nothing is read aloud.
 
 ## Casting — `voices.json`
 
@@ -116,6 +117,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
   "defaults":   {"female": "af_nova", "male": "am_michael", "narrator": "bm_george"},
   "always_voiced": ["Reporting Furb"],      // the dashboard "muted" checkboxes
   "settings": {
+    "game": "auto",                         // auto | hsr | genshin
     "recordings_dir": "~/Videos",
     "overlay_speaker": "Rin Tohsaka",       // voice for floating host bubbles
     "video_device": "ShadowCast 3",
@@ -131,6 +133,21 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 
 Everything above is editable live from the dashboard. Kokoro ships ~50 voices (`af_*`/`am_*` American, `bf_*`/`bm_*` British); `af_nicole` is broken in the packaged model. OCR misreads within ~80% similarity of a known name snap to it; names in quotes are distinct characters from the narrator.
 
+## Games
+
+Reading a screen means knowing where that game draws its nameplate, its dialogue, its choice list, and the chrome that says "this is story, not a menu". Those bands live in `tools/profiles/`, one profile per game; everything else in the pipeline is game-agnostic.
+
+| Game | Status |
+|---|---|
+| Honkai: Star Rail | Complete — dialogue, narration, lore cards, loading screens, overlays, Quick Read, info screens, chat panels |
+| Genshin Impact | **Most screens** — dialogue, choice prompts, full-screen narration, loading-screen tips; all calibrated against a real session. No book/reading UI yet |
+
+`settings.game` picks a profile: `hsr`, `genshin`, or `auto` (the default), which starts on Star Rail and switches when a sustained run of frames carries chrome unique to the other game — Star Rail's `✕ Continue` hint, Genshin's bottom-right UID. The dashboard has the same control, and shows which profile is actually being read in auto mode.
+
+For Genshin, cast **Paimon** and your Traveler by name early: a line from an unknown speaker is only read when the game's story chrome is on screen, and a cast character is trusted without it.
+
+Calibrating a screen type takes captures, not guesswork: every logged event saves the raw OCR blocks to `captures/shots/<id>.json`, and `python tools/replay.py <recording> --game genshin` runs a whole session back through the real classifier.
+
 ## Project layout
 
 | Path | Purpose |
@@ -139,7 +156,8 @@ Everything above is editable live from the dashboard. Kokoro ships ~50 voices (`
 | `hv_platform/` | Platform backends (capture, audio, OCR daemon, TTS, playback) — `darwin.py` / `win32.py` behind `base.py` |
 | `tools/ocrd.swift` | Apple Vision OCR daemon (compiled to `tools/ocrd` by setup) |
 | `tools/ocrd_win.py` | Windows OCR daemon (RapidOCR / Windows.Media.Ocr, same protocol) |
-| `tools/classify.py` | OCR blocks → screen type + speaker/dialogue/choices |
+| `tools/classify.py` | Game-agnostic entry point to classification |
+| `tools/profiles/` | Per-game screen layouts — `hsr.py` / `genshin.py` behind `base.py` |
 | `tools/vad.py` | Silero VAD onnx wrapper (torch-free) |
 | `tools/webui.py` | Dashboard (Flask, single page) + `VERSION` |
 | `tools/replay.py` | Replay a recording through the real pipeline (see below) |
@@ -175,7 +193,7 @@ That runs the actual OCR daemon, classifier, stabilization, dedupe, VAD gate and
 
 ## Contributing / releases
 
-Changes go in `CHANGELOG.md` under *Unreleased* (Keep a Changelog, SemVer). Most-wanted contribution: a Genshin Impact layout profile — see `PROFILE` in `tools/classify.py` for the shape; calibration needs only screenshots of each screen type.
+Changes go in `CHANGELOG.md` under *Unreleased* (Keep a Changelog, SemVer). Most-wanted contribution: finishing the Genshin Impact layout profile — see **Games** above and the `CALIBRATE` comments in `tools/profiles/genshin.py`; each one names the screen a capture is needed of.
 
 ## Disclaimer
 
