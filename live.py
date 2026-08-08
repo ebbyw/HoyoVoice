@@ -168,11 +168,11 @@ ENERGY_SIDE_FLAT = 2.5        # AND side must stay flat — music swells raise
 # --- shared state for the dashboard ---
 events = deque(maxlen=200)
 event_seq = {"n": 0}
-# `parts` are the recording's video segments (a capture respawn has to open
-# a new one — see respawn_capture); `gaps` are the wall-clock windows
-# between them, which the mux cuts out of the audio so the two stay aligned.
+# `parts` are the recording's video segments — a capture respawn has to open
+# a new one (see respawn_capture) — each stamped with the wall-clock offset
+# it started at, which is what lets the mux measure the gaps between them.
 recording = {"on": False, "t0": None, "clips": [], "raw": None,
-             "parts": [], "gaps": []}
+             "parts": []}
 record_request = {"want": None}
 device_request = {"want": None}
 unknown_speakers = set()
@@ -344,10 +344,13 @@ def usually_voiced(speaker):
     return v >= SOFT_GATE_MIN_VOICED and v >= SOFT_GATE_RATIO * (v + s)
 
 
-def is_voiced(since, soft=False):
-    """soft: this speaker is usually voiced, so accept weaker evidence."""
+def vad_evidence(since, soft=False):
+    """(strong hits, weak hits, peak) in the VAD history since `since`.
+
+    Split out of is_voiced so a decision can SAY what it heard: a yield
+    that cuts a line off mid-sentence is indistinguishable in the log from
+    one that was right to fire, and the two want opposite fixes."""
     weak_threshold = VAD_SOFT_THRESHOLD if soft else VAD_WEAK_THRESHOLD
-    weak_hits = VAD_SOFT_HITS if soft else VAD_WEAK_HITS
     strong = weak = 0
     peak = 0.0
     for t, p in vad_history:
@@ -357,6 +360,13 @@ def is_voiced(since, soft=False):
             if p >= weak_threshold:
                 weak += 1
             peak = max(peak, p)
+    return strong, weak, peak
+
+
+def is_voiced(since, soft=False):
+    """soft: this speaker is usually voiced, so accept weaker evidence."""
+    weak_hits = VAD_SOFT_HITS if soft else VAD_WEAK_HITS
+    strong, weak, peak = vad_evidence(since, soft)
     return (strong >= VAD_MIN_HITS or peak >= VAD_PEAK
             or weak >= weak_hits)
 
@@ -728,6 +738,48 @@ def shift_offset(t, gaps):
     return max(0.0, t - shift)
 
 
+def probe_duration(path):
+    """Seconds of video in a file, or None if ffprobe can't say."""
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "format=duration:stream=duration",
+             "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True, text=True, timeout=20)
+        for line in r.stdout.split():
+            if line not in ("N/A", ""):
+                return float(line)
+    except (subprocess.SubprocessError, ValueError, OSError):
+        pass
+    return None
+
+
+def measure_gaps(parts, s0):
+    """Where the capture was down, measured rather than assumed.
+
+    Each part records the wall-clock offset it STARTED at. How much video
+    it then actually contains only ffprobe knows — the frame file can stop
+    updating well before the encoder does, so the stall the watchdog timed
+    is longer than the video that went missing (measured: 10.4s waited,
+    6.2s of video lost, and the 4.2s difference came straight off the sync
+    of everything after it). The gap before part i is therefore the wall
+    time between the end of part i-1's video and the start of part i."""
+    gaps, prev_end = [], None
+    for p in parts:
+        dur = probe_duration(p["file"])
+        if prev_end is not None:
+            g = max(0.0, p["t"] - prev_end)
+            if g > 0.05:
+                gaps.append({
+                    "t0": prev_end, "t1": p["t"],
+                    "a0": s0 + int(prev_end * AUDIO_BYTES_PER_SEC) // 4 * 4,
+                    "a1": s0 + int(p["t"] * AUDIO_BYTES_PER_SEC) // 4 * 4})
+        if dur is None:
+            return gaps          # can't measure further; cut nothing more
+        prev_end = p["t"] + dur
+    return gaps
+
+
 def audio_keep_ranges(s0, s1, gaps):
     """Byte ranges of the PCM stream that have video behind them.
 
@@ -774,11 +826,12 @@ def concat_parts(parts):
     return Path(max(parts, key=lambda p: Path(p).stat().st_size))
 
 
-def mux_recording(parts, gaps, clips, out, s0, s1):
+def mux_recording(parts, clips, out, s0, s1):
     """Combine: video (ffmpeg mkv segments) + game audio (byte-slices of the
     PCM stream between recording start/stop, minus any capture gaps) + TTS
     clips at their offsets on that same timeline."""
-    raw = concat_parts(parts)
+    gaps = measure_gaps(parts, s0)
+    raw = concat_parts([p["file"] for p in parts])
     if raw is None:
         add_event("recording FAILED (no video)", "yield", None, Path(out).name)
         print(f"[recording] no usable video segment for {out}", flush=True)
@@ -830,7 +883,7 @@ def mux_recording(parts, gaps, clips, out, s0, s1):
     cmd += ["-c:v", "copy", "-c:a", "aac", "-y", str(out)]
     ok = subprocess.run(cmd, capture_output=True).returncode == 0
     if ok:
-        for p in {str(raw), *(str(p) for p in parts)}:
+        for p in {str(raw), *(p["file"] for p in parts)}:
             Path(p).unlink(missing_ok=True)
         GAME_SLICE.unlink(missing_ok=True)
         for c in clips:
@@ -848,7 +901,7 @@ video_lock = threading.Lock()
 video_swap = {"thread": None}
 
 
-def respawn_capture(video, stalled_for=0.0):
+def respawn_capture(video):
     """Restart the capture, keeping an in-progress recording alive.
 
     One ffmpeg owns both the capture device and the recording, so every
@@ -856,33 +909,26 @@ def respawn_capture(video, stalled_for=0.0):
     recording amputates the take silently. That is what a stalled capture
     did mid-session: video stopped at the stall, `recording["on"]` stayed
     true, clips and the audio slice kept running on wall clock, and the
-    mux paired a 28s video with 265s of sound. The recording now continues
-    into the next segment, and the window where nothing was captured is
-    remembered — in wall time for the clip offsets, in PCM bytes for the
-    audio — so the mux can cut exactly that much out of the sound and land
-    everything after it back in sync.
+    mux paired a 28s video with 265s of sound. The recording continues
+    into the next segment instead.
 
-    `stalled_for` back-dates the gap to when frames actually stopped, not
-    to when the watchdog noticed: the audio stream ran through that whole
-    window too, and leaving it in would desync everything after it by the
-    length of the stall.
+    All that is recorded here is WHEN each segment started, in wall time.
+    How much video was actually lost is not knowable yet and must not be
+    guessed: the first attempt inferred it from how long the watchdog had
+    been waiting, which overshot by 4.2s on a real stall — the frame file
+    stops updating before the encoder does — and everything after the gap
+    came out that far off. mux_recording measures each segment instead.
 
     Caller must hold video_lock.
     """
     if not recording["on"]:
         video.restart()
         return
-    t0 = max(0.0, time.monotonic() - recording["t0"] - stalled_for)
-    size = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
-    # 4 bytes per stereo s16le frame — never split one, or the channels swap
-    a0 = max(0, size - int(stalled_for * AUDIO_BYTES_PER_SEC)) // 4 * 4
     part = Path(recording["raw"].replace(
         "_raw.mkv", f"_raw.p{len(recording['parts']) + 1}.mkv"))
     video.restart(record_path=part)
-    recording["parts"].append(str(part))
-    recording["gaps"].append(
-        {"t0": t0, "t1": time.monotonic() - recording["t0"],
-         "a0": a0, "a1": AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0})
+    recording["parts"].append(
+        {"file": str(part), "t": time.monotonic() - recording["t0"]})
     print(f"[recording] capture respawned — continuing into {part.name}",
           flush=True)
 
@@ -1151,16 +1197,16 @@ def main():
                             time.sleep(0.1)
                     s0 = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
                     recording.update(on=True, t0=time.monotonic(), clips=[],
-                                     raw=str(raw), s0=s0, parts=[str(raw)],
-                                     gaps=[])
+                                     raw=str(raw), s0=s0,
+                                     parts=[{"file": str(raw), "t": 0.0}])
                     last_frame_change = time.monotonic()
                     print("[recording started]", flush=True)
                 elif not want and recording["on"]:
                     recording["on"] = False
                     s1 = AUDIO_PCM.stat().st_size if AUDIO_PCM.exists() else 0
                     raw, clips = recording["raw"], recording["clips"]
-                    parts = list(recording["parts"]) or [raw]
-                    gaps = list(recording["gaps"])
+                    parts = (list(recording["parts"])
+                             or [{"file": raw, "t": 0.0}])
                     s0 = recording.get("s0", 0)
                     out = raw.replace("_raw.mkv", ".mp4")
                     # clean mkv close, then mux, then respawn — all off the
@@ -1171,7 +1217,7 @@ def main():
                         video, finalize_first=True,
                         on_finalized=lambda: threading.Thread(
                             target=mux_recording,
-                            args=(parts, gaps, clips, out, s0, s1),
+                            args=(parts, clips, out, s0, s1),
                             daemon=True).start())
                     last_frame_change = time.monotonic()
                     print("[recording stopped — finalizing]", flush=True)
@@ -1184,13 +1230,19 @@ def main():
             if (speech.playing and speech.t_play
                     and not speech.qr_playing
                     and is_voiced(speech.t_play + 0.2, soft=True)):
+                # read the evidence BEFORE stopping — stop() clears t_play
+                t_play = speech.t_play
+                s, w, pk = vad_evidence(t_play + 0.2, soft=True)
                 speech.stop()
                 stats["yielded"] += 1
                 if yield_event_id:
                     for e in events:
                         if e["id"] == yield_event_id:
                             e["action"], e["cls"] = "yielded to VO", "yield"
-                print("[yielded to late VO]", flush=True)
+                # what it heard, and how far in — a yield that cut a line
+                # short reads exactly like a correct one otherwise
+                print(f"[yielded to late VO — {time.monotonic() - t_play:.1f}s in,"
+                      f" peak {pk:.2f}, strong {s}, weak {w}]", flush=True)
 
             if not observing["on"]:
                 candidate, candidate_count = None, 0
@@ -1226,7 +1278,7 @@ def main():
                 with video_lock:
                     # keeps an in-progress recording going into a new
                     # segment rather than ending it where the stall began
-                    respawn_capture(video, stalled_for=stalled)
+                    respawn_capture(video)
                 last_frame_change = time.monotonic()
                 gate.reset()          # baseline belongs to the dead capture
                 continue
