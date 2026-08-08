@@ -35,7 +35,8 @@ from profiles import (ProfileSelector, narration_self_certain,  # noqa: E402
                       split_camel)
 from change_gate import ChangeGate  # noqa: E402
 from vad import CHUNK, SileroVAD  # noqa: E402
-from webui import start_webui  # noqa: E402
+import voicepack  # noqa: E402
+from webui import VOICE_CATALOG, start_webui  # noqa: E402
 from hv_platform import get_backend  # noqa: E402
 
 backend = get_backend()
@@ -58,6 +59,12 @@ if not VOICES_PATH.exists():                      # first run: seed from example
     VOICES_PATH.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(ROOT / "voices.example.json", VOICES_PATH)
 VOICES = json.loads(VOICES_PATH.read_text())
+
+# Installed voice packs (dashboard "Add voice file"). The canonical copy of
+# every one lives here, so casting survives the original download being
+# deleted, and a replay's throwaway STATE dir starts with none of them.
+CUSTOM_VOICES = STATE / "voices_custom"
+UPLOADS = STATE / "captures" / "uploads"
 
 REC_DIR = {"path": Path(VOICES.get("settings", {}).get(
     "recordings_dir", str(STATE / "recordings"))).expanduser()}
@@ -195,6 +202,10 @@ if UNKNOWN_LOG.exists():
     unknown_speakers.update(
         n.strip() for n in UNKNOWN_LOG.read_text().splitlines() if n.strip())
 commands = queue.Queue()
+# last "Add voice file" outcome, polled by the dashboard: verification runs
+# on the orchestrator thread (it needs the TTS engine), so the upload
+# request can only answer "accepted", not "worked"
+voice_import = {"state": "", "voice": None, "msg": ""}
 # start paused — resume from the dashboard (replays auto-resume)
 observing = {"on": os.environ.get("HOYOVOICE_AUTORESUME") == "1"}
 stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
@@ -682,6 +693,89 @@ def auto_cast(speaker, gender):
     return voice
 
 
+SMOKE_LINE = "Voice check, one two three."
+
+
+def release_voice(voice_id):
+    """Undo every reference to a voice that no longer exists.
+
+    A dangling id is not a cosmetic problem: the character cast to it goes
+    silent at the moment they speak, and a *default* pointing at one takes
+    every unnamed speaker or every narration line with it. Characters go
+    back to the auto-caster (which claims a packaged voice on their next
+    line); defaults are put back to a packaged voice outright."""
+    for char, c in list(VOICES["characters"].items()):
+        if c.get("voice") == voice_id:
+            VOICES["characters"].pop(char)
+    fallback = {"female": VOICE_POOLS["female"][0],
+                "male": VOICE_POOLS["male"][0], "narrator": "bm_george"}
+    for slot, voice in VOICES.get("defaults", {}).items():
+        if voice == voice_id:
+            VOICES["defaults"][slot] = fallback.get(slot,
+                                                    VOICE_POOLS["female"][0])
+
+
+def register_custom_voices(speech):
+    """Hand every installed voice pack to the TTS engine at startup.
+
+    A pack whose file has gone missing is dropped rather than left to fail
+    at the moment a character speaks: an entry that can't synthesize is
+    worse than no entry, because the character it is cast to goes silent
+    with the reason buried in a traceback."""
+    packs = VOICES.get("custom_voices", {})
+    dropped = False
+    for voice_id in list(packs):
+        path = (STATE / packs[voice_id]["file"]).resolve()
+        try:
+            speech.tts.register_voice(voice_id, path)
+            print(f"[voice] {voice_id} ← {path.name}", flush=True)
+        except Exception as exc:
+            packs.pop(voice_id)
+            release_voice(voice_id)
+            dropped = True
+            print(f"[voice] dropped {voice_id}: {exc}", flush=True)
+    if dropped:
+        VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+
+
+def install_voice(speech, src, name=None, key=None):
+    """Verify a voice-pack file, install it, and prove it makes sound.
+
+    Two halves of verification, and the second is the one that matters: the
+    file can parse to a correctly shaped tensor and still be noise, a
+    zeroed pack, or a style vector from a different model — none of which
+    is visible until something is synthesized with it. So the pack is only
+    written into voices.json after a real line has been synthesized through
+    the real engine and come back as audible audio. Anything short of that
+    is rolled back, leaving no half-installed voice behind.
+    """
+    voice_id, dest = voicepack.install(
+        src, CUSTOM_VOICES, name=name, key=key,
+        taken=set(VOICE_CATALOG) | set(VOICES.get("custom_voices", {})))
+    try:
+        speech.tts.register_voice(voice_id, dest)
+        audio = speech.tts.synth(SMOKE_LINE, voice_id, 1.0)
+        if audio is None or len(audio) < 4000:          # <0.17s isn't a line
+            raise voicepack.VoiceError(
+                "the engine produced no audio from that voice")
+        rms = float(speech.np.sqrt(speech.np.mean(
+            speech.np.square(speech.np.asarray(audio, dtype="float32")))))
+        if rms < 0.005:
+            raise voicepack.VoiceError(
+                f"that voice synthesizes near-silence (rms {rms:.4f}) — the "
+                "data is shaped like a voice but isn't one")
+    except Exception:
+        speech.tts.forget_voice(voice_id)
+        dest.unlink(missing_ok=True)
+        raise
+    VOICES.setdefault("custom_voices", {})[voice_id] = {
+        # posix separators: voices.json is portable between the two platforms
+        "file": dest.relative_to(STATE).as_posix(), "source": Path(src).name}
+    VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+    print(f"[voice] installed {voice_id} from {Path(src).name}", flush=True)
+    return voice_id, audio
+
+
 def pick_voice(speaker):
     # No nameplate, the game's own unquoted narrator label, or an
     # organization/location "speaker" ("The Xianzhou Alliance") → narrator.
@@ -1095,6 +1189,40 @@ def handle_commands(speech):
                     n for n in UNKNOWN_LOG.read_text().splitlines()
                     if n.strip() and n.strip() != char) + "\n")
             print(f"[deleted] {char}", flush=True)
+        elif cmd[0] == "addvoice":
+            _, src, name, key = cmd
+            src = Path(src)
+            try:
+                voice_id, audio = install_voice(speech, src, name, key)
+                # audition it immediately: hearing the voice is the only
+                # check that tells you whether it's the one you wanted
+                speech.play(audio)
+                add_event(f"added voice {voice_id}", "spoken", None,
+                          SMOKE_LINE, voice_id)
+                voice_import.update(state="ok", voice=voice_id,
+                                    msg=f"added {voice_id} — auditioning it now")
+            except voicepack.VoiceError as exc:
+                voice_import.update(state="error", voice=None, msg=str(exc))
+                print(f"[voice] rejected {src.name}: {exc}", flush=True)
+            except Exception as exc:                  # engine/IO failure
+                voice_import.update(state="error", voice=None,
+                                    msg=f"{type(exc).__name__}: {exc}")
+                print(f"[voice] failed on {src.name}: {exc}", flush=True)
+            finally:
+                if src.parent == UPLOADS:             # browser upload: temp
+                    src.unlink(missing_ok=True)
+        elif cmd[0] == "delvoice":
+            voice_id = cmd[1]
+            pack = VOICES.get("custom_voices", {}).pop(voice_id, None)
+            if pack:
+                speech.tts.forget_voice(voice_id)
+                (STATE / pack["file"]).unlink(missing_ok=True)
+                release_voice(voice_id)
+                VOICES_PATH.write_text(
+                    json.dumps(VOICES, indent=2, ensure_ascii=False))
+                print(f"[voice] removed {voice_id}", flush=True)
+                voice_import.update(state="ok", voice=None,
+                                    msg=f"removed {voice_id}")
         elif cmd[0] == "clearlog":
             events.clear()
             print("[log cleared]", flush=True)
@@ -1143,7 +1271,11 @@ def main():
         except (json.JSONDecodeError, ValueError, TypeError):
             pass
 
+    register_custom_voices(speech)
+
     port = start_webui({"events": events, "voices": VOICES,
+                        "voice_import": voice_import,
+                        "uploads_dir": str(UPLOADS),
                         "unknown": unknown_speakers, "metrics_fn": metrics,
                         "commands": commands, "observing": observing,
                         "shots_dir": str(SHOTS), "frame_dir": str(FRAME.parent),

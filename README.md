@@ -74,6 +74,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 - **Device pickers** — choose any connected video/audio device; Apply hot-swaps capture and persists the choice.
 - **Casting** — every speaker the OCR meets appears here, and each new character is **auto-cast** with a distinct voice from a gender-guessed pool (marked "(auto)" until you choose). Assign a voice (instantly re-reads their last line so you can audition), tick **muted** for characters whose real VO the detector can't hear (creature voices), ✕ deletes bogus entries. **Add cast** pre-assigns a voice to a character before they first appear.
 - **Test box** — type anything, pick a voice, hear it.
+- **Add voice file** — import a Kokoro voice pack (`.pt`, `.safetensors`, `.npy`, `.npz`, `.bin`). It's verified by actually synthesizing with it, auditioned on the spot, and then castable like any built-in voice; ✕ removes one. See [Adding your own voice actors](#adding-your-own-voice-actors).
 - **Recording** — ⏺ captures game video + game audio, tracks every TTS clip with wall-clock timestamps, and on ⏹ muxes everything into one MP4 (TTS boosted +8dB over the game bed, clips trimmed where real VO interrupted them). Files land in the configurable save folder; raw capture is crash-safe MKV until the mux succeeds.
 - **Log** — every decision with the voice used and what kind of screen it came from (`chat`, `lore card`, `loading screen`, `narration`…), a 📷 screenshot hover-preview per event, replay buttons, Hide/Clear controls, and **⤓ Download log** — one text file with the environment, analytics, casting, the full decision log and the console log. That file is what to attach when reporting a problem.
 
@@ -142,7 +143,7 @@ Everything above is editable live from the dashboard. Kokoro ships ~50 voices (`
 
 ### Adding your own voice actors
 
-Casting is per character, and every character is one entry in `voices.json`. There are three levels to this: assigning voices (the everyday case), widening the menu of voices to assign from, and replacing the TTS engine entirely.
+Casting is per character, and every character is one entry in `voices.json`. There are three levels to this: assigning one of the voices you have (the everyday case), adding a voice you don't have yet, and replacing the TTS engine entirely.
 
 **From the dashboard (do it this way).** A character appears in **Casting** the moment OCR reads their nameplate, already auto-cast with a distinct voice from a gender-guessed pool and marked `(auto)`. Pick a different voice from their dropdown and they are re-cast immediately — HoyoVoice re-reads their last line in the new voice so you can audition it in context. To cast someone before they first speak, type their **exact** nameplate spelling into **Add cast**, choose a voice, and hit Add; matching is fuzzy to ~80%, so near-misses still land, but a wrong name silently creates a second character. The **muted** checkbox means *never speak for this character* — use it for characters whose real VO the detector can't hear. ✕ deletes an entry, including bogus ones OCR invented. The **Test TTS** box speaks any text in any voice, which is the fastest way to compare candidates before assigning one.
 
@@ -159,11 +160,17 @@ Casting is per character, and every character is one entry in `voices.json`. The
 
 > Edit the file with the app **stopped** (`./hoyovoice.sh stop` / `python hoyovoice.py stop`). It is read once at startup and written back on every casting change, so hand-edits made while it's running are overwritten.
 
-**Widening the voice menu.** The dashboard offers 28 English voices — `VOICE_CATALOG` in `tools/webui.py` — but the packaged Kokoro model actually carries ~54, including Spanish (`ef_`/`em_`), French (`ff_`), Hindi (`hf_`/`hm_`), Italian (`if_`/`im_`), Japanese (`jf_`/`jm_`), Portuguese (`pf_`/`pm_`) and Mandarin (`zf_`/`zm_`) voices. They synthesize English text fine, but through the American English phonemizer — you get a different-sounding *speaker*, not a language switch, and the TTS log notes the mismatch. On macOS they're the `.safetensors` files under `~/.cache/huggingface/hub/models--prince-canuma--Kokoro-82M/snapshots/*/voices/`; on Windows they're all inside `models\voices-v1.0.bin`.
+**Adding a voice the app doesn't ship with.** **Add voice file** in the dashboard takes a Kokoro voice pack, verifies it, and puts it in the voice menu. Choose the file, optionally give it a name, hit **Add & verify**. From then on it is in *every* voice dropdown — each Casting row, **Add cast**, and **Test TTS** — shown as `Rin (CU)`, and castable to anyone exactly like a packaged voice. It's the same control whether the dashboard is open on this machine or another one: pick a file and it uploads; leave the picker empty and it asks for a path to a file already on the machine running HoyoVoice.
 
-To use one, add its ID to `VOICE_CATALOG`. That list is also the dashboard's validation gate: a voice outside it is rejected by the cast and test endpoints, and a character carrying one still *speaks* correctly but their dropdown renders with nothing selected, so touching it reassigns them. To put a voice into the auto-cast rotation as well, add it to the matching pool in `VOICE_POOLS` (`live.py`).
+Where those files come from: any Kokoro-82M voice repo (`hexgrad/Kokoro-82M` is the upstream one), or the model's own extra voices — the packaged model carries ~54, of which the menu shows the 28 English ones, and the rest are Spanish (`ef_`/`em_`), French (`ff_`), Hindi (`hf_`/`hm_`), Italian (`if_`/`im_`), Japanese (`jf_`/`jm_`), Portuguese (`pf_`/`pm_`) and Mandarin (`zf_`/`zm_`). Those speak English text through the American English phonemizer, so what you get is a different-sounding *speaker*, not a language switch. On macOS they're the `.safetensors` files under `~/.cache/huggingface/hub/models--prince-canuma--Kokoro-82M/snapshots/*/voices/`; on Windows they're all inside `models\voices-v1.0.bin` — point the picker at that file and name the one you want in the **voice in pack** box, since a pack holds many.
 
-**Genuinely new voices** — your own recordings, a Kokoro voice pack from elsewhere, a different engine — are not a config change. Synthesis is one class per platform: `Tts` in `hv_platform/darwin.py` (MLX) and `hv_platform/win32.py` (ONNX). Both expose `synth(text, voice, speed)` and must return mono float32 at 24 kHz; everything upstream only ever passes the voice ID through from `voices.json`, so a new engine that honors that contract needs no changes anywhere else. Kokoro can't clone a voice from samples — that's a different model, and swapping it in means accepting its latency, since the whole pipeline is built around a line being spoken within about a second of settling.
+`.pt`, `.safetensors`, `.npy`, `.npz` and `.bin` are all read (`tools/voicepack.py`), no torch required. **Verified means synthesized**, not parsed: a file that reads as a correctly shaped tensor can still be noise or a style vector from another model, so the voice is installed, run through the real engine on a test line, and checked for audible output before it is written into `voices.json` — anything short of that is rolled back, and the reason appears next to the button. A voice that passes is auditioned immediately so you can hear what you just added.
+
+Installed voices are copied into `voices_custom/` and listed under the button; ✕ removes one, and any character cast to it goes back to auto-casting. They survive restarts, and they're the reason casting keeps working after you delete the download. A `.pt` is a pickle — i.e. arbitrary code, in the general case — so the reader for it is a restricted unpickler that will build tensors and nothing else; `tools/test_voicepack.py` includes a hostile file that tries to run a command and pins that it can't.
+
+Two things this doesn't do. It doesn't clone a voice from your own recordings — that's a different model, not a file format, and swapping the engine means accepting its latency, since the pipeline is built around a line being spoken within about a second of settling. And it doesn't add anything to *auto-casting*: new characters still claim built-in voices from `VOICE_POOLS` (`live.py`), so an installed voice is one you cast deliberately. If you'd rather widen the built-in menu instead, `VOICE_CATALOG` in `tools/webui.py` is the packaged-voice list, and it's also the validation gate the cast and test endpoints check against.
+
+**A different TTS engine** is still a code change: synthesis is one class per platform, `Tts` in `hv_platform/darwin.py` (MLX) and `hv_platform/win32.py` (ONNX). Both expose `synth(text, voice, speed)` returning mono float32 at 24 kHz, plus `register_voice`/`forget_voice` for installed packs; everything upstream only ever passes a voice ID through from `voices.json`, so an engine that honors that contract needs no changes anywhere else.
 
 ## Games
 
@@ -194,7 +201,9 @@ Calibrating a screen type takes captures, not guesswork: every logged event save
 | `tools/webui.py` | Dashboard (Flask, single page) + `VERSION` |
 | `tools/replay.py` | Replay a recording through the real pipeline (see below) |
 | `tools/pronounce_names.py` | Character-name spoken forms + roster fetch; audits them against Kokoro's phonemizer |
+| `tools/voicepack.py` | Reads/verifies an imported voice pack (`.pt`, `.safetensors`, `.npy`, `.npz`, `.bin`) |
 | `voices.json` | Casting + settings |
+| `voices_custom/` | Voice packs added from the dashboard, in canonical form |
 | `setup.sh` / `setup.ps1` | One-time install (macOS / Windows) |
 | `hoyovoice.sh` / `hoyovoice.py` | start / stop / status / log / restart (macOS shell / cross-platform) |
 | `plans/` | Windows first-run checklist, pre-merge notes |
@@ -235,6 +244,8 @@ Changes go in `CHANGELOG.md` under *Unreleased* (Keep a Changelog, SemVer). Most
 ## Disclaimer
 
 Fan-made accessibility tool. Not affiliated with or endorsed by HoYoverse/miHoYo. It only observes an HDMI feed and plays audio on your computer — it does not modify the game, inject input, or touch game files. Voices are synthetic and are not intended to imitate the games' official voice actors.
+
+That last point is yours to keep once you import a voice: **Add voice file** will load any Kokoro voice pack you point it at, and the licence of a pack you downloaded — and whether it is a clone of a real person's voice — is between you and wherever you got it. Imported packs stay on your machine (`voices_custom/` is gitignored) and this project neither ships nor endorses any of them.
 
 ## License
 

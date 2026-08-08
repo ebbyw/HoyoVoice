@@ -48,6 +48,10 @@ Behavioral contracts:
 
     Tts.synth(text, voice, speed) -> np.float32 array | None
     Tts.warm_up()   # optional pre-load; called once at startup
+    Tts.register_voice(voice_id, path)   # installed voice pack (a
+        # (510, 1, 256) float32 .safetensors written by tools/voicepack.py);
+        # after this, synth() must accept voice_id like any built-in voice
+    Tts.forget_voice(voice_id)           # undo a registration
 
     Player.play(wav_path, audio, samplerate)   # audio = float32 array;
         # backends use whichever of path/array is cheaper for them

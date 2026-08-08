@@ -1,6 +1,9 @@
 # personal casting/config (created from voices.example.json)
 voices.json
 
+# voice packs added from the dashboard (someone else's model weights)
+voices_custom/
+
 # environments & caches
 .venv/
 __pycache__/

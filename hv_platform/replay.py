@@ -151,6 +151,12 @@ class Tts:
     """Deterministic fake: sleeps a realistic synth latency, returns silence
     sized like real speech (~15 chars/sec)."""
 
+    def register_voice(self, voice_id, path):
+        pass                              # replays never make sound
+
+    def forget_voice(self, voice_id):
+        pass
+
     def synth(self, text, voice, speed):
         import numpy as np
         time.sleep(SYNTH_MS / 1000)
