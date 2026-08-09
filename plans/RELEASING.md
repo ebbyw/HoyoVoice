@@ -32,6 +32,8 @@ fixes, minor for features.
 ## 3. Verify before tagging
 
 ```sh
+for t in tools/test_*.py; do .venv/bin/python "$t" || break; done
+
 ./hoyovoice.sh start && sleep 40
 curl -s http://127.0.0.1:8470/ | grep -o 'v[0-9.]*'   # header
 curl -s http://127.0.0.1:8470/log.txt | head -1        # downloaded log
@@ -39,6 +41,11 @@ curl -s http://127.0.0.1:8470/log.txt | head -1        # downloaded log
 ```
 
 Both must show the new number, or the bump didn't land everywhere.
+
+If the release touches `NAMES`/`TERMS` in `tools/pronounce_names.py`, say so in
+the changelog entry with the `--write` line: `voices.json` is gitignored and
+per-machine, so a pull does not update anyone's pronunciations, and the second
+machine is always the one that reports the fix "not working".
 
 ## 4. Commit, tag, push
 
@@ -67,3 +74,21 @@ gh release list | head -3      # confirm it reads "Latest"
 
 Using the changelog section as the release body means the release page
 explains itself instead of being a bare tag.
+
+## 6. Branch hygiene
+
+Topic branches merge with `--no-ff` (`Merge <branch>: <one-line summary>`) —
+**never squash**. The measurements that justify each fix live in the commit
+messages, and the collapsed changelog entry deliberately doesn't carry them.
+
+Afterwards, remove the worktree and delete the branch, but confirm the tip is
+an ancestor of `origin/main` first:
+
+```sh
+git merge-base --is-ancestor <branch> origin/main && git branch -d <branch>
+git worktree remove .claude/worktrees/<name>
+```
+
+`git worktree remove` warns about "discarded commits" when the branch ref is
+the only thing left pointing at them. That warning is expected once the
+ancestor check above has passed.

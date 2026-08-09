@@ -1,101 +1,90 @@
-# Pre-merge checklist — `windows-support` → `main`
+# Pre-merge checklist
 
-Things that should happen before this branch merges. Written down because
-they're easy to forget once the branch looks finished.
+What should happen before a topic branch merges into `main`. Written down
+because it's all easy to forget once the branch looks finished. Originally the
+`windows-support` checklist; that branch merged at 0.6.0 and the parts of it
+that were about *that* work have been dropped, leaving what turned out to be
+general.
 
 ## 1. Collapse branch-only fixes in the CHANGELOG
 
-The Unreleased section currently carries ~23 Fixed entries, and a large
-share of them fix features that **only ever existed on this branch** — the
-chat-panel reader in particular (scroll cutting the read, the "R" glyph,
-clipped-tail re-reads, mid-animation garbling, the sender-label
-inheritance). To anyone reading the released changelog those are noise:
-the feature never shipped in a broken state.
+A long branch accumulates Fixed entries for features that **only ever existed
+on the branch** — the chat-panel reader was the worst case: scroll cutting the
+read, the "R" glyph, clipped-tail re-reads, mid-animation garbling, sender-label
+inheritance. To anyone reading released history those are noise, because the
+feature never shipped broken. Fold them into the feature entry:
 
-Before merging, fold those into the feature entry they belong to, so the
-public history reads:
+> **Added** — group-chat/message panel reading: messages read incrementally,
+> each sender in their own cast voice, system notices in the narrator's.
 
-> **Added** — group-chat/message panel reading: messages read
-> incrementally, each sender in their own cast voice, system notices in
-> the narrator's.
+**Keep as separate Fixed entries** anything that changed behaviour users already
+had on `main`. From that branch, the ones that qualified were the VAD
+tail-reader lag, the dedupe window never expiring, lines never spoken when the
+stability threshold dropped mid-count, and the mid-play yield being too strict
+to fire.
 
-rather than a bug-by-bug diary of getting there.
-
-**Keep as separate Fixed entries** anything that affected behaviour users
-already had on `main`:
-
-- VAD tail-reader lag (spoke over real voiceover)
-- the dedupe window never expiring (loading-screen lore silently skipped)
-- lines never spoken when the stability threshold dropped mid-count
-- the mid-play yield being too strict to ever fire
-
-The measurements in the collapsed entries (frame counts, VAD
-probabilities, audio durations) are worth preserving somewhere — they are
-the reason each fix is shaped the way it is. Commit messages already hold
-them, so losing them from the changelog is acceptable.
+The measurements inside collapsed entries (frame counts, VAD probabilities,
+audio durations) are the reason each fix is shaped the way it is. Commit
+messages hold them, which is why releases merge rather than squash — losing
+them from the changelog is acceptable, losing them entirely is not.
 
 ## 2. Version + release section
 
-See **[RELEASING.md](RELEASING.md)** for the full sequence. In short:
-`VERSION` lives in `tools/webui.py` (shown in the dashboard header); bump
-it and date the section when cutting the release, then publish a GitHub
-release with `gh release create` — pushing the tag alone leaves the repo
-page advertising the previous version.
+See **[RELEASING.md](RELEASING.md)** for the sequence. In short: `VERSION` in
+`tools/webui.py` is the single source of truth, bump it and date the changelog
+section, then publish a GitHub release with `gh release create` — pushing the
+tag alone leaves the repo page advertising the previous version.
 
-## 3. Re-verify both platforms after the final squash/rebase
+## 3. Re-verify both platforms after the final rebase
 
-- macOS: `./hoyovoice.sh start`, play a scene, confirm dialogue + gating
-  are unchanged. The platform split was meant to be behaviour-neutral
-  there; this is the check that it stayed that way.
-- Windows: one clean session — dialogue, a chat conversation, a loading
-  screen — then **⤓ Download log** and skim it.
+- macOS: `./hoyovoice.sh start`, play a scene, confirm dialogue and gating are
+  unchanged.
+- Windows: one clean session — dialogue, a chat conversation, a loading screen
+  — then **⤓ Download log** and skim it. Remember the Windows box takes its
+  changes through git only.
+- Anything touching the synthesis text pipeline also needs
+  `python tools/pronounce_names.py --check` on both machines, since `voices.json`
+  is per-machine and a pull doesn't update it.
 
-## 4. Decisions to confirm
+## 4. Run the tests, then replay
 
-- **`wordfreq` on macOS — DECIDED: no, keep it Windows-only.** Measured
-  rather than assumed:
-  - The repair is a **no-op on Vision output** — the golden frame passes
-    through unchanged. Vision spaces text correctly; the whole reason
-    run-on repair exists is that RapidOCR's recognition model is
-    Chinese-trained and Chinese has no spaces.
-  - It carries a small but real **downside**: run over 3204 words of
-    correct English prose it still rewrites 3 tokens (all code/URL
-    strings). Non-zero risk, zero upside, on a platform that doesn't
-    need it.
-  - The other half — best-read selection (`text_quality`) — is
-    platform-independent in principle, but only bites when several
-    *different* raw reads of one line normalise identically. Vision is
-    stable enough that the variants are usually the same string, so
-    there is rarely anything to choose between.
+```bash
+for t in tools/test_*.py; do .venv/bin/python "$t" || break; done
+```
 
-  The optional import already handles this: without `wordfreq` both
-  repairs no-op, so macOS behaviour is unchanged. Revisit if macOS ever
-  moves off Vision.
-- **README wording — DECIDED: Windows is no longer "experimental".** Several
-  clean end-to-end sessions (dialogue, chat panels, loading screens) on real
-  hardware. README and the changelog entry updated.
+Then replay a recording that exercises the area you changed
+(`python tools/replay.py <recording> --game <hsr|genshin>`). A branch that only
+has unit coverage has not been verified against real frames, and every
+interesting bug in this project so far has been about real frames.
 
+## 5. Settled decisions worth not relitigating
 
-- **Planning docs — DONE.** `PLAN.md` and `PLAN-WINDOWS.md` moved to
-  `archive/`, which is gitignored: they describe work that is built, and
-  `WINDOWS-TESTING.md` carries everything still true.
+- **`wordfreq` stays Windows-only.** Measured rather than assumed: the run-on
+  repair is a **no-op on Apple Vision output** — Vision spaces text correctly,
+  and the repair exists because RapidOCR's bundled recognition model is
+  Chinese-trained. It also carries a small real downside: over 3204 words of
+  correct English prose it still rewrites 3 tokens (code/URL strings). Non-zero
+  risk, zero upside. The other half — best-read selection (`text_quality`) — is
+  platform-independent in principle but only bites when several *different* raw
+  reads normalise identically, and Vision is stable enough that the variants are
+  usually the same string. The optional import already handles it: without
+  `wordfreq` both repairs no-op. Revisit only if macOS moves off Vision.
+- **Windows is not "experimental".** Several clean end-to-end sessions on real
+  hardware; README and changelog say so.
+- **Planning docs live in `archive/`, which is gitignored.** `PLAN.md` and
+  `PLAN-WINDOWS.md` went there once built; `WINDOWS-TESTING.md` carries what is
+  still true.
 
+## 6. Known, and deliberately not fixed
 
-## 5. Known, and deliberately not fixed
+Recorded so they aren't mistaken for oversights.
 
-Not blockers — recorded so they aren't mistaken for oversights.
-
-- **Sentence streaming has never been judged by ear.** It's the newest
-  behaviour on the branch: a completed sentence is spoken at the
-  typewriter's pause and the remainder follows once it renders. It
-  verifies correctly in replay, but "does it sound chopped?" is a
-  listening question, not a test. Worth one deliberate pass before
-  release.
-- **Word-level OCR misreads remain** ("for a" → "fora", "thingandbring").
-  Run-on repair only splits into two known words, so three-way fusions
-  survive. The real lever is an English-trained PP-OCR recognition model
-  in place of the Chinese-trained default — droppable into RapidOCR via
-  `rec_model_path`, unmeasured so far.
-- **PS5 system menus are read before the game starts** (Ebby: P3, leave
-  it). They're skipped as unknown speakers, so nothing is spoken; the log
-  just fills with rejections.
+- **PS5 system menus are read before the game starts.** Ranked P3, leave it.
+  They're rejected as unknown speakers so nothing is spoken; the log just fills
+  with rejections.
+- **Word-level OCR fusions survive on Windows, at a much lower rate.** The
+  English recognition model (0.7.3) took fusion-class defects from 333 to 144
+  over an 81-shot corpus. Run-on repair only splits into two known words, so
+  three-way fusions still get through. The remaining lever is canonical-text
+  snapping — phase 5 of [OCR-INTEGRATION-PLAN.md](OCR-INTEGRATION-PLAN.md), and
+  blocked on data that can't ship publicly.

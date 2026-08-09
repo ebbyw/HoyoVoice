@@ -1,13 +1,24 @@
 # Windows first-run testing checklist
 
-## Status (2026-07-28, first hardware session)
+## Status
 
-Verified working on real hardware: setup, device enumeration, DirectShow
-video capture, WASAPI audio capture (48k stereo contract holds), OCR →
-classify → speaker detection → auto-casting, Kokoro TTS (~0.9–1.1s synth),
-playback, dedupe, recording + mux. **RapidOCR on DirectML: 154ms/frame** —
-use it; the built-in Windows engine mangles this font ("rabbit-head Nt bad
-or clown") and is only a fallback.
+Windows is a supported platform, not an experiment: many clean end-to-end
+sessions on real hardware since 2026-07-28. Verified there: setup, device
+enumeration, DirectShow video capture, WASAPI audio capture (48k stereo
+contract holds), OCR → classify → speaker detection → auto-casting, Kokoro TTS
+(~0.9–1.1s synth), playback, dedupe, recording + mux, the output-device picker,
+and both games' profiles.
+
+**Use RapidOCR on DirectML** (~115ms/frame with the English recognition model,
+154ms without it). The built-in Windows engine mangles this font
+("rabbit-head Nt bad or clown"), reports no confidence — so `classify.py`'s
+`MIN_CONF` junk filter does nothing — and is only a fallback.
+
+The checklist below is still the way to bring up a *new* Windows box, or to
+isolate a subsystem when one misbehaves: each step exercises one file.
+
+The work reaches that machine through git only. Fix in the repo, push, pull
+there — never hand-edit files on it.
 
 Gotchas found the hard way (all fixed in code — listed so they aren't
 re-diagnosed):
@@ -23,9 +34,19 @@ re-diagnosed):
 | Loading screens read as dialogue | The build/UID strip is one block in Vision, split (and underscore-less) in Windows OCR. Matched on the joined strip now. |
 | Extra console windows | `DETACHED_PROCESS` + `CREATE_NO_WINDOW` are mutually exclusive. |
 | A line takes tens of seconds to speak | The detector loses light subtitles over bright backgrounds — 12/37 frames on a measured capture — and every miss reset stabilization. Fixed by background flattening in the daemon (30/37) plus `MISS_TOLERANCE` in the orchestrator. Note: encoder load during recording was ruled out; the recordings kept up with wall clock (177s captured of 180s). |
+| Words fused together ("RinTohsaka", "fora") | RapidOCR's bundled recognition model is Chinese-trained and Chinese has no spaces. `setup.ps1` now downloads `models\rec_en.onnx`; the startup log must read `[ocrd_win] rec model: rec_en.onnx`. |
+| The dashboard preview 500s | ffmpeg replaces `live_frame.jpg` by rename, and opening it mid-rename raises `PermissionError` on Windows rather than returning stale bytes. One retry, then a 503 the dashboard refreshes past. |
+| A pronunciation fix "didn't land" after a pull | `voices.json` is gitignored and per-machine. Stop the app and run `python tools/pronounce_names.py --write`. |
+| Speech comes out of the wrong speakers | `settings.output_device`; the console log says which output it resolved (`[audio] output → …`) and lists what it can see when a saved name no longer matches. |
+| Dashboard won't load / app won't start | An orphaned instance is holding port 8470 — `python hoyovoice.py stop`, then check Task Manager for stray `python.exe` / `ffmpeg.exe`. |
 
-
-The Windows backend (`hv_platform/win32.py`, `tools/ocrd_win.py`, `setup.ps1`, `hoyovoice.py`) was written and structurally verified off-Windows: everything compiles, the OCR daemon's RapidOCR engine reproduces Apple Vision's classify output on the golden frame (`captures/frame_001.png` → same speaker + dialogue), and the refactored `live.py` passes a stub-backend smoke test. **None of it has touched real Windows hardware yet.** Work through this list in order on the Windows box — each step isolates one subsystem, so a failure points at exactly one file.
+Work through the list below in order on a fresh box — each step isolates one
+subsystem, so a failure points at exactly one file. It was written when the
+backend (`hv_platform/win32.py`, `tools/ocrd_win.py`, `setup.ps1`,
+`hoyovoice.py`) had been verified only off-Windows, against the golden frame
+(`captures/frame_001.png`) and a stub-backend smoke test; those references are
+still the fastest way to tell "this machine is wrong" from "this code is
+wrong".
 
 ## 0. Setup
 
@@ -74,10 +95,10 @@ $env:HOYOVOICE_OCR_ENGINE="windows"; echo captures/frame_001.png | .venv\Scripts
 ```
 
 - Compare both against `captures/frame_001.ocr.json` (Vision's golden output) — feed each through `python tools\classify.py` and diff the speaker/dialogue.
-- **Known risk (rapid):** RapidOCR drops inter-word spaces on low-res text ("RinTohsaka") — confirmed on 854px thumbnails, absent at native 1920px in sandbox testing. If it appears on live frames, switch to the windows engine or add an English recognition model.
-- **Known risk (windows):** Windows.Media.Ocr reports no confidence (hardcoded 1.0), so `classify.py`'s `MIN_CONF=0.8` junk filter does nothing — watch for HUD noise being classified as dialogue.
-- Timing: rapid was ~380 ms/frame on a modest sandbox CPU. Over ~600 ms will lag the 6 fps loop; prefer the faster engine that still classifies correctly.
-- Set the winning engine permanently via `HOYOVOICE_OCR_ENGINE` (or make it a `voices.json` setting — small follow-up).
+- **Resolved (rapid):** the space-dropping ("RinTohsaka") was the Chinese-trained recognition model, not resolution. `setup.ps1` downloads an English-trained one to `models\rec_en.onnx`; `HOYOVOICE_REC_MODEL` / `HOYOVOICE_REC_KEYS` override the path, and deleting the files falls back to the bundled model. Fusion-class defects over an 81-shot corpus: 333 → 144.
+- **Still true (windows engine):** Windows.Media.Ocr reports no confidence (hardcoded 1.0), so `classify.py`'s junk filter does nothing and confidence-aware stabilization degrades to yesterday's behaviour — watch for HUD noise classified as dialogue.
+- Timing: ~115 ms/frame on DirectML with the English model. Over ~600 ms will lag the 6 fps loop; prefer the faster engine that still classifies correctly. The change gate removes most of these calls on static text anyway (`ocr saved` in the dashboard).
+- Force an engine with `HOYOVOICE_OCR_ENGINE` (`auto`, `rapid`, `windows`).
 
 ## 5. TTS + playback
 
@@ -108,6 +129,16 @@ python hoyovoice.py log
 
 ## Known open items
 
-- `Player.playing` uses sounddevice's module-level stream — if the qr-reader pump misbehaves (overlapping or stuttering reads), this is the first suspect; replace with an explicit OutputStream.
-- Auto-pick GPU (DirectML) for TTS — deliberately out of scope for v1.
+- Auto-pick GPU (DirectML) for TTS — deliberately out of scope; synthesis on
+  CPU is inside the latency budget.
 - Same-PC window capture (no capture card) — future idea, separate backend.
+- Windows OCR remains noisier than Apple Vision even with the English model.
+  The next real lever is canonical-text snapping (phase 5 of
+  [OCR-INTEGRATION-PLAN.md](OCR-INTEGRATION-PLAN.md)), which is blocked on
+  datamined text that can't ship in a public repo.
+
+- `Player.playing` still reads sounddevice's module-level stream
+  (`sd.get_stream().active`), and `play()` still goes through `sd.play` — now
+  with an explicit `device=` for the output picker. If playback ever overlaps
+  or stutters, this is still the first suspect; the fix is an explicit
+  `OutputStream` the player owns.
