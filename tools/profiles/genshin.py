@@ -165,13 +165,33 @@ class Genshin(Profile):
 
     # Choice options float to the right of the dialogue box, above it, each
     # row left-aligned past a chat-bubble icon (the icon is not text, so the
-    # left edge is where the option text starts): measured x 0.686-0.689,
-    # rows at cy 0.291 and 0.267 across two prompts.
-    # CALIBRATE: both prompts in the capture were a SINGLE two-row option,
-    # so how far a longer list stacks upward is unverified — the ceiling
-    # here is Star Rail's and may be short.
-    CHOICES = {"x": (0.66, 1.00), "y": (0.22, 0.62)}
+    # left edge is where the option text starts): measured x 0.686-0.689 on
+    # the two-row prompts of the calibration capture, and x=0.6875 on every
+    # row of the 7-option Katheryne prompt in rec_20260809_143259 — the
+    # long-list capture the old CALIBRATE note was waiting for. The stack
+    # grows UPWARD from a fixed bottom (~0.277): that prompt's rows sit at
+    # cy 0.277/0.323-0.346/0.393/0.441-0.464/0.508/0.565/0.622, so the old
+    # 0.62 ceiling (Star Rail's, kept while unverified) clipped the top
+    # option out of the prompt — the session log shows it read as a
+    # six-option list missing "Claim Daily Commission Reward". 0.66 clears
+    # the measured top edge (0.636) by a full half-row; an 8th option
+    # would sit at ~0.68 and need another +0.06 — not taken on faith, the
+    # same way 0.62 wasn't.
+    CHOICES = {"x": (0.66, 1.00), "y": (0.22, 0.66)}
     CHOICE_LEFT_EDGE = (0.66, 0.75)
+    # What separates two OPTIONS from the wrapped rows of one, as an
+    # absolute center-to-center gap. The height-relative rule (1.5x the
+    # taller row) sits on a knife edge here: measured on the 7-option
+    # prompt, wrapped rows of one option are 0.023 apart and adjacent
+    # options 0.044-0.057, but Vision's heights for the same visual rows
+    # span 0.018-0.034, putting 1.5xH anywhere from 0.027 to 0.052 — and
+    # the session log shows three options fused into one ("Check Valiant
+    # Chronicles information We meet again, Katheryne…"). The 0.044 floor
+    # on the option side is itself an icon artifact: the bubble glyph
+    # fused into the Dispatch row inflates its box, which is also why the
+    # gap is measured between centers, not bottom edges. 0.034 is the
+    # midpoint of the clear air between the two pitches.
+    CHOICE_GROUP_GAP = 0.034
     # A wrapped option's second row is set smaller than its first (measured
     # 0.019 against 0.024); Star Rail's 0.020 floor dropped it and the
     # option read as a sentence fragment. Party-member names are the only
