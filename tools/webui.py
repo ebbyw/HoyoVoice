@@ -18,7 +18,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 from profiles import PROFILES, profile_choices
 
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 # single source of truth (hoyovoice.py reads it); env override lets
 # tools/replay.py run beside a live instance without a port collision
 DASHBOARD_PORT = int(os.environ.get("HOYOVOICE_PORT", "8470"))
