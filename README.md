@@ -88,7 +88,8 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 | Loading screens (version string + UID) | Lore blurb read by narrator |
 | Lore cards (centered title + prose, no UI chrome) | Title + blurb read by narrator |
 | System screens (version string, no UID — e.g. epilepsy warning) | Silent |
-| Quick Read book screens | Read incrementally as you scroll; Back stops mid-sentence |
+| Quick Read book screens (Star Rail) | Read incrementally as you scroll; Back stops mid-sentence |
+| Readable articles (Genshin — "Investigative Report…") | Title then body by the narrator, incrementally as you scroll; Return stops mid-sentence |
 | Message / group-chat panels | Each message in its sender's cast voice, incrementally as you scroll; system notices ("… started sharing location") read by the narrator |
 | Info screens (Participant Details…) | Read top-to-bottom via the same reader |
 | Floating host bubbles (portrait, no nameplate) | Spoken as `settings.overlay_speaker` |
@@ -187,7 +188,7 @@ Reading a screen means knowing where that game draws its nameplate, its dialogue
 | Game | Status |
 |---|---|
 | Honkai: Star Rail | Complete — dialogue, narration, lore cards, loading screens, overlays, Quick Read, info screens, chat panels |
-| Genshin Impact | **Most screens** — dialogue, choice prompts, full-screen narration, loading-screen tips; all calibrated against a real session. No book/reading UI yet |
+| Genshin Impact | **Most screens** — dialogue, choice prompts, full-screen narration, loading-screen tips, readable articles; all calibrated against a real session. No book/inventory reading UI yet |
 
 `settings.game` picks a profile: `hsr`, `genshin`, or `auto` (the default), which starts on Star Rail and switches when a sustained run of frames carries chrome unique to the other game — Star Rail's `✕ Continue` hint, Genshin's bottom-right UID. The dashboard has the same control, and shows which profile is actually being read in auto mode.
 
