@@ -4,7 +4,30 @@ Companion to `plans/OCR-VISION-RESEARCH.md` (2026-08-04). Grounded in the curren
 
 Ground rules: every phase lands as its own branch → main, validated through `tools/replay.py` on the regression recordings (and the sandbox frame-corpus diff for OCR-level changes) BEFORE hardware testing. Fix in the repo, push, pull on the Windows box — never hand-edit there. Version bump in `tools/webui.py` + CHANGELOG per release.
 
-**Status update before starting:** two research items are already partially built and the plan accounts for that. `repair_runons`/`text_quality` in live.py already do wordfreq-based fusion splitting and best-variant voting (research #6), and the loop already skips unchanged *mtimes*. What's genuinely missing: a better rec model, pixel-level change gating, confidence use, anchors, and TextMap matching.
+## Status (2026-08-08)
+
+**Phases 0–3 shipped in 0.7.3.** The English recognition model, the pixel change
+gate (`tools/change_gate.py`, pinned by `tools/test_change_gate.py`) and
+confidence-aware stabilization are all in `main`; the changelog entry for 0.7.3
+carries the measured results and the two mistakes the gate design had to survive
+(watching every block on the frame instead of the line's own, and averaging the
+diff instead of counting moved bright pixels). Baseline numbers are below.
+
+**Phase 4 is next and is the large one.** Genshin support arrived ahead of it
+in 0.7.0 as hand-written geometry in `tools/profiles/genshin.py` rather than as
+anchor data, so phase 4's framing has shifted: it is no longer the enabler for
+Genshin, it is what would make the *remaining* Genshin screens (the book /
+reading UI) captures rather than code, and what would cut OCR cost by cropping
+to a band. Weigh it against just calibrating the last screens by hand.
+
+**Phase 5 stays blocked** on datamined text that cannot ship in a public repo.
+
+**Phase 6** hasn't been needed; labelling by hand hasn't become annoying enough.
+
+**Two research items were already built before this plan** and the phases below
+account for it: `repair_runons`/`text_quality` in `live.py` do wordfreq-based
+fusion splitting and best-variant voting (research #6), and the loop already
+skipped unchanged *mtimes*.
 
 ## Phase 0 — Baseline (half a session)
 
@@ -84,14 +107,18 @@ Replay-harness-only: batch low-confidence lines from the regression corpus throu
 
 ## Order and expected wins
 
-| Phase | Effort | Pain point hit | Success metric |
-|---|---|---|---|
-| 0 baseline | 0.5 session | — | numbers recorded |
-| 1 rec model | small | word fusions | fusion count ↓, 0 classify regressions |
-| 2 change gate | medium | 154ms/frame burn, recording-load tearing | ≥60% OCR calls skipped on static dialogue |
-| 3 confidence | small | stabilization latency/stalls | time-to-spoken ↓, no new false fires |
-| 4 anchors/ROI | large | Genshin profile, OCR speed, chrome heuristics | Genshin profile ships as data |
-| 5 TextMap | experiment | everything OCR, latency ceiling | match rate ≥90%, wrong-match ~0 on replay corpus |
-| 6 arbiter | backlog | corpus labeling | labeled corpus |
+| Phase | Effort | Pain point hit | Success metric | Outcome |
+|---|---|---|---|---|
+| 0 baseline | 0.5 session | — | numbers recorded | **done** — reconstructed after the fact, see above |
+| 1 rec model | small | word fusions | fusion count ↓, 0 classify regressions | **shipped 0.7.3** — 333 → 144 fusions on 81 shots, zero regressions |
+| 2 change gate | medium | 154ms/frame burn, recording-load tearing | ≥60% OCR calls skipped on static dialogue | **shipped 0.7.3** — 23%, and the target was wrong (see Baseline) |
+| 3 confidence | small | stabilization latency/stalls | time-to-spoken ↓, no new false fires | **shipped 0.7.3** — ~0.12s, no lines lost |
+| 4 anchors/ROI | large | OCR speed, remaining Genshin screens, chrome heuristics | screens ship as data, detector cost ↓ | next |
+| 5 TextMap | experiment | everything OCR, latency ceiling | match rate ≥90%, wrong-match ~0 on replay corpus | blocked on data |
+| 6 arbiter | backlog | corpus labeling | labeled corpus | not needed yet |
 
-1→2→3 are independent of 4 and can release incrementally (0.6.x). 4 is the 0.7.0 headline. 5 only after 4's profiles exist (it's per-game data too, same profiles dir).
+1→2→3 were independent of 4 and released together in 0.7.3. Phase 4 is now
+optional rather than load-bearing: Genshin shipped as profile code in 0.7.0
+without it, so what remains for 4 to justify itself is OCR cost and the last
+uncalibrated screens. 5 only after 4's profiles exist (it's per-game data too,
+same profiles dir).

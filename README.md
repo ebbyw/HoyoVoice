@@ -214,7 +214,7 @@ Calibrating a screen type takes captures, not guesswork: every logged event save
 | `voices_custom/` | Voice packs added from the dashboard, in canonical form |
 | `setup.sh` / `setup.ps1` | One-time install (macOS / Windows) |
 | `hoyovoice.sh` / `hoyovoice.py` | start / stop / status / log / restart (macOS shell / cross-platform) |
-| `plans/` | Windows first-run checklist, pre-merge notes |
+| `plans/` | Release process, pre-merge checklist, Windows first-run checklist, OCR roadmap |
 
 ## Debugging a session
 
