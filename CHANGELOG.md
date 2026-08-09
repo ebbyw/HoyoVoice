@@ -6,6 +6,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-08-08
+
 ### Added
 
 - **`Phlogiston`** → `flo-jiston`, a `TERMS` entry. Wrong on one platform only, like `shaman`: misaki says `flOʤˈɪstən` already, espeak says `flˈɑːdʒɪstən` ("FLAH-jis-tun"), and the respelling is `flˈOʤˈɪstən` on both — the reading macOS already had. The last syllable is joined on purpose: `flo-jis-ten` makes a third stressed chunk (`flˈOʤˈɪstˈɛn`, "-TEN") where the word ends in a schwa. Capitalised, so `--custom-words` also pins it in the OCR vocabulary.
