@@ -24,6 +24,10 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **`Sigewinne` was over-corrected into three syllables.** The shipped respelling `See-guh-win` phonemized to `sˈiɡˈʌwˈɪn` — "see-guh-WIN", with the `g` hardened back and a syllable the name doesn't have. The raw name was never wrong in that way: both engines read `Sigewinne` as `sˈIʤwɪn`, "SIJE-win", where the `ge` is already soft and what is actually wrong is the first vowel (the /aɪ/ of "sigh") and the clipped last one. `Seej-ween` is `sˈiʤwˈin` / `sˈiːʤwˈiːn` — two syllables, soft `g`, both vowels long. Not `Siege-ween` or `Seege-ween`: same phones, but the stress on the second chunk splits the engines (misaki `wˌin`, espeak `wˈiːn`).
+
+  `--write` overwrites an entry whose value has changed, so `python tools/pronounce_names.py --write` picks this up on each machine — `voices.json` is yours, and a pull never updates it.
+
 - **OCR garbage stops earning casting rows.** Windows session logs show `iii`
   auto-cast as a character, and `Lv. 90`, `Liv, 9.`, `255771/25577`,
   `1v.90 2557` reaching the speaker slot — HUD readouts and half-drawn rows
