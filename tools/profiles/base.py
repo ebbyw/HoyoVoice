@@ -99,6 +99,11 @@ class Profile:
     PLATE_MAX_W = 0.30              # names are short; dialogue lines are wide
     DIALOGUE_X = (0.40, 0.60)       # real lines are centered
     DIALOGUE_SPAN = 0.15            # lines live this far below the nameplate
+    # Hard floor for dialogue rows, whatever the span works out to. The span
+    # is measured DOWN FROM the nameplate, so a game that draws the plate
+    # lower reaches further into whatever sits at the bottom of the screen.
+    # 0.0 = no floor (the span alone decides).
+    DIALOGUE_MIN_Y = 0.0
     DIALOGUE_FALLBACK_Y = (0.08, 0.21)
     DIALOGUE_WIDE_X = (0.08, 0.92)  # row-mate fragments can sit this far out
 
@@ -206,7 +211,7 @@ class Profile:
         if plate is not None:
             state["speaker"] = plate["text"]
             dlg_top = plate["y"] - 0.004            # just below the nameplate
-            dlg_bot = plate["y"] - self.DIALOGUE_SPAN
+            dlg_bot = max(plate["y"] - self.DIALOGUE_SPAN, self.DIALOGUE_MIN_Y)
             # a role/title line under the name is part of the plate, not the
             # line — drop it before it can seed a dialogue row
             subtitle = self.subtitle_rows(conf, plate)
