@@ -30,6 +30,11 @@ CASES = [
     ("The Fatui hold the Northland Bank.",
      "The Fah-too-ee hold the Northland Bank."),
     ("A Fatuus stood guard.", "A Fah-too-oose stood guard."),
+    # a plural needs its own entry — substitution is word-bounded, so a
+    # \bWayob\b rule never reaches inside "Wayobs"
+    ("The Wayob Manifestation stirred.",
+     "The Wah-yohb Manifestation stirred."),
+    ("The Wayobs guard the tribes.", "The Wah-yohbs guard the tribes."),
     # pronunciations_exact: the character, not the pastime
     ("Gaming brought the soup.", "Gah-ming brought the soup."),
     ("I spent all night gaming.", "I spent all night gaming."),
