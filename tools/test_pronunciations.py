@@ -34,6 +34,9 @@ CASES = [
     # the wrong vowel. Same path as a respelling, for the same reason.
     ("Shh! Someone's coming.", "Shush! Someone's coming."),
     ("Tsk. Typical.", "Tisk. Typical."),
+    # "Tch" is "T-C-H" on Windows, a bare ʧ on macOS — the same tut as Tsk
+    ("Tch. Whatever.", "Tisk. Whatever."),
+    ("Tchh, fine.", "Tisk, fine."),
     ("Uhm, I'm not sure.", "Um, I'm not sure."),
     ("Uhmm... maybe.", "Um... maybe."),
     ("Ugh, this is heavy.", "Ug, this is heavy."),
@@ -66,6 +69,18 @@ CASES = [
     ("O-okay then.", "O-okay then."),
     ("I—It's him!?", "I-It's him!?"),
     ("O—Okay then.", "O-Okay then."),
+    # a whole onset stammers too, and is spelled out letter by letter
+    # ("Wh-What's" → dˌʌbᵊljˌuˈAʧ—wˌʌts)
+    ("Wh-What's going on?", "Whuh-What's going on?"),
+    ("Sh-She's here.", "Shuh-She's here."),
+    ("Th—That's it.", "Thuh-That's it."),
+    ("Str-Strange…", "Struh-Strange…"),
+    # an all-caps onset is read as letters again ("WHuh" → dˈʌbᵊljuhˌʌ)
+    ("WH-WHAT!", "Whuh-WHAT!"),
+    # a multi-letter onset carrying a vowel is a prefix, not a stammer
+    ("Re-read the sign.", "Re-read the sign."),
+    ("He is a co-conspirator.", "He is a co-conspirator."),
+    ("The de-dented armor.", "The de-dented armor."),
     # not stammers: the letter doesn't match the word it precedes
     ("He bought a T-shirt.", "He bought a T-shirt."),
     ("The X-ray came back clear.", "The X-ray came back clear."),

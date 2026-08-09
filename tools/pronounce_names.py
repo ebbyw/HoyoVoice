@@ -149,6 +149,11 @@ TERMS = {
     "Asha": "Ahshaa",
     # "eign" is read as its own syllable: ɹˌiˈInbO, "ree-EYE-n-bow"
     "Reignbow": "Rainbow",
+    # Windows only, like "shaman": misaki says ˈɑɹkɑn already, espeak says
+    # ˈɑːɹtʃˌɔn ("AR-chon", the ch of church). The plural needs its own entry
+    # because substitution is word-bounded.
+    "Archon": "Ahr-kon",
+    "Archons": "Ahr-kons",
     # Wrong on ONE platform, like "shaman": misaki says flOʤˈɪstən already,
     # espeak says flˈɑːdʒɪstən ("FLAH-jis-tun"). "flo-jiston" is flˈOʤˈɪstən
     # on both — the reading macOS already had. Spelled with the last
