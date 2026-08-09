@@ -6,6 +6,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-08-09
+
 ### Fixed
 
 - **`Mavuika` was read with a syllable she doesn't have.** The `vu` is a w, not a v followed by a vowel. Both engines read the raw name as `mˈævjuˌɪkə`, "MAV-yoo-ick-uh", and the respelling that shipped fixed the vowels but kept the v — `Mah-vooee-kah` is `mˈɑvˈuikˈɑ`, "mah-voo-EE-kah", four syllables where the name has three. `Mah-wee-kah` is `mˈɑwˈikˈɑ` / `mˈɑːwˈiːkˈɑː`. Changing a respelling needs nothing but the edit: the table always wins over what is already in a `voices.json`, so `--write` carries a correction through the same way it carries a new entry. Run `python tools/pronounce_names.py --write` on **each** machine — a pull does not update anyone's pronunciations.
