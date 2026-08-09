@@ -30,7 +30,10 @@ from:
   * The UID sits bottom-right and is on screen in nearly every context
     (249 frames), which makes it a good game fingerprint but useless as a
     system-screen marker.
-  * No phone UI: no group-chat panel, no Quick Read book screen.
+  * No phone UI: no group-chat panel. Readable articles (the
+    "Investigative Report" panels) ARE a reading screen and are read
+    incrementally the way Star Rail's Quick Read books are, but their
+    layout is entirely their own — see READABLE_* below.
 """
 import re
 
@@ -41,11 +44,12 @@ class Genshin(Profile):
     name = "genshin"
     label = "Genshin Impact"
     PLAYER_NAME = "Traveler"
+    READER_LABEL = "readable"
     # Only screens whose geometry has been checked against real frames.
     # Choice prompts did not occur in the calibration capture; they stay off
     # rather than guessed at, because a wrong band does not fail quietly —
     # it narrates menus. See CALIBRATE below.
-    SCREENS = frozenset({"dialogue", "narration", "loading"})
+    SCREENS = frozenset({"dialogue", "narration", "loading", "quickread"})
 
     # Box chrome that is never speech. 'Confirm' and 'Auto' both sit inside
     # the dialogue band's reach; without this they can join a row.
@@ -180,6 +184,120 @@ class Genshin(Profile):
                 return False
             other = other or bool(self._HINT_WORD.match(text))
         return other
+
+    # --- Readable articles ---------------------------------------------
+    # The full-screen reading panel ("Investigative Report: Bakunawa"): a
+    # gold title centered under an ornate rule, prose in a fixed column
+    # below it, and 'Return' alone in the hint strip. Measured off a 1080p
+    # capture of that article: title cx=0.499 cy=0.924 h=0.034; body rows
+    # all share a left edge at x=0.266 and run from cy=0.859 down to 0.536
+    # at a pitch of 0.033; 'Return' cx=0.915 cy=0.076; UID cy=0.014.
+    #
+    # This is NOT Star Rail's Quick Read layout — different bands, different
+    # chrome — but it is the same KIND of screen, so it hooks in through
+    # classify_quickread and gets the same incremental reading, scroll
+    # tolerance and panel-close handling.
+    READABLE_TITLE = {"x": (0.40, 0.60), "y": (0.90, 0.96)}
+    # The article SCROLLS between the two ornate rules, and the rules are
+    # where it is clipped. Measured off the same frame by scanning row
+    # brightness across the column: the upper rule is a single bright line
+    # at cy=0.896, the lower at cy=0.052 — well BELOW the Return hint
+    # (cy=0.076), which floats inside the panel out at cx=0.915. So the
+    # body band is the full span between the rules; anything narrower
+    # silently swallows rows once the article is scrolled, which is the one
+    # failure this screen cannot afford (a dropped row is never read again,
+    # unlike a deferred one).
+    READABLE_BODY = {"x": (0.20, 0.80), "y": (0.052, 0.896)}
+    READABLE_RULE_Y = (0.052, 0.896)
+    # A row sliding under a rule is drawn in half, and half a row OCRs as
+    # garbage or as a fragment that dedupe cannot match against the whole
+    # row it becomes — so it would be read, then read again complete. Defer
+    # any row whose box reaches within this of a rule. Unscrolled, the
+    # nearest row clears the upper rule by 0.023 (0.873 against 0.896) and
+    # the article's own padding is a full row pitch (0.033), so a row this
+    # close to a rule is one being scrolled past, not one at rest.
+    READABLE_CLIP_MARGIN = 0.004
+    # Body rows are left-aligned in the column; the title is not. At least
+    # one row must sit on that edge — it is what separates an article from
+    # a centered card that happens to carry a Return hint.
+    READABLE_LEFT_EDGE = (0.22, 0.32)
+    # Below this is the panel's own chrome (Return, UID), which is allowed
+    # on screen without disqualifying the panel.
+    READABLE_STRIP_Y = 0.10
+    # Row pitch, for ordering fragments Vision split out of one drawn row.
+    READABLE_LINE_H = 0.033
+    # Stylized proper nouns read weakly even here: "Tenochtzitoc." came
+    # back at 0.50 on both frames of the capture while every other row
+    # scored 1.00, and at the 0.8 floor the word was dropped SILENTLY from
+    # the middle of a sentence. The column is as tightly constrained as the
+    # nameplate slot, so it takes the same floor the plate does.
+    READABLE_MIN_CONF = 0.3
+    _RETURN = re.compile(r"^return$", re.I)
+
+    def _readable_unclipped(self, block):
+        """True if this row is drawn WHOLE — clear of both scroll rules."""
+        lo, hi = self.READABLE_RULE_Y
+        m = self.READABLE_CLIP_MARGIN
+        return block["y"] >= lo + m and block["y"] + block["h"] <= hi - m
+
+    def classify_quickread(self, blocks):
+        """Detect a readable article and return its title and body rows in
+        reading order, or None.
+
+        Articles scroll. Rows are returned per row rather than as one string
+        so live.py can read the newly revealed ones and skip what it has
+        already spoken, and a row still half-hidden behind a scroll rule is
+        left out until it is drawn whole.
+
+        The title comes back with a period appended when it has no sentence
+        punctuation of its own, so it is spoken as a heading rather than
+        running into the first line ("Investigative Report: Bakunawa. A
+        gigantic beast that…").
+        """
+        if "quickread" not in self.SCREENS:
+            return None
+        conf = self.confident(blocks)
+        if not any(self._RETURN.match(b["text"].strip(" •✕×○()[]{}"))
+                   and in_region(b, self.HINT_STRIP) for b in conf):
+            return None
+        # NOTHING may be on screen but the panel and its bottom strip. This
+        # is the whole defence against reading a menu aloud: 'Return' is a
+        # common enough hint, and a menu's own heading and first column read
+        # as a title over a left-aligned body. What menus always also have
+        # is text elsewhere — tabs, counters, a second column — and a
+        # readable never does.
+        for b in conf:
+            if b["y"] + b["h"] / 2 < self.READABLE_STRIP_Y:
+                continue
+            if not (in_region(b, self.READABLE_TITLE)
+                    or in_region(b, self.READABLE_BODY)):
+                return None
+        pool = [b for b in blocks
+                if b["confidence"] >= self.READABLE_MIN_CONF
+                and b["text"].strip() not in self.IGNORE]
+        title = [b for b in pool if in_region(b, self.READABLE_TITLE)]
+        body = [b for b in pool if in_region(b, self.READABLE_BODY)
+                and self._readable_unclipped(b)]
+        if not title or not body:
+            return None
+        if not any(self.READABLE_LEFT_EDGE[0] <= b["x"]
+                   <= self.READABLE_LEFT_EDGE[1] for b in body):
+            return None
+        order = lambda b: (round((1 - (b["y"] + b["h"] / 2))    # noqa: E731
+                                 / self.READABLE_LINE_H), b["x"])
+        body.sort(key=order)
+        text = " ".join(b["text"] for b in body).strip()
+        # prose, not a stat block: the same guards the narration cards use
+        if (len(text) < self.NARRATION_MIN_CHARS
+                or len(text.split()) < self.NARRATION_MIN_WORDS
+                or sum(c.isdigit() for c in text)
+                > self.NARRATION_MAX_DIGIT_RATIO * len(text)):
+            return None
+        title.sort(key=order)
+        head = split_camel(" ".join(b["text"] for b in title).strip())
+        if head and head[-1] not in ".!?…:;,":
+            head += "."
+        return [head] + [b["text"] for b in body]
 
     def _uid_corner(self, blocks):
         return any(self._UID.search(b["text"])
