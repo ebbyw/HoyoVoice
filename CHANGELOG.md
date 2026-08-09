@@ -6,6 +6,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-08-09
+
 ### Fixed
 
 - **A companion talking while you walk is read.** Genshin draws its nameplate at two heights, and they are separate clusters rather than a spread: boxed NPC dialogue at cy 0.2261-0.253, and the world dialogue special quests use — no box, no chrome, full HUD on screen — at cy 0.2093-0.2097. The plate band was sized for the first and missed the second **by 0.0003**. That is not a quiet miss: without a plate the line falls through to the plate-less band, which reaches up to 0.21 and so read the nameplate itself as words (`Paimon These floaty lil' guys… They won't jump us out of nowhere, will they?`), and the line was then dropped as an unknown speaker, because world dialogue carries no story chrome to fall back on either. Six of them went unread in one session.
