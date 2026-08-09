@@ -163,6 +163,18 @@ VAD_SOFT_THRESHOLD = 0.12
 VAD_SOFT_HITS = 3
 SOFT_GATE_MIN_VOICED = 3      # observations before the prior is trusted
 SOFT_GATE_RATIO = 0.75
+# ...over the last this-many observations of that speaker, not their whole
+# recorded life. A lifetime ratio cannot describe a character whose voicing
+# CHANGES, and in these games it changes per quest: Paimon is unvoiced for
+# hundreds of lines and then fully voiced for a scene. Her lifetime tally
+# makes 0.75 unreachable no matter how thoroughly the current scene voices
+# her, so she was judged at full-strength thresholds through a quest that
+# voiced every one of her lines. Eight, because the ratio needs enough slots
+# to express 0.75 (6 of 8) while still turning over inside a single
+# conversation; measured across thirteen sessions and 944 spoken lines,
+# windowing changes the gate on exactly four of them — the three Paimon
+# talk-overs and one Sigewinne line — and nothing else moves.
+PRIOR_WINDOW = 8
 # The same prior, pointed the other way, and only ever used to decide
 # whether to CUT our own playback. A speaker the game has never once been
 # heard to voice — across sessions, the history outlives a restart — is a
@@ -220,8 +232,40 @@ CHOICE_LEAD_IN = 0.5
 
 vad_history = deque(maxlen=400)
 vad_lag = {"s": 0.0}          # how far the VAD tail-reader trails the live edge
-# speaker -> [times the game voiced them, times we spoke for them]
+# speaker -> [times the game voiced them, times we spoke for them], over
+# that speaker's last PRIOR_WINDOW observations. Derived from voiced_recent
+# and kept in this shape because it is what the gates, the log line and the
+# persisted state all read.
 voiced_history = {}
+# speaker -> the outcomes themselves, oldest first ("v" voiced, "s" spoken).
+# The window is the source of truth; the counts above are a view of it.
+voiced_recent = {}
+
+
+def record_voiced(speaker, was_voiced):
+    """Add one observation and roll the window forward."""
+    w = voiced_recent.setdefault(speaker, deque(maxlen=PRIOR_WINDOW))
+    w.append("v" if was_voiced else "s")
+    voiced_history[speaker] = [sum(1 for c in w if c == "v"),
+                               sum(1 for c in w if c == "s")]
+
+
+def seed_window(speaker, v, s):
+    """Rebuild a window from legacy lifetime counts, preserving the ratio.
+
+    State written before the window existed is a pair of lifetime tallies
+    with no order in it, so the honest reconstruction is the ratio it
+    implies. A character with a long unvoiced history seeds to an all-spoken
+    window, which is what their record actually says — and it re-arms the
+    firm gate for them, which is the protection that record earns.
+    """
+    n = v + s
+    nv = min(PRIOR_WINDOW, round(PRIOR_WINDOW * v / n)) if n else 0
+    w = deque("v" * nv + "s" * (PRIOR_WINDOW - nv) if n else "",
+              maxlen=PRIOR_WINDOW)
+    voiced_recent[speaker] = w
+    voiced_history[speaker] = [sum(1 for c in w if c == "v"),
+                               sum(1 for c in w if c == "s")]
 # per-block stereo energy: (t, mid_dB, side_dB). Game VO is center-panned
 # (mid), music/ambience is wide (side) — a mid-only burst at line start is
 # voiceover even when the VAD can't recognize the voice as speech.
@@ -1665,7 +1709,9 @@ def handle_commands(speech, recent_lines):
             recent_lines.clear()
             SPOKEN_CACHE.write_text(json.dumps(
                 {"window": [], "saved_at": time.time(),
-                 "voiced_history": voiced_history}))
+                 "voiced_history": voiced_history,
+                 "voiced_recent": {k: "".join(w)
+                                   for k, w in voiced_recent.items()}}))
             print(f"[log cleared — dedupe window of {n} cleared too]",
                   flush=True)
         elif cmd[0] == "game":
@@ -1704,9 +1750,21 @@ def main():
             else:
                 print(f"dedupe window discarded ({age / 60:.0f} min old)",
                       flush=True)
+            recent = obj.get("voiced_recent", {})
+            for spk, outcomes in recent.items():
+                if isinstance(outcomes, str):
+                    voiced_recent[spk] = deque(
+                        [c for c in outcomes if c in "vs"][-PRIOR_WINDOW:],
+                        maxlen=PRIOR_WINDOW)
+                    w = voiced_recent[spk]
+                    voiced_history[spk] = [sum(1 for c in w if c == "v"),
+                                           sum(1 for c in w if c == "s")]
+            # state written before the window existed carries lifetime
+            # tallies only — seed from the ratio they imply
             for spk, counts in obj.get("voiced_history", {}).items():
-                if isinstance(counts, list) and len(counts) == 2:
-                    voiced_history[spk] = list(counts)
+                if spk not in voiced_recent and \
+                        isinstance(counts, list) and len(counts) == 2:
+                    seed_window(spk, counts[0], counts[1])
             print(f"restored dedupe window of {len(recent_lines)}"
                   f"; voiced history for {len(voiced_history)} speaker(s)",
                   flush=True)
@@ -2526,7 +2584,9 @@ def main():
             SPOKEN_CACHE.write_text(json.dumps(
                 {"window": [[e["speaker"], e["norm"]] for e in recent_lines],
                  "saved_at": time.time(),
-                 "voiced_history": voiced_history}))
+                 "voiced_history": voiced_history,
+                 "voiced_recent": {k: "".join(w)
+                                   for k, w in voiced_recent.items()}}))
 
             if state["speaker"] in VOICES.get("always_voiced", []):
                 stats["always_voiced"] += 1
@@ -2610,8 +2670,7 @@ def main():
                 wait_until = time.monotonic() + 15
                 while speech.playing and time.monotonic() < wait_until:
                     time.sleep(0.05)
-            rec = voiced_history.setdefault(state["speaker"], [0, 0])
-            rec[0 if voiced else 1] += 1
+            record_voiced(state["speaker"], voiced)
             if voiced:
                 stats["skipped_voiced"] += 1
                 skip_label = ("skipped (voiced — soft gate)" if soft
