@@ -208,6 +208,13 @@ CHOICE_STALE_AFTER = 8.0
 # option forever and it went unread. Long enough for a typing line to show
 # up and be adopted instead.
 CHOICE_EMPTY_GRACE = 2.0
+# Beat of silence between the line above and the option, once our own voice
+# has stopped. The option is the player answering, and answering the instant
+# the other character's last syllable ends reads as one breathless run —
+# both halves are ours, in different voices, with nothing between them. Long
+# enough to hear as a turn taken, short enough that the player has usually
+# not clicked through yet.
+CHOICE_LEAD_IN = 0.5
 
 vad_history = deque(maxlen=400)
 vad_lag = {"s": 0.0}          # how far the VAD tail-reader trails the live edge
@@ -1687,6 +1694,8 @@ def main():
     choice_prev = ""            # last frame's options (settle check)
     choice_logged = None        # last prompt written to the log
     pending_choice = None       # lone option waiting for the line below it
+    # long ago: an option held before we have ever spoken shouldn't wait
+    speech_busy_t = time.monotonic() - 60.0
     last_spoken_norm = None     # suppresses repeat-logs for the live line
     fired_norm = None           # line already pushed through the gate once
     unstable_count = 0
@@ -1723,6 +1732,10 @@ def main():
             time.sleep(0.03)
             handle_commands(speech, recent_lines)
             now = time.monotonic()
+            if speech.playing:
+                # when our voice was last busy — a held choice option waits
+                # a beat past this before answering
+                speech_busy_t = now
 
             if device_request["want"] is not None:
                 want = device_request["want"]
@@ -2145,9 +2158,11 @@ def main():
                     pending_choice = None
             if (pending_choice and pending_choice["armed"]
                     and not speech.playing
+                    and now - speech_busy_t >= CHOICE_LEAD_IN
                     and not is_voiced(time.monotonic() - CHOICE_VO_LOOKBACK)):
-                # our own voice is idle and the game's has stopped — the line
-                # under it may be voiced even when the option is not
+                # our own voice has been idle for a beat and the game's has
+                # stopped — the line under it may be voiced even when the
+                # option is not
                 text = fix_ocr_text(pending_choice["text"])
                 # The option is the player character's own words, and the
                 # game gives it no nameplate. Cast it under their name —
