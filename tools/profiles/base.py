@@ -301,7 +301,7 @@ class Profile:
                 # while the centers keep the drawn pitch. The legacy rule
                 # stays on bottom edges — it predates the measurement and
                 # its games are calibrated to it.
-                if self.CHOICE_GROUP_GAP:
+                if self.CHOICE_GROUP_GAP is not None:
                     split = ((prev["y"] + prev["h"] / 2)
                              - (b["y"] + b["h"] / 2)) > self.CHOICE_GROUP_GAP
                 else:
