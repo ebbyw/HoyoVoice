@@ -230,6 +230,16 @@ ENERGY_MID_BURST = 7.0        # dB over pre-line baseline
 ENERGY_MID_OVER_SIDE = 5.0    # mid must rise this much more than side
 ENERGY_SIDE_FLAT = 2.5        # AND side must stay flat — music swells raise
                               # both channels; VO raises only the center
+# Above this much mid-over-side, the burst is decisive on its own and neither
+# the side-flat cap nor the speechiness floor applies. Both guards exist to
+# keep center-panned SFX out; a burst this lopsided is not an explosion,
+# which is broadband. Measured over 1107 spoken and 46 known-voiced lines
+# from thirteen sessions: mid-over-side runs p50 0.5 / p90 4.2 on lines we
+# read aloud and p50 8.8 / p90 11.4 on lines the VAD independently called
+# voiced, so 8 sits between the populations rather than inside either. At
+# this cut 18 of 1107 spoken lines (1.6%) become voiced, and 27 of the 46
+# known-voiced ones are reachable without the VAD agreeing at all.
+ENERGY_DECISIVE_OVER_SIDE = 8.0
 
 # --- shared state for the dashboard ---
 events = deque(maxlen=200)
@@ -450,6 +460,22 @@ def audio_thread():
 def speech_hits(since, threshold=None):
     threshold = VAD_THRESHOLD if threshold is None else threshold
     return sum(1 for t, p in vad_history if t >= since and p >= threshold)
+
+
+def center_energy_voiced(mid_up, side_up, vad_peak):
+    """Is this centre-channel burst voiceover rather than a sound effect?
+
+    Game VO is mixed to the stereo centre; music and ambience are wide. The
+    side-flat cap and the speechiness floor both exist to keep centre-panned
+    SFX out — but a burst this lopsided is not an explosion, which is
+    broadband, so above ENERGY_DECISIVE_OVER_SIDE neither applies. Kept as a
+    pure function so tools/test_center_energy.py can pin it.
+    """
+    if mid_up < ENERGY_MID_BURST or mid_up - side_up < ENERGY_MID_OVER_SIDE:
+        return False
+    if mid_up - side_up >= ENERGY_DECISIVE_OVER_SIDE:
+        return True
+    return side_up <= ENERGY_SIDE_FLAT and vad_peak >= 0.15
 
 
 def usually_voiced(speaker):
@@ -2560,13 +2586,23 @@ def main():
             vad_peak = max((p for t, p in vad_history
                             if t >= max(t_stable - 1.2, gate_since)),
                            default=0.0)
-            if (not voiced and mid_up >= ENERGY_MID_BURST
-                    and side_up <= ENERGY_SIDE_FLAT
-                    and mid_up - side_up >= ENERGY_MID_OVER_SIDE
-                    and vad_peak >= 0.15):
+            # A decisive burst answers for itself. Both other guards are
+            # there to keep center-panned SFX out, and both were refusing
+            # real voiceover instead: across thirteen sessions this layer
+            # fired ZERO times, while the side-flat cap alone rejected 24 of
+            # the 46 lines the VAD had independently called voiced (their
+            # side channel runs p50 3.8dB, well over the 2.5 cap), and the
+            # speechiness floor rejected nearly every line we spoke. A
+            # Paimon line went out over her own voiceover at mid+17.3
+            # side+5.2 — 12.1dB of centre burst — because her processed
+            # squeak scores 0.00 to a speech model built on human speech,
+            # which is the exact case this layer exists for.
+            decisive = mid_up - side_up >= ENERGY_DECISIVE_OVER_SIDE
+            if not voiced and center_energy_voiced(mid_up, side_up, vad_peak):
                 voiced = True
                 print(f"[voiced — center energy] mid+{mid_up:.1f}dB "
-                      f"side+{side_up:.1f}dB peak={vad_peak:.2f}", flush=True)
+                      f"side+{side_up:.1f}dB peak={vad_peak:.2f}"
+                      f"{' decisive' if decisive else ''}", flush=True)
             synth_thread.join()
             if ext_base and not voiced:
                 # the remainder continues a line we're still speaking —
