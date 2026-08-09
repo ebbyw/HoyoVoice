@@ -115,7 +115,14 @@ FIXES = {
     # "Nah-hee-dah" is nˈɑhˈidˈɑ / nˈɑːhˈiːdˈɑː.
     "Nahida": "Nah-hee-dah",
     "Nilou": "Nee-loo",
-    "Sigewinne": "See-guh-win",
+    # the raw name is sˈIʤwɪn on both, "SIJE-win": the ge is already soft,
+    # and what is wrong is the first vowel (/aɪ/) and the clipped last one.
+    # "See-guh-win" over-corrected — sˈiɡˈʌwˈɪn hardened the g back and
+    # bought a third syllable the name doesn't have. "Seej-ween" is
+    # sˈiʤwˈin / sˈiːʤwˈiːn. NOT "Siege-ween" or "Seege-ween", which are the
+    # same phones but split the stress on the second chunk (misaki wˌin
+    # against espeak wˈiːn).
+    "Sigewinne": "Seej-ween",
     "Wriothesley": "Rees-lee",
     "Xilonen": "Shee-loh-nen",
     # --- Star Rail: pinyin ---
