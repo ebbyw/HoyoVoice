@@ -79,8 +79,16 @@ class Genshin(Profile):
     PLATE_MAX_W = 0.25
 
     # Dialogue: rows run from just under the plate down to cy=0.134 (the
-    # deepest row seen, a 3-row line). The span stops at 0.10 so the
-    # Auto/Confirm chrome row at cy~=0.067 stays out of the band entirely.
+    # deepest row seen, a 3-row line). The span is measured from the plate's
+    # BOTTOM EDGE (`plate["y"]`), not its center — a distinction that cost a
+    # word: at 0.10 the floor landed at 0.140 on a plate whose y was 0.240,
+    # and the third row of a Pucli line (cy=0.136, the word "Asha.") fell
+    # 0.005 outside the band and was never spoken. Row offsets below the
+    # plate edge are stable at 0.045 / 0.076 / 0.105 (pitch 0.030), so 0.125
+    # clears a 3-row line with margin. A 4-row line would sit at 0.135 and
+    # need 0.15 — not raised speculatively, because the floor also has to
+    # stay clear of the chrome row at cy~=0.067, where the bottom-left icon
+    # strip misreads as text ("134)", cx=0.183) well inside DIALOGUE_X.
     # Rows are accepted across the whole text column rather than by Star
     # Rail's centered-seed test. Genshin centers each row, but only once it
     # is fully typed: the typewriter reveals a row rightward from its final
@@ -89,7 +97,7 @@ class Genshin(Profile):
     # else lands in the band — the Auto/Confirm chrome row is at cy~=0.067,
     # well below its floor — so the column bounds are all that is needed.
     DIALOGUE_X = (0.15, 0.85)
-    DIALOGUE_SPAN = 0.10
+    DIALOGUE_SPAN = 0.125
     DIALOGUE_FALLBACK_Y = (0.12, 0.21)
 
     # The role line under a name ("Pucli" / "Entertainment Supervisor").
