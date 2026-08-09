@@ -27,6 +27,20 @@ def in_region(block, region):
     return x0 <= cx <= x1 and y0 <= cy <= y1
 
 
+def _bounds(blocks):
+    """The box that encloses these blocks — one block's own box if that is
+    all there is, so a row Vision returned whole is tested unchanged."""
+    if len(blocks) == 1:
+        return blocks[0]
+    x0 = min(b["x"] for b in blocks)
+    y0 = min(b["y"] for b in blocks)
+    return {"text": " ".join(b["text"] for b in blocks),
+            "confidence": min(b["confidence"] for b in blocks),
+            "x": x0, "y": y0,
+            "w": max(b["x"] + b["w"] for b in blocks) - x0,
+            "h": max(b["y"] + b["h"] for b in blocks) - y0}
+
+
 def split_camel(s):
     """'CindearthAge' -> 'Cindearth Age'. OCR drops the space in these
     stylized titles, and TTS then reads them as one mangled word."""
@@ -124,8 +138,28 @@ class Profile:
     def is_plate_subtitle(self, block, plate):
         """True if this block is part of the NAMEPLATE rather than speech —
         a role/title line drawn under the name. It sits in the dialogue band
-        and would otherwise be read aloud as the first words of the line."""
+        and would otherwise be read aloud as the first words of the line.
+
+        Called with a whole ROW's bounding box, not with a single OCR box —
+        see `subtitle_rows`."""
         return False
+
+    def subtitle_rows(self, blocks, plate):
+        """Row buckets under `plate` that are the role/title line.
+
+        The test runs on the row's bounding box because Vision splits one
+        drawn line into several boxes as readily as it returns it whole:
+        "Shopkeeper, Mondstadt General Goods" came back as two, and a
+        fragment of a centered line is not itself centered, so a per-box
+        axis test cleared neither half and the whole title was read as the
+        opening words of the line. A row's union has the geometry the game
+        actually drew, however Vision cut it up."""
+        rows = {}
+        for b in blocks:
+            if b is not plate:
+                rows.setdefault(self._row(b), []).append(b)
+        return {row for row, members in rows.items()
+                if self.is_plate_subtitle(_bounds(members), plate)}
 
     def is_dialogue_seed(self, block):
         """True if this block is confidently a dialogue row (as opposed to a
@@ -171,8 +205,9 @@ class Profile:
             dlg_bot = plate["y"] - self.DIALOGUE_SPAN
             # a role/title line under the name is part of the plate, not the
             # line — drop it before it can seed a dialogue row
+            subtitle = self.subtitle_rows(conf, plate)
             conf = [b for b in conf
-                    if b is plate or not self.is_plate_subtitle(b, plate)]
+                    if b is plate or self._row(b) not in subtitle]
         else:
             dlg_bot, dlg_top = self.DIALOGUE_FALLBACK_Y
 

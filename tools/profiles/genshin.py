@@ -109,6 +109,12 @@ class Genshin(Profile):
     # 0.026-0.034 of dialogue rows — so height is only a damage bound here,
     # and the axis test is the second signal (subtitles are centered on the
     # plate to within 0.008).
+    # The axis test is applied to the whole ROW (see Profile.subtitle_rows),
+    # because a long role reaches Vision in pieces: "Shopkeeper, Mondstadt
+    # General Goods" came back split, and neither half is centered on the
+    # plate even though the line is — so per-piece the test cleared nothing
+    # and Blanche's whole title was read as the opening words of "Please
+    # have a look around."
     SUBTITLE_MAX_H = 0.032
     SUBTITLE_MAX_DX = 0.012         # from the plate's center axis
     SUBTITLE_MAX_DROP = 0.036       # below the plate's baseline
@@ -144,6 +150,37 @@ class Genshin(Profile):
     # story on its own.
     _BOX_CHROME = re.compile(r"^[•\s]*(auto|continue|confirm)\s*$", re.I)
 
+    # Button hints, bottom-right. Every Genshin screen draws a hint cluster
+    # there and WHAT IT SAYS is what separates a menu from a story frame:
+    # dialogue shows Auto/Confirm and narration cards Continue, while the
+    # crafting, shop and inventory screens show their own verbs ("Convert",
+    # "Leave", "Item Details"). Nothing else about those screens rules them
+    # out — the Convert screen's "Conversion Material" banner sits dead in
+    # the plate band (cx=0.47, cy=0.27) and the item grid below it reads as
+    # dialogue rows ("Shadow of… Dragon Lo… 9/1"), so a menu is one cast
+    # name away from being spoken aloud. The UID shares the strip and must
+    # not count as a hint, hence the letters-only word test.
+    HINT_STRIP = {"x": (0.70, 1.00), "y": (0.00, 0.10)}
+    _HINT_WORD = re.compile(r"^[A-Za-z][A-Za-z' ]{2,}$")
+
+    def is_menu(self, blocks):
+        """True if the hint strip advertises a menu's own actions.
+
+        Deliberately one-sided: a frame that shows story chrome is never a
+        menu no matter what else is down there, so the cost of a stray read
+        in the strip is a menu that stays readable, not a line that goes
+        unread.
+        """
+        other = False
+        for b in self.confident(blocks):
+            if not in_region(b, self.HINT_STRIP):
+                continue
+            text = b["text"].strip(" •✕×○()[]{}")
+            if self._BOX_CHROME.match(text):
+                return False
+            other = other or bool(self._HINT_WORD.match(text))
+        return other
+
     def _uid_corner(self, blocks):
         return any(self._UID.search(b["text"])
                    and b["y"] < 0.10 and b["x"] + b["w"] / 2 > 0.70
@@ -156,6 +193,8 @@ class Genshin(Profile):
         'Confirm' is deliberately NOT accepted: unlike Star Rail, Genshin
         shows it during ordinary dialogue, so it separates nothing.
         """
+        if self.is_menu(blocks):
+            return False
         if any(self._CHROME.match(b["text"].strip())
                and b["y"] < 0.10 and b["x"] + b["w"] / 2 > 0.70
                for b in self.confident(blocks)):
@@ -220,6 +259,9 @@ class Genshin(Profile):
         return False
 
     def classify(self, blocks, _no_plate=False):
+        if self.is_menu(blocks):
+            return {"speaker": None, "dialogue": "", "choices": [],
+                    "boxes": [], "conf": 1.0}
         state = super().classify(blocks, _no_plate)
         # A choice prompt only exists alongside a speaker. The teleport map
         # lists its waypoints ("Sea of Bygone Eras", "Temple of Space"…) in
