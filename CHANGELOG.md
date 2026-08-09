@@ -6,23 +6,36 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
-### Fixed
-
-- **A character the game starts voicing could never earn the sensitive gate.** The per-speaker prior asked whether a speaker had been voiced in at least 75% of their whole recorded history — a lifetime tally that outlives every restart. That cannot describe a character whose voicing *changes*, and in these games it changes per quest: Paimon goes hundreds of lines unvoiced and is then fully voiced for a scene. With hundreds of unvoiced lines behind her, 0.75 was unreachable no matter how thoroughly the current quest voiced her, so every line of it was judged at full-strength thresholds and read aloud over her own voiceover. The same tally, pointed the other way, decides whether cutting our own playback needs sustained speech or a blip will do — and that side used `voiced == 0`, so one voiced line anywhere in her recorded life would have spent the protection permanently.
-
-  The prior now reads a speaker's **last 8 observations** rather than all of them. Paimon reaches the soft gate part-way into a quest that voices her and loses it again a few lines after one that doesn't, and the firm-gate protection re-arms instead of being spent once and gone. Eight because the ratio needs enough slots to express 0.75 (6 of 8) while still turning over inside a single conversation.
-
-  The change is narrower than it sounds. Replayed across thirteen sessions and 944 spoken lines, windowing moves the gate on **four** of them — the three Paimon talk-overs from the reported session and one Sigewinne line — and nothing else changes. State written by an older version carries lifetime tallies with no order in them, so it seeds a window from the ratio they imply: a long unvoiced record becomes an all-spoken window, which re-arms the firm gate that record earns, and a reliably voiced character keeps their soft gate across the upgrade. The window is persisted alongside the counts, so downgrading reads the old field and behaves as before. `tools/test_voiced_prior.py` pins all of it, including a quest that voices Paimon and then stops.
-
-- **HoyoVoice talked over Paimon's own voiceover, and the layer built to prevent exactly that had never once fired.** Game voiceover is mixed to the stereo centre, so a mid-channel burst with flat sides is voiceover even when the speech model can't recognise the voice — that is what the centre-energy layer is for, and it is the only thing standing between a processed game voice and a talk-over. Across thirteen sessions of logs it fired **zero times**.
-
-  Two guards were refusing real voiceover rather than the sound effects they were written for. The side-flat cap (2.5dB) alone rejected **24 of the 46** lines the VAD had independently called voiced — their side channel runs p50 3.8dB, well over it. The speechiness floor (`vad_peak >= 0.15`) rejected nearly every line we spoke, including the repro: Paimon at `mid+17.3 side+5.2`, a 12.1dB centre burst, scoring `0.00` to a model trained on human speech, because her voice is processed into a squeak.
-
-  A burst that lopsided is not an explosion — explosions are broadband — so above `ENERGY_DECISIVE_OVER_SIDE` (8dB) neither guard applies; below it both survive unchanged. The cut is measured, not chosen: over 1107 spoken and 46 known-voiced lines from thirteen sessions, mid-over-side runs p50 0.5 / p90 4.2 on lines HoyoVoice read aloud and p50 8.8 / p90 11.4 on lines the VAD called voiced, so 8 sits between the two populations rather than inside either. At that cut 18 of 1107 spoken lines (1.6%) become voiced, and 27 of the 46 known-voiced lines become reachable with no VAD agreement at all.
-
-  Replay cannot settle this one and did not: a recording muxes HoyoVoice's own speech into the bed, so every VAD decision in a replay of one is an artifact — the same limitation the OCR plan already records. The evidence here is the live console log, where `mid`, `side` and `gate` are printed for every line. `tools/test_center_energy.py` pins the rule on the real triples, in both directions.
+## [0.10.3] - 2026-08-09
 
 ### Added
+
+- **UI anchors, as log-only evidence (phase 4a of the OCR plan).** A small
+  grayscale template of game chrome — Star Rail's ✕-circle by `Continue`,
+  Genshin's auto-play toggle — matched by normalized cross-correlation on the
+  same half-scale decode the change gate uses, in 4–5ms a frame. Nothing
+  reads the result yet: `[anchors]` log lines and an `anchor_ms` metric are
+  the whole feature, and the score distributions they produce are what will
+  earn (or refuse) ROI cropping in phase 4b. Design, coordinate gotcha table
+  and sequencing: [plans/ANCHORS.md](plans/ANCHORS.md). Measured over 1560
+  frames of both games: the HSR anchor agreed with the classifier on 819 of
+  819 trusted-dialogue frames (worst score 0.981) and cleared every negative
+  by a ±0.27 margin; the Genshin anchor's misses are the frames where the
+  game genuinely hides the chrome (choice prompts) — and on three mid-fade
+  frames the anchor saw chrome the OCR text couldn't, both of which are the
+  "presence strong, absence weak" rule the design leans on. A choice-glyph
+  anchor was tried and rejected — the option pill's rendering varies with
+  hover and wrap; the numbers are in the plan doc. `settings.anchors: false`
+  turns it off.
+
+- **Four place names get spoken forms.** `TERMS` has carried lore words and creatures; these are the first locations, and they are wrong the same way every other pinyin or romaji word is — English spelling rules applied end to end.
+
+  - **`Liyue`** → `Lee-wey`. Was `lˈɪju` / `lˈɪjuː`, "LIH-yoo": the i of "lit", and the *ue* collapsed into a single dropped vowel. Spelled `-wey` rather than `-way`, which gives the same phones but splits the stress (misaki `lˌiwˈA`, espeak `lˈiːwˈA`) — the same split `Ah-shah` was rejected for.
+  - **`Guili`** → `Gway-lee`. Was `ɡˈɪli` on both, "GILL-ee". Not `Guay-lee`, which reads `ɡwˈIlˈi` — "GWY-lee", the /aɪ/ of "guy": *ua* is that diphthong to both engines, a trap in the same family as a chunk-final "eh".
+  - **`Orobaxi`** → `Oh-roh-bak-shi`. Was `ˈɔɹəbˌæksi` / `ˈɔːɹəbˌæksi`, "OR-uh-BAK-see" — an open "or" where the word opens on "oh", and a schwa swallowing the second syllable. The last chunk is `-shi` and not `-shee` because `-shee` takes a stress of its own (`ˈækʃˈi`) where the name ends unstressed.
+  - **`Narukami`** → `Nah-roo-kah-mee`. The one here whose vowels were already close: what was wrong is that *ru* doubled the rhotic, `nˌɑɹɹukˈɑmi`, a trill the name doesn't have. The respelling is `nˈɑɹˈukˈɑmˈi` / `nˈɑːɹˈuːkˈɑːmˈiː` — one r, and even stress across the four syllables instead of a peak on "kah".
+
+  All four are capitalised, so `--custom-words` pins them in the OCR vocabulary as well; substitution is word-bounded, which is what leaves `Liyue Harbor`, `Guili Plains` and `Narukami Island` intact around them. Run `python tools/pronounce_names.py --write` to pick them up — `voices.json` is yours, and a pull never updates it.
 
 - **`tools/sweep_frames.py` — the frame-corpus classification A/B, as a
   tool.** The check that cleared the 0.10.2 world-dialogue fix — classify
@@ -40,9 +53,19 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
-- **`Sigewinne` was over-corrected into three syllables.** The shipped respelling `See-guh-win` phonemized to `sˈiɡˈʌwˈɪn` — "see-guh-WIN", with the `g` hardened back and a syllable the name doesn't have. The raw name was never wrong in that way: both engines read `Sigewinne` as `sˈIʤwɪn`, "SIJE-win", where the `ge` is already soft and what is actually wrong is the first vowel (the /aɪ/ of "sigh") and the clipped last one. `Seej-ween` is `sˈiʤwˈin` / `sˈiːʤwˈiːn` — two syllables, soft `g`, both vowels long. Not `Siege-ween` or `Seege-ween`: same phones, but the stress on the second chunk splits the engines (misaki `wˌin`, espeak `wˈiːn`).
+- **HoyoVoice talked over Paimon's own voiceover, and the layer built to prevent exactly that had never once fired.** Game voiceover is mixed to the stereo centre, so a mid-channel burst with flat sides is voiceover even when the speech model can't recognise the voice — that is what the centre-energy layer is for, and it is the only thing standing between a processed game voice and a talk-over. Across thirteen sessions of logs it fired **zero times**.
 
-  `--write` overwrites an entry whose value has changed, so `python tools/pronounce_names.py --write` picks this up on each machine — `voices.json` is yours, and a pull never updates it.
+  Two guards were refusing real voiceover rather than the sound effects they were written for. The side-flat cap (2.5dB) alone rejected **24 of the 46** lines the VAD had independently called voiced — their side channel runs p50 3.8dB, well over it. The speechiness floor (`vad_peak >= 0.15`) rejected nearly every line we spoke, including the repro: Paimon at `mid+17.3 side+5.2`, a 12.1dB centre burst, scoring `0.00` to a model trained on human speech, because her voice is processed into a squeak.
+
+  A burst that lopsided is not an explosion — explosions are broadband — so above `ENERGY_DECISIVE_OVER_SIDE` (8dB) neither guard applies; below it both survive unchanged. The cut is measured, not chosen: over 1107 spoken and 46 known-voiced lines from thirteen sessions, mid-over-side runs p50 0.5 / p90 4.2 on lines HoyoVoice read aloud and p50 8.8 / p90 11.4 on lines the VAD called voiced, so 8 sits between the two populations rather than inside either. At that cut 18 of 1107 spoken lines (1.6%) become voiced, and 27 of the 46 known-voiced lines become reachable with no VAD agreement at all.
+
+  Replay cannot settle this one and did not: a recording muxes HoyoVoice's own speech into the bed, so every VAD decision in a replay of one is an artifact — the same limitation the OCR plan already records. The evidence here is the live console log, where `mid`, `side` and `gate` are printed for every line. `tools/test_center_energy.py` pins the rule on the real triples, in both directions.
+
+- **A character the game starts voicing could never earn the sensitive gate.** The per-speaker prior asked whether a speaker had been voiced in at least 75% of their whole recorded history — a lifetime tally that outlives every restart. That cannot describe a character whose voicing *changes*, and in these games it changes per quest: Paimon goes hundreds of lines unvoiced and is then fully voiced for a scene. With hundreds of unvoiced lines behind her, 0.75 was unreachable no matter how thoroughly the current quest voiced her, so every line of it was judged at full-strength thresholds and read aloud over her own voiceover. The same tally, pointed the other way, decides whether cutting our own playback needs sustained speech or a blip will do — and that side used `voiced == 0`, so one voiced line anywhere in her recorded life would have spent the protection permanently.
+
+  The prior now reads a speaker's **last 8 observations** rather than all of them. Paimon reaches the soft gate part-way into a quest that voices her and loses it again a few lines after one that doesn't, and the firm-gate protection re-arms instead of being spent once and gone. Eight because the ratio needs enough slots to express 0.75 (6 of 8) while still turning over inside a single conversation.
+
+  The change is narrower than it sounds. Replayed across thirteen sessions and 944 spoken lines, windowing moves the gate on **four** of them — the three Paimon talk-overs from the reported session and one Sigewinne line — and nothing else changes. State written by an older version carries lifetime tallies with no order in them, so it seeds a window from the ratio they imply: a long unvoiced record becomes an all-spoken window, which re-arms the firm gate that record earns, and a reliably voiced character keeps their soft gate across the upgrade. The window is persisted alongside the counts, so downgrading reads the old field and behaves as before. `tools/test_voiced_prior.py` pins all of it, including a quest that voices Paimon and then stops.
 
 - **OCR garbage stops earning casting rows.** Windows session logs show `iii`
   auto-cast as a character, and `Lv. 90`, `Liv, 9.`, `255771/25577`,
@@ -73,35 +96,9 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   the class is decided; a quote on one end only is left alone — that is an
   apostrophe or a clipped read, not a quoting style.
 
-### Added
+- **`Sigewinne` was over-corrected into three syllables.** The shipped respelling `See-guh-win` phonemized to `sˈiɡˈʌwˈɪn` — "see-guh-WIN", with the `g` hardened back and a syllable the name doesn't have. The raw name was never wrong in that way: both engines read `Sigewinne` as `sˈIʤwɪn`, "SIJE-win", where the `ge` is already soft and what is actually wrong is the first vowel (the /aɪ/ of "sigh") and the clipped last one. `Seej-ween` is `sˈiʤwˈin` / `sˈiːʤwˈiːn` — two syllables, soft `g`, both vowels long. Not `Siege-ween` or `Seege-ween`: same phones, but the stress on the second chunk splits the engines (misaki `wˌin`, espeak `wˈiːn`).
 
-- **Four place names get spoken forms.** `TERMS` has carried lore words and creatures; these are the first locations, and they are wrong the same way every other pinyin or romaji word is — English spelling rules applied end to end.
-
-  - **`Liyue`** → `Lee-wey`. Was `lˈɪju` / `lˈɪjuː`, "LIH-yoo": the i of "lit", and the *ue* collapsed into a single dropped vowel. Spelled `-wey` rather than `-way`, which gives the same phones but splits the stress (misaki `lˌiwˈA`, espeak `lˈiːwˈA`) — the same split `Ah-shah` was rejected for.
-  - **`Guili`** → `Gway-lee`. Was `ɡˈɪli` on both, "GILL-ee". Not `Guay-lee`, which reads `ɡwˈIlˈi` — "GWY-lee", the /aɪ/ of "guy": *ua* is that diphthong to both engines, a trap in the same family as a chunk-final "eh".
-  - **`Orobaxi`** → `Oh-roh-bak-shi`. Was `ˈɔɹəbˌæksi` / `ˈɔːɹəbˌæksi`, "OR-uh-BAK-see" — an open "or" where the word opens on "oh", and a schwa swallowing the second syllable. The last chunk is `-shi` and not `-shee` because `-shee` takes a stress of its own (`ˈækʃˈi`) where the name ends unstressed.
-  - **`Narukami`** → `Nah-roo-kah-mee`. The one here whose vowels were already close: what was wrong is that *ru* doubled the rhotic, `nˌɑɹɹukˈɑmi`, a trill the name doesn't have. The respelling is `nˈɑɹˈukˈɑmˈi` / `nˈɑːɹˈuːkˈɑːmˈiː` — one r, and even stress across the four syllables instead of a peak on "kah".
-
-  All four are capitalised, so `--custom-words` pins them in the OCR vocabulary as well; substitution is word-bounded, which is what leaves `Liyue Harbor`, `Guili Plains` and `Narukami Island` intact around them. Run `python tools/pronounce_names.py --write` to pick them up — `voices.json` is yours, and a pull never updates it.
-
-- **UI anchors, as log-only evidence (phase 4a of the OCR plan).** A small
-  grayscale template of game chrome — Star Rail's ✕-circle by `Continue`,
-  Genshin's auto-play toggle — matched by normalized cross-correlation on the
-  same half-scale decode the change gate uses, in 4–5ms a frame. Nothing
-  reads the result yet: `[anchors]` log lines and an `anchor_ms` metric are
-  the whole feature, and the score distributions they produce are what will
-  earn (or refuse) ROI cropping in phase 4b. Design, coordinate gotcha table
-  and sequencing: [plans/ANCHORS.md](plans/ANCHORS.md). Measured over 1560
-  frames of both games: the HSR anchor agreed with the classifier on 819 of
-  819 trusted-dialogue frames (worst score 0.981) and cleared every negative
-  by a ±0.27 margin; the Genshin anchor's misses are the frames where the
-  game genuinely hides the chrome (choice prompts) — and on three mid-fade
-  frames the anchor saw chrome the OCR text couldn't, both of which are the
-  "presence strong, absence weak" rule the design leans on. A choice-glyph
-  anchor was tried and rejected — the option pill's rendering varies with
-  hover and wrap; the numbers are in the plan doc. `settings.anchors: false`
-  turns it off.
-
+  `--write` overwrites an entry whose value has changed, so `python tools/pronounce_names.py --write` picks this up on each machine — `voices.json` is yours, and a pull never updates it.
 ## [0.10.2] - 2026-08-09
 
 ### Fixed
