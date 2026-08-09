@@ -39,6 +39,9 @@ def centered(text, cy, w=0.275, h=0.034, conf=1.0):
 
 TITLE = centered("Investigative Report: Bakunawa", 0.924)
 RETURN = row("Return", 0.076, x=0.897, w=0.036, h=0.018)
+# The same hint with its ◯ button glyph merged into the word, exactly as
+# Vision returned it on the inventory-opened article.
+RETURN_GLYPH = row("Return e", 0.076, x=0.895, w=0.048, h=0.018)
 UID = row("UID: 603275577", 0.014, x=0.875, w=0.094, h=0.023)
 CHROME = [RETURN, UID]
 
@@ -87,11 +90,44 @@ FRAMES = [
     ("...but not while the lower rule still cuts it",
      article(row("the last line of the article", 0.058, h=0.020, w=0.20)),
      lambda got: "the last line of the article" not in got),
+    # The visible half of a row mid-slide sits just under the upper rule,
+    # at a center of ~0.897 — between the body ceiling (0.896) and the
+    # title floor (0.90). It must be DEFERRED, not treated as text off the
+    # panel: a veto there killed detection outright for as long as the row
+    # was sliding, so a scrolling article fell silent.
+    ("a row in the sliver between the bands doesn't kill detection",
+     article(row("half a row caught mid-slide", 0.897, h=0.014)),
+     lambda got: "mid-slide" not in got and "gigantic beast" in got),
+
+    # --- opened from the inventory, not the world --------------------
+    # The article is an OVERLAY there: the bag screen stays on behind it
+    # and OCRs right through. Measured off rec_20260809_080614 at 1080p —
+    # this frame is why the "nothing else on screen" rule had to go, and
+    # the read must still contain none of the bag's own text.
+    ("the article opened from the inventory",
+     [centered("Investigative Report: Mare Jivari", 0.925, w=0.282),
+      row("Quest", 0.932, x=0.099, w=0.029, h=0.018),
+      row("Inventory capacity 1185/2300", 0.930, x=0.799, w=0.144, h=0.021),
+      row("No extant records suggest how the Mare Jivari could have", 0.857),
+      row("It seems that all related information was erased alongside", 0.828),
+      row("Quest Item", 0.814, x=0.715, w=0.054, h=0.016),
+      row("ash itself.", 0.796, w=0.067),
+      row("The only speculation that remains to be made comes from an", 0.762),
+      row("1880", 0.712, x=0.099, w=0.020, h=0.013),
+      row("An investigative report that", 0.613, x=0.717, w=0.148, h=0.021),
+      row("someone left behind in a hurry.", 0.589, x=0.715, w=0.170, h=0.021),
+      RETURN_GLYPH,
+      row("Destroy", 0.075, x=0.761, w=0.043, h=0.022),
+      row("406180", 0.076, x=0.161, w=0.044, h=0.018),
+      UID],
+     lambda got: ("No extant records" in got and "ash itself." in got
+                  and "Inventory capacity" not in got
+                  and "Quest Item" not in got and "1880" not in got
+                  and "left behind in a hurry" not in got)),
 
     # --- things that are not articles --------------------------------
-    # A menu: same title-over-column shape, same Return hint, but it has
-    # text elsewhere — tabs down the left, a counter up top — and an
-    # article never does.
+    # A menu: same title-over-column shape, same Return hint, but two rows
+    # sharing a margin is a list, not a page.
     ("a menu with a Return hint",
      [centered("Character Archive", 0.924),
       row("Kachina", 0.859, w=0.10),
@@ -110,7 +146,15 @@ FRAMES = [
     ("a digit-heavy stat panel",
      [centered("Adventure Handbook", 0.924),
       row("Level 45 60/100 Exp 2450 3/5 Rewards 12", 0.859),
-      row("Level 46 70/100 Exp 2650 4/5 Rewards 14", 0.825)] + CHROME,
+      row("Level 46 70/100 Exp 2650 4/5 Rewards 14", 0.825),
+      row("Level 47 80/100 Exp 2850 5/5 Rewards 16", 0.795),
+      row("Level 48 90/100 Exp 3050 6/5 Rewards 18", 0.762)] + CHROME,
+     None),
+    # 'Return to Title' is not the panel's Return hint — only single-glyph
+    # noise may ride along with the word.
+    ("a hint that merely starts with Return",
+     [TITLE] + BODY + [row("Return to Title", 0.076, x=0.880, w=0.070,
+                           h=0.018), UID],
      None),
     ("a title with no body", [TITLE] + CHROME, None),
 ]

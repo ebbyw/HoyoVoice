@@ -186,12 +186,25 @@ class Genshin(Profile):
         return other
 
     # --- Readable articles ---------------------------------------------
-    # The full-screen reading panel ("Investigative Report: Bakunawa"): a
-    # gold title centered under an ornate rule, prose in a fixed column
-    # below it, and 'Return' alone in the hint strip. Measured off a 1080p
-    # capture of that article: title cx=0.499 cy=0.924 h=0.034; body rows
-    # all share a left edge at x=0.266 and run from cy=0.859 down to 0.536
-    # at a pitch of 0.033; 'Return' cx=0.915 cy=0.076; UID cy=0.014.
+    # The reading panel ("Investigative Report: Bakunawa"): a gold title
+    # centered under an ornate rule, prose in a fixed column below it, and
+    # a 'Return' hint. Measured off two 1080p captures — one opened from the
+    # world, one from the inventory: title cx=0.499/0.500 cy=0.924/0.925;
+    # body rows all share a left edge at x=0.264-0.267 at a pitch of 0.033;
+    # 'Return' cx=0.915; UID cy=0.014. The panel is the SAME either way,
+    # which is why the column, not the screen around it, is what identifies
+    # it.
+    #
+    # Opened from the inventory the article is an OVERLAY: the bag screen
+    # stays on behind it and OCRs right through — 'Quest', 'Inventory
+    # capacity 1185/2300', item counts, the item's own name and description
+    # panel on the right. An earlier rule here demanded nothing be on screen
+    # but the panel, which is true of the world-opened article and false of
+    # this one, so the inventory-opened article went unread except on the
+    # occasional frame where OCR happened to miss the dimmed chrome. What
+    # holds in both is the COLUMN: several rows of prose sharing one left
+    # edge, under a centered title. Nothing else in Genshin's UI is shaped
+    # like that.
     #
     # This is NOT Star Rail's Quick Read layout — different bands, different
     # chrome — but it is the same KIND of screen, so it hooks in through
@@ -217,22 +230,46 @@ class Genshin(Profile):
     # the article's own padding is a full row pitch (0.033), so a row this
     # close to a rule is one being scrolled past, not one at rest.
     READABLE_CLIP_MARGIN = 0.004
-    # Body rows are left-aligned in the column; the title is not. At least
-    # one row must sit on that edge — it is what separates an article from
-    # a centered card that happens to carry a Return hint.
-    READABLE_LEFT_EDGE = (0.22, 0.32)
-    # Below this is the panel's own chrome (Return, UID), which is allowed
-    # on screen without disqualifying the panel.
-    READABLE_STRIP_Y = 0.10
-    # Row pitch, for ordering fragments Vision split out of one drawn row.
+    # The column's left edge, and the whole of what identifies this screen.
+    # Measured at x=0.264-0.267 across both captures; the tolerance is for
+    # OCR's own left-edge jitter, not for a different column somewhere else.
+    READABLE_LEFT_EDGE = (0.24, 0.30)
+    # Rows on that edge before this is an article. One or two lines sharing
+    # a left margin is just a menu; several rows of prose is a page. This
+    # replaces the "nothing else on screen" rule, so it carries the weight
+    # that rule used to — measured against 1030 frames of both games,
+    # including 546 of the inventory screen this panel overlays.
+    READABLE_MIN_ROWS = 3
+    # Row pitch, measured at 0.033 across both captures. Blocks whose
+    # centers are within ROW_TOL of each other are fragments of one drawn
+    # row: real fragments agree to ~0.001, while the nearest text that is
+    # NOT part of the row (the item panel beside the column) sits 0.018
+    # away. Comfortably between the two.
     READABLE_LINE_H = 0.033
+    READABLE_ROW_TOL = 0.010
     # Stylized proper nouns read weakly even here: "Tenochtzitoc." came
     # back at 0.50 on both frames of the capture while every other row
     # scored 1.00, and at the 0.8 floor the word was dropped SILENTLY from
     # the middle of a sentence. The column is as tightly constrained as the
     # nameplate slot, so it takes the same floor the plate does.
     READABLE_MIN_CONF = 0.3
-    _RETURN = re.compile(r"^return$", re.I)
+    _WORD = re.compile(r"[A-Za-z]+")
+
+    def _is_return_hint(self, text):
+        """True if this block is the panel's Return hint.
+
+        The button glyph beside it is not always a separate block: on the
+        inventory-opened article Vision returned 'Return e', the ◯ read as
+        a letter and merged into the word. The same thing happens all over
+        this pipeline ('R Scroll', 'O Back', '5 Quick Read'), so match on
+        the WORDS: 'return' must be there, and anything else in the block
+        has to be single-glyph noise. 'Return to Title' and the like are
+        still rejected.
+        """
+        words = self._WORD.findall(text)
+        return (any(w.lower() == "return" for w in words)
+                and all(len(w) <= 1 for w in words
+                        if w.lower() != "return"))
 
     def _readable_unclipped(self, block):
         """True if this row is drawn WHOLE — clear of both scroll rules."""
@@ -257,35 +294,47 @@ class Genshin(Profile):
         if "quickread" not in self.SCREENS:
             return None
         conf = self.confident(blocks)
-        if not any(self._RETURN.match(b["text"].strip(" •✕×○()[]{}"))
+        if not any(self._is_return_hint(b["text"])
                    and in_region(b, self.HINT_STRIP) for b in conf):
             return None
-        # NOTHING may be on screen but the panel and its bottom strip. This
-        # is the whole defence against reading a menu aloud: 'Return' is a
-        # common enough hint, and a menu's own heading and first column read
-        # as a title over a left-aligned body. What menus always also have
-        # is text elsewhere — tabs, counters, a second column — and a
-        # readable never does.
-        for b in conf:
-            if b["y"] + b["h"] / 2 < self.READABLE_STRIP_Y:
-                continue
-            if not (in_region(b, self.READABLE_TITLE)
-                    or in_region(b, self.READABLE_BODY)):
-                return None
         pool = [b for b in blocks
                 if b["confidence"] >= self.READABLE_MIN_CONF
                 and b["text"].strip() not in self.IGNORE]
         title = [b for b in pool if in_region(b, self.READABLE_TITLE)]
-        body = [b for b in pool if in_region(b, self.READABLE_BODY)
+        if not title:
+            return None
+        # Rows of the COLUMN, and only those. Keep a row only when its
+        # leftmost block starts on the column's edge — that is what leaves
+        # the inventory behind the overlay out of the read: its item counts
+        # sit left of the column and the item's name and description panel
+        # to the right of it, so neither can start a row here.
+        #
+        # Rows are clustered by their own baselines rather than quantized
+        # onto a grid. A grid put "ash itself." (cy=0.796) and the item
+        # panel's "Quest Item" (cy=0.814) in one bucket — 0.018 apart, half
+        # a row pitch, but either side of a bucket edge — and the panel text
+        # rode into the read on the article row's ticket.
+        band = [b for b in pool
+                if in_region(b, self.READABLE_BODY)
                 and self._readable_unclipped(b)]
-        if not title or not body:
+        band.sort(key=lambda b: -(b["y"] + b["h"] / 2))
+        rows, cur, top = [], [], None
+        for b in band:
+            cy = b["y"] + b["h"] / 2
+            if top is None or top - cy > self.READABLE_ROW_TOL:
+                cur = []
+                rows.append(cur)
+                top = cy
+            cur.append(b)
+        body, n_rows = [], 0
+        for row in rows:
+            row.sort(key=lambda b: b["x"])
+            if (self.READABLE_LEFT_EDGE[0] <= row[0]["x"]
+                    <= self.READABLE_LEFT_EDGE[1]):
+                body.extend(row)
+                n_rows += 1
+        if n_rows < self.READABLE_MIN_ROWS:
             return None
-        if not any(self.READABLE_LEFT_EDGE[0] <= b["x"]
-                   <= self.READABLE_LEFT_EDGE[1] for b in body):
-            return None
-        order = lambda b: (round((1 - (b["y"] + b["h"] / 2))    # noqa: E731
-                                 / self.READABLE_LINE_H), b["x"])
-        body.sort(key=order)
         text = " ".join(b["text"] for b in body).strip()
         # prose, not a stat block: the same guards the narration cards use
         if (len(text) < self.NARRATION_MIN_CHARS
@@ -293,7 +342,7 @@ class Genshin(Profile):
                 or sum(c.isdigit() for c in text)
                 > self.NARRATION_MAX_DIGIT_RATIO * len(text)):
             return None
-        title.sort(key=order)
+        title.sort(key=lambda b: (-(b["y"] + b["h"] / 2), b["x"]))
         head = split_camel(" ".join(b["text"] for b in title).strip())
         if head and head[-1] not in ".!?…:;,":
             head += "."
