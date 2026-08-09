@@ -58,6 +58,37 @@ FRAMES = [
       block("Hey there! We have quality goods", 0.500, 0.170, w=0.24),
       block("at honest prices!", 0.500, 0.140, w=0.14)] + CHROME,
      "Blanche", "Hey there! We have quality goods at honest prices!"),
+    # --- world dialogue: a companion talking while you walk ---------------
+    # No box, no Auto/Confirm, full HUD on screen, and the nameplate drawn
+    # LOWER than the boxed layout's. Measured off captures\shots\98.json
+    # (and 100/101/102, which agree to 0.0005): plate cy=0.2097 h=0.0324,
+    # line cy=0.1718 h=0.0306, level readout "Lv.90" at cy=0.0819.
+    #
+    # Under the old 0.21 plate floor the plate missed by 0.0003, the line
+    # fell through to the plate-less band — which reaches to 0.21 and so
+    # took the nameplate in as WORDS — and the whole thing was then dropped
+    # as an unknown speaker, because there is no chrome here either.
+    ("world dialogue (no box, no chrome)",
+     [block("Paimon", 0.5003, 0.2097, w=0.0557, h=0.0324),
+      block("These floaty lil' guys... They won't jump us out of nowhere, "
+            "will they?", 0.5008, 0.1718, w=0.4505, h=0.0306),
+      block("Lv.90", 0.4198, 0.0819, w=0.025, h=0.0194),
+      block("Chat", 0.0807, 0.0597, w=0.024, h=0.0231),
+      block("UID: 603275577", 0.9221, 0.0153, w=0.0974, h=0.0269)],
+     "Paimon", "These floaty lil' guys... They won't jump us out of "
+     "nowhere, will they?"),
+    # The line sits 0.0370 below the plate's baseline against a
+    # SUBTITLE_MAX_DROP of 0.0360, is centred on the plate to 0.0005, and on
+    # this frame reads SHORTER than SUBTITLE_MAX_H — so all that kept it out
+    # of the role-line test was a margin of 0.001. It is the plate's own
+    # height that rules the test out now: role lines belong to the boxed
+    # layout. Eaten, the line would vanish with no log at all, because
+    # Genshin does not re-parse a plate that has nothing under it.
+    ("a world-dialogue line is not a role subtitle",
+     [block("Paimon", 0.5003, 0.2097, w=0.0557, h=0.0324),
+      block("Where are we now..?", 0.5003, 0.1718, w=0.14, h=0.0300),
+      block("UID: 603275577", 0.9221, 0.0153, w=0.0974, h=0.0269)],
+     "Paimon", "Where are we now..?"),
     # The Convert screen: a banner in the plate band, an item grid under it,
     # and menu verbs where the story chrome would be.
     ("convert menu",
@@ -84,9 +115,15 @@ def main():
             print(f"FAIL {name}: want {(speaker, dialogue)}, got {got}")
             bad += 1
     # A menu must not be trusted as story either — that gate is what lets an
-    # unknown speaker's line be read at all.
+    # unknown speaker's line be read at all. World dialogue is NOT trusted
+    # and must not be: it carries no story chrome, so the only thing that
+    # can get it read is finding its nameplate and recognizing the
+    # character. That is exactly what the frames above pin.
+    UNTRUSTED = {"convert menu",
+                 "world dialogue (no box, no chrome)",
+                 "a world-dialogue line is not a role subtitle"}
     for name, blocks, _, _ in FRAMES:
-        want = name != "convert menu"
+        want = name not in UNTRUSTED
         if GENSHIN.trusts_dialogue(blocks) is not want:
             print(f"FAIL trust {name}: want {want}")
             bad += 1
