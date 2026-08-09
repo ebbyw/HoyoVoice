@@ -160,6 +160,15 @@ TERMS = {
     # syllable joined on purpose: "flo-jis-ten" makes a third stressed chunk
     # (flˈOʤˈɪstˈɛn, "-TEN"), where the word ends in a schwa.
     "Phlogiston": "flo-jiston",
+    # Wrong on BOTH engines, and the same way: the a is the flat a of "fat"
+    # and the t is flapped — misaki fˈæɾui, espeak fˈæɾuːi, "FAT-oo-ee".
+    # "Fah-too-ee" is fˈɑtˈuˈi / fˈɑːtˈuːˈiː, an open ah and a real t.
+    "Fatui": "Fah-too-ee",
+    # Same flat a and flap, and the u collapses to a schwa on both:
+    # fˈæɾəs, "FAT-us". Spelled "-toose" rather than "-toos" for the hiss —
+    # "toos" is a voiced z on both engines (fˈɑtˈuz, "fah-TOOZ"), while
+    # "toose" is fˈɑtˈus / fˈɑːtˈuːs, the sound the word ends on.
+    "Fatus": "Fah-toose",
     # The one entry here that is only wrong on ONE platform: misaki says
     # ʃˈɑmən, espeak says ʃˈæmən ("SHAM-un", rhyming with salmon), so this
     # reads correctly on macOS and wrong on Windows. "shahmon" is ʃˈɑmən on
