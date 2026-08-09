@@ -113,7 +113,7 @@ Replay-harness-only: batch low-confidence lines from the regression corpus throu
 | 1 rec model | small | word fusions | fusion count ↓, 0 classify regressions | **shipped 0.7.3** — 333 → 144 fusions on 81 shots, zero regressions |
 | 2 change gate | medium | 154ms/frame burn, recording-load tearing | ≥60% OCR calls skipped on static dialogue | **shipped 0.7.3** — 23%, and the target was wrong (see Baseline) |
 | 3 confidence | small | stabilization latency/stalls | time-to-spoken ↓, no new false fires | **shipped 0.7.3** — ~0.12s, no lines lost |
-| 4 anchors/ROI | large | OCR speed, remaining Genshin screens, chrome heuristics | screens ship as data, detector cost ↓ | next |
+| 4 anchors/ROI | large | OCR speed, remaining Genshin screens, chrome heuristics | screens ship as data, detector cost ↓ | **4a shipped** (log-only, measured) — see [plans/ANCHORS.md](ANCHORS.md); 4b/4c pending its trust gates |
 | 5 TextMap | experiment | everything OCR, latency ceiling | match rate ≥90%, wrong-match ~0 on replay corpus | blocked on data |
 | 6 arbiter | backlog | corpus labeling | labeled corpus | not needed yet |
 
