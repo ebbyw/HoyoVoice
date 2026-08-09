@@ -483,6 +483,8 @@ _CONTRACTION_RE = re.compile(
 #   Shh   ˌɛsˌAʧˈAʧ ("S-H-H")  → shush  ʃˈʊʃ
 #   Hmph  ˌAʧˌɛmpˌiˈAʧ         → humph  hˈʌmf
 #   Tsk   tˈəsk ("tuhsk")      → tisk   tˈɪsk
+#   Tch   tˌiːsˌiːˈeɪtʃ ("T-C-H" on Windows; ʧ, a bare consonant, on macOS)
+#         → tisk, the same tut "Tsk" already maps to — Kokoro can't click
 #   Uhm   ˈum ("oom")          → um     ˈʌm
 #   Ugh   ˈʌh on macOS, ˈʌɡ on Windows → ug ˈʌɡ on both
 #   Urgh  ˈɜɹɡ ("erg", a word)         → ug ˈʌɡ on both
@@ -494,6 +496,7 @@ _INTERJECTIONS = [
     (re.compile(r"\bshh+\b", re.IGNORECASE), "shush"),
     (re.compile(r"\bhmph+\b", re.IGNORECASE), "humph"),
     (re.compile(r"\btsk\b", re.IGNORECASE), "tisk"),
+    (re.compile(r"\btch+\b", re.IGNORECASE), "tisk"),
     (re.compile(r"\buh+m+\b", re.IGNORECASE), "um"),
     (re.compile(r"\bugh+\b", re.IGNORECASE), "ug"),
     (re.compile(r"\bu+r+gh+\b", re.IGNORECASE), "ug"),
@@ -503,8 +506,18 @@ _INTERJECTIONS = [
 # A stammer is written as a repeated initial — "W-what", "N-no", "A-aah" —
 # and the phonemizer reads that lone letter as its NAME: "DOUBLE-YOU-what",
 # "EN-no", "AY-ah". Spelling the stammer as a syllable fixes it. Only when
-# the letter matches the word it precedes, so "X-ray", "T-shirt" and "e-mail"
+# the initial matches the word it precedes, so "X-ray", "T-shirt" and "e-mail"
 # are left alone.
+#
+# The initial can be the whole ONSET rather than one letter — "Wh-What's",
+# "Sh-She's", "Th-That's", "Str-Strange" — and then it is spelled out letter
+# by letter: "Wh-What's" is dˌʌbᵊljˌuˈAʧ—wˌʌts, "DOUBLE-YOU-AITCH-what's".
+# Same repair, with the same "uh" ending: "Whuh-What's" (wˈʌ—wˌʌts).
+# A multi-letter onset has to be ALL CONSONANTS, which is what separates a
+# stammer from an ordinary prefix that happens to repeat the word's opening:
+# "re-read", "co-conspirator" and "de-dent" all carry a vowel and are left
+# alone. An all-caps onset is title-cased first — "WHuh" is read as letters
+# again (dˈʌbᵊljuhˌʌ), "Whuh-WHAT!" is wˈʌwˈʌt.
 #
 # The dash can be an EM dash: Genshin writes "A—Ahh!" that way and the
 # hyphen-only pattern walked straight past it, so the lone "A" was read as
@@ -512,12 +525,13 @@ _INTERJECTIONS = [
 # plain hyphen — including for the letters whose reading is left alone, since
 # the dash is a fault of its own (see _unstutter). A spaced dash (" — ", the
 # punctuation kind) can't match: the letter and the dash have to be adjacent.
-_STUTTER = re.compile(r"\b([A-Za-z])[-‐‑–—]([A-Za-z])")
+_STUTTER = re.compile(r"\b([A-Za-z]{1,3})[-‐‑–—]([A-Za-z]+)")
 # E/I/O already read as sounds rather than names ("I-I'm" → ˌIˌIm), and every
 # respelling tried for them was worse. A and U are not: "A-" is "AY", "U-" is
 # "YOU".
 _STUTTER_KEEP = "eio"
 _STUTTER_TAIL = {"a": "h", "u": "h"}
+_VOWELS = set("aeiou")
 
 
 def _unstutter(m):
@@ -530,12 +544,16 @@ def _unstutter(m):
     actually is. Misaki reads both as ˌI—ˌɪts, the same break "Wuh-what"
     already gets, so macOS is unchanged either way.
     """
-    lead, nxt = m.group(1), m.group(2)
-    if lead.lower() != nxt.lower():
+    onset, word = m.group(1), m.group(2)
+    if onset.lower() != word[:len(onset)].lower():
         return m.group(0)
-    if lead.lower() in _STUTTER_KEEP:
-        return f"{lead}-{nxt}"
-    return f"{lead}{_STUTTER_TAIL.get(lead.lower(), 'uh')}-{nxt}"
+    if len(onset) == 1:
+        if onset.lower() in _STUTTER_KEEP:
+            return f"{onset}-{word}"
+        return f"{onset}{_STUTTER_TAIL.get(onset.lower(), 'uh')}-{word}"
+    if _VOWELS & set(onset.lower()):     # a prefix ("re-read"), not a stammer
+        return m.group(0)
+    return f"{onset.capitalize() if onset.isupper() else onset}uh-{word}"
 
 
 # RapidOCR's default recognition model is Chinese-trained, and Chinese
