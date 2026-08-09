@@ -6,13 +6,15 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-08-08
+
 ### Added
 
 - **`Archon`** → `Ahr-kon`, plus `Archons` → `Ahr-kons`. Windows only, like `shaman`: misaki says `ˈɑɹkɑn` already, espeak says `ˈɑːɹtʃˌɔn` ("AR-chon", the *ch* of church). The plural gets its own entry because substitution is word-bounded.
 
 ### Fixed
 
-- **`Wh-What's going on?` was read as "DOUBLE-YOU-AITCH-what's".** The stammer repair only ever looked at a single letter, so a stammer on a whole onset — `Wh-What's`, `Sh-She's`, `Th-That's`, `Str-Strange` — fell through to the phonemizer, which spells the cluster out (`dˌʌbᵊljˌuˈAʧ—wˌʌts`). An onset of up to three letters now takes the same `uh` ending as a single one: `Whuh-What's` (`wˈʌ—wˌʌts`). A multi-letter onset has to be **all consonants**, which is what separates a stammer from an ordinary prefix that repeats the word's opening — `re-read`, `co-conspirator` and `de-dented` all carry a vowel and are untouched. An all-caps onset is title-cased first, because `WHuh` is read as letters all over again.
+- **`Wh-What's going on?` was read as "DOUBLE-YOU-AITCH-what's".** The stammer repair only ever looked at a single letter, so a stammer on a whole onset — `Wh-What's`, `Sh-She's`, `Th-That's`, `Str-Strange` — fell through to the phonemizer, which spells the cluster out (`dˌʌbᵊljˌuˈAʧ—wˌʌts`). An onset of up to three letters now takes the same `uh` ending as a single one: `Whuh-What's` (`wˈʌ—wˌʌts`). A multi-letter onset has to be **all consonants**, which is what separates a stammer from an ordinary prefix that repeats the word's opening — `re-read`, `co-conspirator` and `de-dented` all carry a vowel and are untouched. An all-caps onset is title-cased first, because `WHuh` is read as letters all over again. (0.9.0 listed `Wh-what` among the stammers it fixed; it never was — the pattern couldn't match it.)
 
 - **`Tch` was read as "T-C-H".** `tˌiːsˌiːˈeɪtʃ` on Windows, and a bare `ʧ` on macOS. It joins `Tsk` in the interjection table and reads as `tisk` — the same tut, since Kokoro can't click.
 
