@@ -37,6 +37,9 @@ CASES = [
     ("Uhm, I'm not sure.", "Um, I'm not sure."),
     ("Uhmm... maybe.", "Um... maybe."),
     ("Ugh, this is heavy.", "Ug, this is heavy."),
+    # "Urgh" is ˈɜɹɡ — "erg", a word, not a groan
+    ("Urgh… It all happened so fast.", "Ug… It all happened so fast."),
+    ("Urrgh, my head.", "Ug, my head."),
     ("Aaah, that feels better.", "Ah, that feels better."),
     # "Pfft" is ˈft on its own, which is roughly the right noise. The "pfff"
     # respelling this list used to carry came out as "P-E-F-E-F".
@@ -56,9 +59,13 @@ CASES = [
     # the punctuation kind of dash is spaced, and never a stammer
     ("The vegetable — it is the eyes of the earth.",
      "The vegetable — it is the eyes of the earth."),
-    # E/I/O already read as sounds, and every respelling tried was worse
+    # E/I/O already read as sounds, and every respelling tried was worse —
+    # but the dash is still normalized, or espeak reads the em dash as
+    # punctuation and the stammer becomes two words ("Aye. It's…")
     ("I-I don't know.", "I-I don't know."),
     ("O-okay then.", "O-okay then."),
+    ("I—It's him!?", "I-It's him!?"),
+    ("O—Okay then.", "O-Okay then."),
     # not stammers: the letter doesn't match the word it precedes
     ("He bought a T-shirt.", "He bought a T-shirt."),
     ("The X-ray came back clear.", "The X-ray came back clear."),
