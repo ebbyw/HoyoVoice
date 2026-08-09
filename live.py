@@ -35,6 +35,7 @@ from profiles import (ProfileSelector, narration_self_certain,  # noqa: E402
                       split_camel)
 from change_gate import ChangeGate  # noqa: E402
 from anchors import AnchorPack, decode_half  # noqa: E402
+from casting_filter import canonical_quotes, junk_speaker  # noqa: E402
 from vad import CHUNK, SileroVAD  # noqa: E402
 import voicepack  # noqa: E402
 from webui import VOICE_CATALOG, start_webui  # noqa: E402
@@ -986,6 +987,11 @@ def normalize_speaker(speaker):
     speaker = speaker.strip()
     for a, b in (("“", '"'), ("”", '"'), ("‘", "'"), ("’", "'")):
         speaker = speaker.replace(a, b)
+    # OCR reads the opening quote of a quoted plate with the wrong glyph
+    # often enough that `'Tenoyollotzin"` cast as a SECOND character next
+    # to `"Tenoyollotzin"` — canonicalize both ends before the quoting
+    # class is decided, so the fuzzy match below can see them as one
+    speaker = canonical_quotes(speaker)
     quoted = len(speaker) >= 2 and speaker[0] == '"' and speaker[-1] == '"'
     known = [k for k in (list(VOICES["characters"].keys()) + ["Narrator"]
                          + VOICES.get("always_voiced", []))
@@ -1127,6 +1133,13 @@ def pick_voice(speaker):
     c = VOICES["characters"].get(speaker)
     if c:
         return c["voice"], c.get("speed", 1.0)
+    # OCR garbage in the speaker slot (`iii`, `Lv. 90`, `???`) must not
+    # earn a permanent casting row and a pooled voice — but the LINE is
+    # still spoken, as the narrator. Checked only after the cast lookup,
+    # so casting a name by hand always beats the filter. The rules and
+    # the session-log strings behind them: tools/casting_filter.py.
+    if junk_speaker(speaker):
+        return VOICES["defaults"]["narrator"], 1.0
     with open(UNKNOWN_LOG, "a") as f:
         f.write(speaker + "\n")
     # best-effort gender guess from name shape, then claim a distinct voice;
