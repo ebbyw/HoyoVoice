@@ -121,7 +121,14 @@ MISS_TOLERANCE = 3
 # as closed (drop the queue, stop reading). Scrolling briefly hides the
 # hints the detector keys on, so a short count fires on ordinary scrolling.
 READER_CLOSE_AFTER = 2.0
-DEDUP_WINDOW = 3              # a line repeats only if it's within the last N messages
+# A line is a repeat only against the line spoken IMMEDIATELY before it,
+# and only when the same character said both. Anyone else speaking in
+# between makes it a fresh line: characters really do say the same words
+# again a moment later, and a 3-deep window swallowed those — the second
+# "Let's go!" of a scene never got read. What the window is actually for is
+# the line still on screen re-stabilizing after we spoke it, and the entry
+# right behind us covers that completely.
+DEDUP_WINDOW = 1
 # the persisted window only guards against a restart mid-scene; older than
 # this, the same text is a new encounter (a loading screen seen every
 # session was being skipped as a repeat). voiced_history is NOT aged out —
@@ -889,22 +896,25 @@ def window_verdict(new_norm, speaker, recent_lines):
     for e in recent_lines:
         o = e["norm"]
         same_spk = similar_speaker(e["speaker"], speaker)
-        if not (same_spk or len(new_norm) >= SHORT_LINE):
+        # SAME CHARACTER only. A repeat is one character saying the same
+        # words twice running; two characters saying the same words is a
+        # scene, not a duplicate, and it has to be read for both. An
+        # unknown nameplate on either side still counts as the same
+        # character: the plate flickers out mid-line, and the re-read that
+        # follows is the same line, not a new speaker's.
+        if not (same_spk or not e["speaker"] or not speaker):
             continue
         # extension FIRST: with sentence streaming, a grown line's
         # remainder can be short enough that the 0.90 fuzzy check below
         # would classify the whole thing as a repeat and the remainder
         # would never be spoken.
         #
-        # Same nameplate only. A line grows by typewriter and the
-        # typewriter never changes speaker mid-line, but the window spans
-        # speakers — so Paimon's "And then?" made Leyla's "And then I
-        # blossomed into a healthy vegetable…" look like a continuation of
-        # it, and Leyla was cut off at the front. An unknown speaker on
-        # either side still counts: the plate can flicker out mid-line,
-        # and a genuine extension must not be re-read from the top.
-        ext_ok = same_spk or not e["speaker"] or not speaker
-        if ext_ok and new_norm != o and new_norm.startswith(o):
+        # The same-character gate above is what protects this: a line grows
+        # by typewriter and the typewriter never changes speaker mid-line,
+        # so before that gate covered extensions too, Paimon's "And then?"
+        # made Leyla's "And then I blossomed into a healthy vegetable…" look
+        # like a continuation of it, and Leyla was cut off at the front.
+        if new_norm != o and new_norm.startswith(o):
             if len(new_norm) - len(o) < 8:   # trivial tail = jitter
                 return True, None
             if ext_base is None or len(o) > len(ext_base):
