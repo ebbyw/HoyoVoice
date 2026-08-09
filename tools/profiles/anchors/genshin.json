@@ -1,0 +1,23 @@
+{
+  "anchors": [
+    {
+      "name": "auto",
+      "template": "genshin/auto.png",
+      "search": {
+        "x": [
+          0.7979,
+          0.8357
+        ],
+        "y": [
+          0.0346,
+          0.1012
+        ]
+      },
+      "threshold": 0.75,
+      "ref": [
+        960,
+        540
+      ]
+    }
+  ]
+}
