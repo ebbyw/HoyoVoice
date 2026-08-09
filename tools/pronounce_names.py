@@ -56,6 +56,10 @@ FIXES = {
     # --- NPCs: the rosters list PLAYABLE characters only, so the companion
     # who talks more than anyone else in Genshin isn't in either fetch ---
     "Paimon": "Pie-mahn",
+    # "en-JOO" (ɛnʤˈu) — the Abyss Order clerk's name ends in the "joe" sound.
+    # NOT "ehn-joe", which reads "AYN-joe" (ˈAnʤˈO): a chunk-initial "eh" is
+    # /eɪ/ on both engines, the same trap the header records for "Freh".
+    "Enjou": "En-joe",
     # --- Genshin: pinyin ---
     "Baizhu": "Bye-joo",
     "Beidou": "Bay-doe",
@@ -145,6 +149,12 @@ TERMS = {
     "Asha": "Ahshaa",
     # "eign" is read as its own syllable: ɹˌiˈInbO, "ree-EYE-n-bow"
     "Reignbow": "Rainbow",
+    # Wrong on ONE platform, like "shaman": misaki says flOʤˈɪstən already,
+    # espeak says flˈɑːdʒɪstən ("FLAH-jis-tun"). "flo-jiston" is flˈOʤˈɪstən
+    # on both — the reading macOS already had. Spelled with the last
+    # syllable joined on purpose: "flo-jis-ten" makes a third stressed chunk
+    # (flˈOʤˈɪstˈɛn, "-TEN"), where the word ends in a schwa.
+    "Phlogiston": "flo-jiston",
     # The one entry here that is only wrong on ONE platform: misaki says
     # ʃˈɑmən, espeak says ʃˈæmən ("SHAM-un", rhyming with salmon), so this
     # reads correctly on macOS and wrong on Windows. "shahmon" is ʃˈɑmən on

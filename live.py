@@ -485,6 +485,7 @@ _CONTRACTION_RE = re.compile(
 #   Tsk   tˈəsk ("tuhsk")      → tisk   tˈɪsk
 #   Uhm   ˈum ("oom")          → um     ˈʌm
 #   Ugh   ˈʌh on macOS, ˈʌɡ on Windows → ug ˈʌɡ on both
+#   Urgh  ˈɜɹɡ ("erg", a word)         → ug ˈʌɡ on both
 #   Aah   fine, but Aaah is ˈææə       → ah     ˈɑ
 # "Pfft" is deliberately absent: it phonemizes to ˈft, a short puff that is
 # roughly the right noise, and the "pfff" respelling this list used to carry
@@ -495,6 +496,7 @@ _INTERJECTIONS = [
     (re.compile(r"\btsk\b", re.IGNORECASE), "tisk"),
     (re.compile(r"\buh+m+\b", re.IGNORECASE), "um"),
     (re.compile(r"\bugh+\b", re.IGNORECASE), "ug"),
+    (re.compile(r"\bu+r+gh+\b", re.IGNORECASE), "ug"),
     (re.compile(r"\ba+h+\b", re.IGNORECASE), "ah"),
 ]
 
@@ -507,8 +509,9 @@ _INTERJECTIONS = [
 # The dash can be an EM dash: Genshin writes "A—Ahh!" that way and the
 # hyphen-only pattern walked straight past it, so the lone "A" was read as
 # the letter. Any of the dashes count, and all of them are respelled to a
-# plain hyphen. A spaced dash (" — ", the punctuation kind) can't match:
-# the letter and the dash have to be adjacent.
+# plain hyphen — including for the letters whose reading is left alone, since
+# the dash is a fault of its own (see _unstutter). A spaced dash (" — ", the
+# punctuation kind) can't match: the letter and the dash have to be adjacent.
 _STUTTER = re.compile(r"\b([A-Za-z])[-‐‑–—]([A-Za-z])")
 # E/I/O already read as sounds rather than names ("I-I'm" → ˌIˌIm), and every
 # respelling tried for them was worse. A and U are not: "A-" is "AY", "U-" is
@@ -518,9 +521,20 @@ _STUTTER_TAIL = {"a": "h", "u": "h"}
 
 
 def _unstutter(m):
+    """A letter that keeps its own reading still gets the dash normalized.
+
+    An em dash is punctuation to the phonemizer, a hyphen is not: espeak —
+    the g2p behind kokoro-onnx, so this is the Windows reading — says
+    aɪ ɪts for "I—It's" (two words, a punctuation pause between them: "Aye.
+    It's Enjou!?") and aɪɪts for "I-It's", the run-together the stammer
+    actually is. Misaki reads both as ˌI—ˌɪts, the same break "Wuh-what"
+    already gets, so macOS is unchanged either way.
+    """
     lead, nxt = m.group(1), m.group(2)
-    if lead.lower() != nxt.lower() or lead.lower() in _STUTTER_KEEP:
+    if lead.lower() != nxt.lower():
         return m.group(0)
+    if lead.lower() in _STUTTER_KEEP:
+        return f"{lead}-{nxt}"
     return f"{lead}{_STUTTER_TAIL.get(lead.lower(), 'uh')}-{nxt}"
 
 

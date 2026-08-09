@@ -6,6 +6,18 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **`Phlogiston`** → `flo-jiston`, a `TERMS` entry. Wrong on one platform only, like `shaman`: misaki says `flOʤˈɪstən` already, espeak says `flˈɑːdʒɪstən` ("FLAH-jis-tun"), and the respelling is `flˈOʤˈɪstən` on both — the reading macOS already had. The last syllable is joined on purpose: `flo-jis-ten` makes a third stressed chunk (`flˈOʤˈɪstˈɛn`, "-TEN") where the word ends in a schwa. Capitalised, so `--custom-words` also pins it in the OCR vocabulary.
+
+- **`Enjou`** → `En-joe`. Kokoro read the Abyss Order clerk as "en-JOO" (`ɛnʤˈu`). Not `ehn-joe`, which reads "AYN-joe" (`ˈAnʤˈO`) — a chunk-initial "eh" is /eɪ/ on both engines, the trap `tools/pronounce_names.py` already records for "Freh". Run `python tools/pronounce_names.py --write` to pick it up: `voices.json` is yours, and a pull never updates it.
+
+### Fixed
+
+- **`I—It's Enjou!?` was read as two sentences.** The stammer respelling leaves `E`, `I` and `O` alone — they read as sounds already — but it was leaving the *dash* alone with them, and the dash is a fault of its own. To espeak, the g2p behind kokoro-onnx and so the Windows reading, an em dash is punctuation: `I—It's` is `aɪ ɪts`, two words with a pause between them ("Aye. It's Enjou!?"), while `I-It's` is `aɪɪts`, the run-together the stammer actually is. Every stammer now gets its dash normalized to a plain hyphen, whether or not the letter itself is respelled. Misaki reads both spellings as `ˌI—ˌɪts`, the same break `Wuh-what` already gets, so macOS is unchanged.
+
+- **`Urgh` was read as "erg".** `ˈɜɹɡ` — an actual English word, not a groan. It joins `Ugh` in the interjection table and reads as `ug` (`ˈʌɡ`) on both engines; doubled spellings (`Urrgh`) match too.
+
 ## [0.9.0] - 2026-08-08
 
 ### Added
