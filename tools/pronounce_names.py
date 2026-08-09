@@ -170,6 +170,14 @@ TERMS = {
     # "-oos" for the hiss — "-oos" is a voiced z on both engines
     # (fˈɑtˈuˈuz, "fah-too-OOZ"), where the word ends on an s.
     "Fatuus": "Fah-too-oose",
+    # Read as English "way" plus a flat "ob" on both engines — misaki
+    # wˈAɑb, espeak wˈeɪɑːb, "WAY-ahb". "Wah-yohb" is wˈɑjˈOb / wˈɑːjˈoʊb.
+    # The plural needs its own entry, substitution being word-bounded, and
+    # it has to be "-yohbs": "Wah-yobes" splits the engines (misaki
+    # wˌɑjˈɑbz, back to the flat ob), where "-yohbs" is wˈɑjˈObz /
+    # wˈɑːjˈoʊbz on both.
+    "Wayob": "Wah-yohb",
+    "Wayobs": "Wah-yohbs",
     # The one entry here that is only wrong on ONE platform: misaki says
     # ʃˈɑmən, espeak says ʃˈæmən ("SHAM-un", rhyming with salmon), so this
     # reads correctly on macOS and wrong on Windows. "shahmon" is ʃˈɑmən on
