@@ -105,6 +105,10 @@ FIXES = {
     "Lauma": "Lau-mah",
     "Mavuika": "Mah-vooee-kah",
     "Mualani": "Moo-ah-lah-nee",
+    # both engines apply English spelling rules end to end: nˈæhɪdə,
+    # "NAH-hid-uh", a flat first a and a schwa where the name ends open.
+    # "Nah-hee-dah" is nˈɑhˈidˈɑ / nˈɑːhˈiːdˈɑː.
+    "Nahida": "Nah-hee-dah",
     "Nilou": "Nee-loo",
     "Sigewinne": "See-guh-win",
     "Wriothesley": "Rees-lee",
