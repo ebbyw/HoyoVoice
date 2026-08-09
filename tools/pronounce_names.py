@@ -187,6 +187,30 @@ TERMS = {
     # wˈɑːjˈoʊbz on both.
     "Wayob": "Wah-yohb",
     "Wayobs": "Wah-yohbs",
+    # --- places. Wrong the same way names are: English spelling rules over
+    # pinyin and romaji. They are proper nouns, so --custom-words pins them
+    # in the OCR vocabulary too.
+    # lˈɪju / lˈɪjuː, "LIH-yoo" — the i is the i of "lit" and the ue is a
+    # dropped vowel. "Lee-wey" is lˈiwˈA / lˈiːwˈA. Spelled "-wey" and not
+    # "-way", which reads the same phones but splits the stress (misaki
+    # lˌiwˈA against espeak lˈiːwˈA) — the split that "Ah-shah" was rejected
+    # for above.
+    "Liyue": "Lee-wey",
+    # ɡˈɪli on both, "GILL-ee". "Gway-lee" is ɡwˈAlˈi / ɡwˈAlˈiː. NOT
+    # "Guay-lee", which is ɡwˈIlˈi — "GWY-lee", the /aɪ/ of "guy": ua is
+    # that diphthong to both engines, the same trap as a chunk-final "eh".
+    "Guili": "Gway-lee",
+    # ˈɔɹəbˌæksi / ˈɔːɹəbˌæksi, "OR-uh-BAK-see" — an open "or" where the word
+    # starts on "oh", and a schwa swallowing the second syllable.
+    # "Oh-roh-bak-shi" is ˈOɹˈObˈækʃi on both, identically. The last chunk is
+    # "-shi" rather than "-shee" on purpose: "-shee" takes a stress of its
+    # own (ˈækʃˈi), and the name ends unstressed.
+    "Orobaxi": "Oh-roh-bak-shi",
+    # nˌɑɹɹukˈɑmi / nˌɑːɹɹuːkˈɑːmi — the vowels are close, but "ru" doubles
+    # the rhotic (ɹɹ), which is a trill the name doesn't have.
+    # "Nah-roo-kah-mee" is nˈɑɹˈukˈɑmˈi / nˈɑːɹˈuːkˈɑːmˈiː: one r, and even
+    # stress across the four syllables rather than a peak on "kah".
+    "Narukami": "Nah-roo-kah-mee",
     # The one entry here that is only wrong on ONE platform: misaki says
     # ʃˈɑmən, espeak says ʃˈæmən ("SHAM-un", rhyming with salmon), so this
     # reads correctly on macOS and wrong on Windows. "shahmon" is ʃˈɑmən on
