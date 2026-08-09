@@ -6,6 +6,16 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Fixed
+
+- **HoyoVoice talked over Paimon's own voiceover, and the layer built to prevent exactly that had never once fired.** Game voiceover is mixed to the stereo centre, so a mid-channel burst with flat sides is voiceover even when the speech model can't recognise the voice — that is what the centre-energy layer is for, and it is the only thing standing between a processed game voice and a talk-over. Across thirteen sessions of logs it fired **zero times**.
+
+  Two guards were refusing real voiceover rather than the sound effects they were written for. The side-flat cap (2.5dB) alone rejected **24 of the 46** lines the VAD had independently called voiced — their side channel runs p50 3.8dB, well over it. The speechiness floor (`vad_peak >= 0.15`) rejected nearly every line we spoke, including the repro: Paimon at `mid+17.3 side+5.2`, a 12.1dB centre burst, scoring `0.00` to a model trained on human speech, because her voice is processed into a squeak.
+
+  A burst that lopsided is not an explosion — explosions are broadband — so above `ENERGY_DECISIVE_OVER_SIDE` (8dB) neither guard applies; below it both survive unchanged. The cut is measured, not chosen: over 1107 spoken and 46 known-voiced lines from thirteen sessions, mid-over-side runs p50 0.5 / p90 4.2 on lines HoyoVoice read aloud and p50 8.8 / p90 11.4 on lines the VAD called voiced, so 8 sits between the two populations rather than inside either. At that cut 18 of 1107 spoken lines (1.6%) become voiced, and 27 of the 46 known-voiced lines become reachable with no VAD agreement at all.
+
+  Replay cannot settle this one and did not: a recording muxes HoyoVoice's own speech into the bed, so every VAD decision in a replay of one is an artifact — the same limitation the OCR plan already records. The evidence here is the live console log, where `mid`, `side` and `gate` are printed for every line. `tools/test_center_energy.py` pins the rule on the real triples, in both directions.
+
 ### Added
 
 - **`tools/sweep_frames.py` — the frame-corpus classification A/B, as a
