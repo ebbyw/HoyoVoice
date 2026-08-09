@@ -143,10 +143,18 @@ class AnchorPack:
         if not spec.exists():
             return
         for a in json.loads(spec.read_text()).get("anchors", []):
-            png = ANCHOR_DIR / a["template"]
-            tmpl = np.asarray(Image.open(png).convert("L"), dtype=np.float32)
-            self.anchors.append(Anchor(a["name"], tmpl, a["search"],
-                                       a["threshold"], a["ref"]))
+            # a broken entry (missing/corrupt PNG, malformed spec) drops
+            # that one anchor, never the app: this runs inside the main
+            # loop on first use, where an uncaught error would kill it
+            try:
+                png = ANCHOR_DIR / a["template"]
+                tmpl = np.asarray(Image.open(png).convert("L"),
+                                  dtype=np.float32)
+                self.anchors.append(Anchor(a["name"], tmpl, a["search"],
+                                           a["threshold"], a["ref"]))
+            except Exception as e:
+                print(f"[anchors] {game}/{a.get('name', '?')} unloadable "
+                      f"({e}) — skipped", flush=True)
 
     def match(self, gray):
         """{name: score} for matched anchors only. `gray` from
