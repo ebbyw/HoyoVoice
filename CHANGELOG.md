@@ -6,6 +6,26 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **UI anchors, as log-only evidence (phase 4a of the OCR plan).** A small
+  grayscale template of game chrome — Star Rail's ✕-circle by `Continue`,
+  Genshin's auto-play toggle — matched by normalized cross-correlation on the
+  same half-scale decode the change gate uses, in 4–5ms a frame. Nothing
+  reads the result yet: `[anchors]` log lines and an `anchor_ms` metric are
+  the whole feature, and the score distributions they produce are what will
+  earn (or refuse) ROI cropping in phase 4b. Design, coordinate gotcha table
+  and sequencing: [plans/ANCHORS.md](plans/ANCHORS.md). Measured over 1560
+  frames of both games: the HSR anchor agreed with the classifier on 819 of
+  819 trusted-dialogue frames (worst score 0.981) and cleared every negative
+  by a ±0.27 margin; the Genshin anchor's misses are the frames where the
+  game genuinely hides the chrome (choice prompts) — and on three mid-fade
+  frames the anchor saw chrome the OCR text couldn't, both of which are the
+  "presence strong, absence weak" rule the design leans on. A choice-glyph
+  anchor was tried and rejected — the option pill's rendering varies with
+  hover and wrap; the numbers are in the plan doc. `settings.anchors: false`
+  turns it off.
+
 ## [0.10.2] - 2026-08-09
 
 ### Fixed
