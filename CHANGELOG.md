@@ -39,6 +39,15 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **Four place names get spoken forms.** `TERMS` has carried lore words and creatures; these are the first locations, and they are wrong the same way every other pinyin or romaji word is — English spelling rules applied end to end.
+
+  - **`Liyue`** → `Lee-wey`. Was `lˈɪju` / `lˈɪjuː`, "LIH-yoo": the i of "lit", and the *ue* collapsed into a single dropped vowel. Spelled `-wey` rather than `-way`, which gives the same phones but splits the stress (misaki `lˌiwˈA`, espeak `lˈiːwˈA`) — the same split `Ah-shah` was rejected for.
+  - **`Guili`** → `Gway-lee`. Was `ɡˈɪli` on both, "GILL-ee". Not `Guay-lee`, which reads `ɡwˈIlˈi` — "GWY-lee", the /aɪ/ of "guy": *ua* is that diphthong to both engines, a trap in the same family as a chunk-final "eh".
+  - **`Orobaxi`** → `Oh-roh-bak-shi`. Was `ˈɔɹəbˌæksi` / `ˈɔːɹəbˌæksi`, "OR-uh-BAK-see" — an open "or" where the word opens on "oh", and a schwa swallowing the second syllable. The last chunk is `-shi` and not `-shee` because `-shee` takes a stress of its own (`ˈækʃˈi`) where the name ends unstressed.
+  - **`Narukami`** → `Nah-roo-kah-mee`. The one here whose vowels were already close: what was wrong is that *ru* doubled the rhotic, `nˌɑɹɹukˈɑmi`, a trill the name doesn't have. The respelling is `nˈɑɹˈukˈɑmˈi` / `nˈɑːɹˈuːkˈɑːmˈiː` — one r, and even stress across the four syllables instead of a peak on "kah".
+
+  All four are capitalised, so `--custom-words` pins them in the OCR vocabulary as well; substitution is word-bounded, which is what leaves `Liyue Harbor`, `Guili Plains` and `Narukami Island` intact around them. Run `python tools/pronounce_names.py --write` to pick them up — `voices.json` is yours, and a pull never updates it.
+
 - **UI anchors, as log-only evidence (phase 4a of the OCR plan).** A small
   grayscale template of game chrome — Star Rail's ✕-circle by `Continue`,
   Genshin's auto-play toggle — matched by normalized cross-correlation on the
