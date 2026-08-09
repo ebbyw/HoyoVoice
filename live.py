@@ -1689,7 +1689,7 @@ def main():
     playing_speaker = None      # whose line is on the speakers right now
     qr_seen, qr_absent = set(), 99      # Quick Read incremental-reading state
     qr_gone_t0 = 0.0                    # when the reader panel first vanished
-    chat_prev = set()                   # last frame's messages (settle check)
+    reader_prev = set()                 # last frame's panel rows (settle check)
     reader_closed = True                # panel-closed handling already done
     read_queue = deque()
     chat_senders = []                   # session canon: OCR jitters the tiny
@@ -1932,19 +1932,28 @@ def main():
                 qr_absent = 0
                 reader_closed = False
                 items = [(None, t) for t in qr] if qr is not None else chat
-                if chat is not None:
-                    # A message is queued the instant it's seen, so a frame
-                    # caught mid fade-in gets read verbatim — that is where
-                    # "started shan ing (ocation" came from; the same text
-                    # reads at 0.98+ confidence once settled. Require a
-                    # message to survive one more frame before reading it.
-                    cur = {normalize_text(t) for _, t in chat}
-                    settled = {c for c in cur
-                               if any(same_line(c, p, 0.92)
-                                      for p in chat_prev)}
-                    chat_prev = cur
-                    items = [(s, t) for s, t in items
-                             if normalize_text(t) in settled]
+                # A row is queued the instant it's seen, so a frame caught
+                # mid fade-in gets read verbatim — that is where "started
+                # shan ing (ocation" came from; the same text reads at 0.98+
+                # confidence once settled. Require a row to survive one more
+                # frame before reading it.
+                #
+                # It does the same job for a row caught mid-SCROLL. Moving
+                # is not itself the problem — a row that is fully drawn
+                # reads the same text wherever it sits, settles at once and
+                # is spoken while the panel is still moving, which is what
+                # we want. The problem is a row drawn in HALF as it slides
+                # under the panel's clip edge: that OCRs as garbage, or as a
+                # fragment dedupe can't match against the whole row it
+                # becomes, so it would be read and then read again complete.
+                # A half-drawn row reads differently every frame while it
+                # moves, so it can't settle until it is whole.
+                cur = {normalize_text(t) for _, t in items}
+                settled = {c for c in cur
+                           if any(same_line(c, p, 0.92) for p in reader_prev)}
+                reader_prev = cur
+                items = [(s, t) for s, t in items
+                         if normalize_text(t) in settled]
                 new = []
                 for spk, t in items:
                     if spk:
@@ -1984,7 +1993,7 @@ def main():
                                            fix_ocr_text(t)))
                 candidate, candidate_count = None, 0
             else:
-                chat_prev = set()
+                reader_prev = set()
                 if qr_absent < 99:
                     qr_absent += 1
                 if qr_absent == 1:
@@ -2019,7 +2028,8 @@ def main():
                 stats["spoken"] += 1
                 last_spoken_norm = normalize_text(text)   # suppress its repeats
                 kind = ("chat" if spk else
-                        "chat notice" if chat is not None else "quick read")
+                        "chat notice" if chat is not None
+                        else screens.READER_LABEL)
                 add_event(kind, "spoken", spk, text, voice, speed,
                           can_replay=True, shot=True)
                 print(f"[{kind}{' ' + spk if spk else ''} → {voice}] "
