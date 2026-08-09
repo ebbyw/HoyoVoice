@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from profiles import (ProfileSelector, narration_self_certain,  # noqa: E402
                       split_camel)
 from change_gate import ChangeGate  # noqa: E402
+from anchors import AnchorPack, decode_half  # noqa: E402
 from vad import CHUNK, SileroVAD  # noqa: E402
 import voicepack  # noqa: E402
 from webui import VOICE_CATALOG, start_webui  # noqa: E402
@@ -252,7 +253,38 @@ voice_import = {"state": "", "voice": None, "msg": ""}
 observing = {"on": os.environ.get("HOYOVOICE_AUTORESUME") == "1"}
 stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
          "synth_ms": deque(maxlen=100), "ocr_ms": deque(maxlen=200),
-         "started": time.time()}
+         "anchor_ms": deque(maxlen=200), "started": time.time()}
+
+# UI anchors — pixel evidence of game chrome, matched before/without OCR.
+# Phase (a) of plans/ANCHORS.md: LOG-ONLY. Nothing downstream reads the
+# result; the log lines and score distributions are what earn (or refuse)
+# phase (b)'s ROI cropping. Packs are cached per game; a game without
+# anchor data gets an empty pack and zero behavior change.
+anchor_packs = {}
+anchor_state = {"enabled": True, "matched": ()}
+
+
+def match_anchors(profile_name):
+    """Match the current frame against the active game's anchor pack and
+    log when the SET of matched anchors changes. Called only on frames
+    that paid for a fresh OCR — a gate-unchanged frame provably didn't
+    change where text was, and chrome moves even less than text."""
+    pack = anchor_packs.get(profile_name)
+    if pack is None:
+        pack = anchor_packs[profile_name] = AnchorPack(profile_name)
+    if not pack.anchors:
+        return
+    t0 = time.perf_counter()
+    try:
+        hits = pack.match(decode_half(FRAME))
+    except Exception:
+        return                      # a torn frame is OCR's problem, not ours
+    stats["anchor_ms"].append(int((time.perf_counter() - t0) * 1000))
+    matched = tuple(sorted(hits))
+    if matched != anchor_state["matched"]:
+        anchor_state["matched"] = matched
+        shown = "  ".join(f"{n}={hits[n]:.2f}" for n in matched) or "none"
+        print(f"[anchors] {profile_name}: {shown}", flush=True)
 
 
 def frame_is_dark():
@@ -344,6 +376,9 @@ def metrics():
         "synth_avg_ms": int(sum(synth) / len(synth)) if synth else 0,
         "ocr_avg_ms": int(sum(ocr) / len(ocr)) if ocr else 0,
         "ocr_skipped": gate.skips,
+        "anchor_avg_ms": (int(sum(stats["anchor_ms"])
+                              / len(stats["anchor_ms"]))
+                          if stats["anchor_ms"] else 0),
         "lost_frames": lost_frames["n"],
         "lines_per_min": round(stats["spoken"] / mins, 1),
     }
@@ -1682,6 +1717,9 @@ def main():
     gate.enabled = bool(VOICES.get("settings", {}).get("change_gate", True))
     gate.frac = float(VOICES.get("settings", {}).get("change_gate_frac",
                                                      gate.frac))
+    # settings.anchors: false silences the log-only anchor matching
+    anchor_state["enabled"] = bool(VOICES.get("settings", {})
+                                   .get("anchors", True))
     global LATE_YIELD
     LATE_YIELD = bool(VOICES.get("settings", {}).get("late_yield", True))
 
@@ -1924,6 +1962,7 @@ def main():
             # dropping it costs 11% of the skips to remove 76% of them.
             if gate.unchanged(FRAME, latest_ocr["text_blocks"]):
                 blocks = latest_ocr["blocks"]
+                fresh_read = False
             else:
                 t0 = time.time()
                 blocks = ocr.recognize(FRAME)
@@ -1932,6 +1971,7 @@ def main():
                 stats["ocr_ms"].append(int((time.time() - t0) * 1000))
                 latest_ocr["blocks"] = blocks
                 latest_ocr["text_blocks"] = None    # until classify sets it
+                fresh_read = True
             if not blocks:
                 # NO blocks at all means we failed to read the frame (a torn
                 # JPEG mid-rewrite, common under recording load), not that
@@ -1944,6 +1984,9 @@ def main():
             # which game's layout to read this frame with (sticky; only
             # switches on sustained chrome from another game)
             screens = game.observe(blocks)
+
+            if fresh_read and anchor_state["enabled"]:
+                match_anchors(screens.name)
 
             # --- Reading-mode screens (Quick Read books, info/profile
             # screens, message/group-chat panels): incremental reading ---
