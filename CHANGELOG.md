@@ -6,6 +6,16 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Fixed
+
+- **A companion talking while you walk is read.** Genshin draws its nameplate at two heights, and they are separate clusters rather than a spread: boxed NPC dialogue at cy 0.2261-0.253, and the world dialogue special quests use — no box, no chrome, full HUD on screen — at cy 0.2093-0.2097. The plate band was sized for the first and missed the second **by 0.0003**. That is not a quiet miss: without a plate the line falls through to the plate-less band, which reaches up to 0.21 and so read the nameplate itself as words (`Paimon These floaty lil' guys… They won't jump us out of nowhere, will they?`), and the line was then dropped as an unknown speaker, because world dialogue carries no story chrome to fall back on either. Six of them went unread in one session.
+
+  The floor is now 0.204, placed in the 0.0103 of clear air between the world plate and the highest role subtitle ever measured (0.1990 across 79 sightings) — that subtitle being what the old floor was really defending against. The role-line test is switched off below a plate cy of 0.215, between the two clusters: a job title belongs to the boxed layout, and the world line sits 0.0370 below its plate's baseline against a `SUBTITLE_MAX_DROP` of 0.0360, so a single OCR wobble would have had it eaten as a role line — and with `REPARSE_PLATELESS` off, an eaten line leaves the plate with nothing under it and vanishes without so much as a log entry.
+
+  Dialogue rows also gained a hard floor (`DIALOGUE_MIN_Y`, 0.10 for Genshin). The span is measured *down from* the nameplate, so the lower plate reached 0.018 further into the permanent bottom HUD and welded `Lv. 90` onto the end of a line. The deepest dialogue row ever measured is 0.134, so the floor costs nothing and also keeps out the HP readout, which the log shows arriving as its own would-be line.
+
+  Verified against `captures\shots\98/100/101/102.json` — the exact frames from the report — and A/B'd across 1030 frames of dialogue, menus, readables and both games: **not one changed classification**, so nothing that worked before moved.
+
 ## [0.10.1] - 2026-08-09
 
 ### Fixed

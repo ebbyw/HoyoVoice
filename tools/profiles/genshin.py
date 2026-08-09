@@ -16,6 +16,13 @@ from:
     `trusts_dialogue` accepts either.
   * 'Confirm' sits in the same corner during ordinary dialogue, so unlike
     Star Rail it is NOT evidence of a menu — it is ignored, not trusted.
+  * The nameplate is drawn at TWO heights, in separate clusters: boxed
+    NPC dialogue at cy 0.2261-0.253, and world dialogue — a companion
+    talking while you walk, no box and no chrome at all — at
+    cy 0.2093-0.2097. A band sized for the first misses the second by
+    well under a thousandth, and the miss is not quiet: the line drops to
+    the plate-less band, which reaches high enough to read the nameplate
+    itself as words.
   * The nameplate is dead-centered (cx 0.493-0.504 across 210 reads) and
     can carry a second, smaller line under it: the speaker's role
     ("Pucli" / "Entertainment Supervisor"). That subtitle lands exactly
@@ -75,12 +82,36 @@ class Genshin(Profile):
     # (0.194/0.164/0.134), while fragments of one row agree to ~0.001
     LINE_H = 0.027
 
-    # Nameplate: cy 0.222-0.253, cx 0.493-0.504, w 0.034-0.058. The floor is
-    # 0.21 rather than 0.18 deliberately — the role subtitle sits at
-    # cy~=0.198 and must not be able to win the speaker slot.
-    PLATE_Y = (0.21, 0.28)
+    # Nameplate. Genshin draws it at two heights, and they are separate
+    # clusters rather than a spread:
+    #
+    #   boxed dialogue (an NPC conversation)   cy 0.2261-0.253
+    #   world dialogue (a companion talking
+    #     while you walk, no box, no chrome)   cy 0.2093-0.2097
+    #
+    # The floor used to be 0.21, sized for the boxed layout alone, and the
+    # world-dialogue plate misses it by seven ten-thousandths. Every one of
+    # those lines lost its speaker, fell through to DIALOGUE_FALLBACK_Y —
+    # which reaches up to 0.21 and so swallowed the nameplate as WORDS
+    # ("Paimon These floaty lil' guys… They won't jump us out of nowhere,
+    # will they?") — and was then dropped as an unknown speaker, because
+    # world dialogue carries no story chrome either.
+    #
+    # 0.204 sits in the 0.0103 of clear air between the world plate and the
+    # highest role subtitle ever measured (0.1990 over 79 sightings), which
+    # is what the old floor was really defending against.
+    PLATE_Y = (0.204, 0.28)
     PLATE_X = (0.45, 0.55)
     PLATE_MAX_W = 0.25
+    # A role line belongs to the BOXED layout: it is the job title under an
+    # NPC's name, and the world-dialogue plate never has one. Below this,
+    # the subtitle test is off. It has to be, and not by a hair: the world
+    # line sits 0.037 below its plate's baseline against a SUBTITLE_MAX_DROP
+    # of 0.036, so on a frame where OCR reads it a shade shorter it would be
+    # eaten as a role line — and with REPARSE_PLATELESS off, an eaten line
+    # leaves the plate with nothing under it and vanishes without a log.
+    # Placed between the two plate clusters, not next to either.
+    SUBTITLE_PLATE_MIN_CY = 0.215
 
     # Dialogue: rows run from just under the plate down to cy=0.134 (the
     # deepest row seen, a 3-row line). The span is measured from the plate's
@@ -102,6 +133,15 @@ class Genshin(Profile):
     # well below its floor — so the column bounds are all that is needed.
     DIALOGUE_X = (0.15, 0.85)
     DIALOGUE_SPAN = 0.125
+    # …but never below this, whatever the span works out to. The world
+    # plate sits 0.018 lower than the boxed one, so the same span reaches
+    # 0.018 further down — far enough to take in the permanent bottom HUD,
+    # and "Whoa! Paimon thinks she heard a terrifying roar..." came back
+    # with "Lv. 90" (cy=0.082) welded onto the end of it. The deepest
+    # dialogue row ever measured is 0.134, so this costs nothing: below it
+    # are only the level readout, the HP bar ("25577/25577", which the log
+    # shows arriving as its own would-be line), the Chat tab and the UID.
+    DIALOGUE_MIN_Y = 0.10
     DIALOGUE_FALLBACK_Y = (0.12, 0.21)
 
     # The role line under a name ("Pucli" / "Entertainment Supervisor").
@@ -439,6 +479,9 @@ class Genshin(Profile):
         return state
 
     def is_plate_subtitle(self, block, plate):
+        # boxed layout only — see SUBTITLE_PLATE_MIN_CY
+        if plate["y"] + plate["h"] / 2 < self.SUBTITLE_PLATE_MIN_CY:
+            return False
         cx = block["x"] + block["w"] / 2
         pcx = plate["x"] + plate["w"] / 2
         return (block["h"] <= self.SUBTITLE_MAX_H
