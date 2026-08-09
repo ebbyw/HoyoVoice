@@ -6,6 +6,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-08
+
 ### Added
 
 - **`*cough*` can be an actual cough.** `settings.sound_effects` maps the inside of a stage direction to an audio file, spliced into the line where the direction sat — `{"cough": "sounds/cough.wav"}` — or to words to speak in its place, `{"sigh": "Ahem."}`, for the sounds Kokoro can manage on its own. Relative paths resolve from the project directory, any sample rate and channel count is accepted (decoded once, mixed to mono, resampled to 24 kHz and cached), and a file that won't load costs the effect, not the line: the read goes ahead without it and the reason is logged once. A direction with no entry is read as the bare word, exactly as before; mapping one to `""` cuts it silently.
@@ -41,6 +43,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
   macOS plays through `afplay`, which has no device selection, so that backend reports no output list and the picker shows System default alone (route per-app from Sound settings there). Backends now take the live devices dict in `create_player(devices)` and `list_devices()` returns a third list; see `hv_platform/base.py`.
 
+  Naming a device is also what exposed a format problem the default never had: the system default reaches PortAudio through a host API that resamples whatever it's given, while a *named* WASAPI endpoint in shared mode requires the stream to match its mix format — so 24 kHz mono TTS was rejected outright (`-9997 invalid sample rate`) and the never-lose-a-line fallback spoke on the default anyway. The Player walks the same format ladder `AudioCapture` already needed for input: WASAPI auto-convert, the audio as-is, then resampled to the endpoint's native rate and duplicated to stereo. The rung that works is remembered, so only the first line of a session pays for the search, and the conversion is lazy — nothing is resampled on the common path where the endpoint takes the audio directly.
+
 ### Fixed
 
 - **A shopkeeper's job title was read as the start of her line.** Blanche said "Shopkeeper, Mondstadt General Goods Please have a look around." The role line under a Genshin nameplate is already recognized as part of the plate — it sits closer to the name (0.023–0.031 below its baseline) than a dialogue row does (0.041–0.063), and it is centered on the name's axis to within 0.008 — but both tests were applied to each OCR box, and a long role does not arrive as one box. Vision returned this one as "Shopkeeper," and "Mondstadt General Goods", and a piece of a centered line is not itself centered: neither piece was within 0.012 of the axis, so neither was recognized, and Genshin accepts dialogue rows across the whole text column (the typewriter puts a half-typed row anywhere left of center), which left both free to seed a row of their own. The test now runs on the **row's** bounding box, which has the geometry the game drew however Vision cut it up, and a row that passes is dropped whole. A role that arrives as one box is tested exactly as before. `tools/test_genshin_chrome.py` pins both forms, plus a plain nameplate and a two-row line, so the row under the title can't be swallowed with it.
@@ -68,8 +72,6 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   Three earlier theories died against A/B tests on the real line in the voice it's cast to, and are recorded here so nobody re-derives them: the `!?` token pair (collapsed and uncollapsed are indistinguishable — shipped, then reverted), the `…` at the `You… You're` junction (every replacement punctuation sounded identical), and the name's respelling (`Pie-mahn` phonemizes with two primary stresses, `pˈImˈɑn`, but the unrespelled `Paimon` fails the same way). Bisecting growing prefixes of the line is what actually located it. Beware synthesizing fragments while bisecting: Kokoro trails off into noise on text with no terminal punctuation, which reads exactly like the bug being chased.
 
 - **Sentiment pacing scored the respelled line, not the written one.** Speed was picked after `spoken_form()` had already turned names into nonsense words. It now scores the line as the game wrote it.
-
-- **A chosen output device was ignored: speech still came out of the Windows default.** The system default reaches PortAudio through a host API that resamples whatever it's given; a *named* WASAPI endpoint doesn't — in shared mode the stream has to match the endpoint's mix format, so 24 kHz mono TTS was rejected outright (`-9997 invalid sample rate`) and the "never lose a line" fallback did what it says and spoke on the default. The Player now walks the same format ladder `AudioCapture` already needed for input: WASAPI auto-convert, then the audio as-is, then resampled to the endpoint's native rate and duplicated to stereo here. The rung that works is remembered, so only the first line of a session pays for the search, and the conversion is lazy — nothing is resampled on the common path where the endpoint takes the audio directly.
 
 ### Changed
 
