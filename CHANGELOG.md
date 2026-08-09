@@ -6,6 +6,18 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **Genshin's readable articles are read aloud.** The full-screen reading panel ("Investigative Report: Bakunawa") — a gold title over a prose column, clipped top and bottom by two ornate rules, with `Return` alone in the hint strip. It hooks into the same reader Star Rail's Quick Read books use, so it is read incrementally as you scroll, survives the panel briefly vanishing, and stops mid-sentence when you close it. The title is spoken as a heading (a period is appended when it has none of its own) rather than running into the first line. Every band is measured off a 1080p capture, including the two rules themselves, found by scanning row brightness across the column: title cy=0.924, body rows left-aligned at x=0.266 at a pitch of 0.033, rules at cy=0.896 and cy=0.052. Logged as `readable` rather than `quick read` — the label is the profile's now.
+
+  Two things are guarded. **A menu must never be read**: `Return` is an ordinary hint, and a menu's heading over its first column has the same shape as a title over a body, so nothing may be on screen but the panel and its own bottom strip — menus always have tabs, counters or a second column, and an article never does. Swept over 484 saved frames (dialogue, menus, both games): no false positives. And **a row still drawn in half is deferred**, because half a row OCRs as garbage or as a fragment dedupe can't match against the whole row it becomes — it would be read, then read again complete. The body band runs the *full* span between the rules, well below the `Return` hint: a band that stopped at the hint would swallow the end of every scrolled article, and a swallowed row is never read again, unlike a deferred one.
+
+  Body rows are taken down to confidence 0.3, the floor the nameplate slot already uses. `Tenochtzitoc.` came back at 0.50 on both frames of the capture while every other row scored 1.00, and at the 0.8 default the word vanished silently from the middle of a sentence. The column is as tightly constrained as the plate.
+
+### Fixed
+
+- **A reading panel's rows are read a frame late, not the instant they appear.** The settle check that message panels already had — a row must survive one more frame before it is spoken — now covers books, info screens and articles too. It was there because a frame caught mid fade-in gets read verbatim (`started shan ing (ocation`); it does the same job for a row caught mid-scroll.
+
 ## [0.9.2] - 2026-08-08
 
 ### Added

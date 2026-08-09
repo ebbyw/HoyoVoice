@@ -72,6 +72,10 @@ class Profile:
     # phone UI can't have one hallucinated out of a menu.
     SCREENS = frozenset()
 
+    # What this game calls its reading panel, for the log and the history.
+    # Star Rail's is a "Quick Read" book; Genshin's is a readable article.
+    READER_LABEL = "quick read"
+
     MIN_CONF = 0.8
     # Confidence floor for the nameplate slot alone. That slot is heavily
     # constrained by geometry (short, inside a narrow band, above the line),
