@@ -103,7 +103,12 @@ FIXES = {
     "Kaveh": "Kah-veh",
     "Kinich": "Kee-neech",
     "Lauma": "Lau-mah",
-    "Mavuika": "Mah-vooee-kah",
+    # the vu is a w, not a v followed by a vowel. Both engines read the raw
+    # name as mˈævjuˌɪkə, "MAV-yoo-ick-uh"; the first respelling here fixed
+    # the vowels but kept the v (mˈɑvˈuikˈɑ, "mah-voo-EE-kah") — an extra
+    # syllable the name doesn't have. "Mah-wee-kah" is mˈɑwˈikˈɑ /
+    # mˈɑːwˈiːkˈɑː.
+    "Mavuika": "Mah-wee-kah",
     "Mualani": "Moo-ah-lah-nee",
     # both engines apply English spelling rules end to end: nˈæhɪdə,
     # "NAH-hid-uh", a flat first a and a schwa where the name ends open.
