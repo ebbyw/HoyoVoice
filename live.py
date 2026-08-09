@@ -1993,7 +1993,6 @@ def main():
                                            fix_ocr_text(t)))
                 candidate, candidate_count = None, 0
             else:
-                reader_prev = set()
                 if qr_absent < 99:
                     qr_absent += 1
                 if qr_absent == 1:
@@ -2018,6 +2017,18 @@ def main():
                 if qr_absent == 40:             # gone a while: forget progress
                     qr_seen.clear()
                     chat_senders.clear()
+                    # Held until here ON PURPOSE, with the rest of the
+                    # panel's state. Cleared on every frame that failed to
+                    # see the panel, a detector that merely FLICKERS — one
+                    # frame missed to a confidence dip or a stray block —
+                    # can never satisfy the settle check, because the row
+                    # it should be matched against was thrown away in
+                    # between. Nothing is then read for as long as the
+                    # flicker lasts, which looks exactly like the panel
+                    # being ignored. Two seconds of grace here costs
+                    # nothing: the rows are only ever used as the thing a
+                    # later frame is compared AGAINST.
+                    reader_prev = set()
 
             # pump the reading queue when the voice is idle
             if read_queue and not speech.playing:
