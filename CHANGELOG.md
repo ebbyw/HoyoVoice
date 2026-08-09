@@ -6,6 +6,37 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Fixed
+
+- **OCR garbage stops earning casting rows.** Windows session logs show `iii`
+  auto-cast as a character, and `Lv. 90`, `Liv, 9.`, `255771/25577`,
+  `1v.90 2557` reaching the speaker slot — HUD readouts and half-drawn rows
+  that, once cast, sit in `voices.json` forever, can never match a real
+  nameplate again, and each claim a voice from the auto-cast pool. A junk
+  name is now refused at **auto-cast time, not in the plate slot**, and the
+  placement is the point: Genshin's unnamed characters carry the literal
+  plate `???` and Star Rail has `March 7th`, so filtering plates by shape
+  would eat real speakers, and a rejected plate can silence a line — the one
+  error this project treats as worse than any talk-over. A refused name
+  still *speaks*, in the narrator's voice (the right voice for a character
+  the game isn't naming), and a manual cast row beats the filter outright —
+  it runs only after the cast-table lookup misses. The rules are exactly the
+  junk classes in the logs (fewer than two letters, digit-heavy, comma or
+  slash, one repeated letter, lowercase first letter), each pinned with the
+  real strings in `tools/test_casting_filter.py`. `Crafting Bench` is left
+  alone on purpose: it is lexically indistinguishable from the real NPC
+  `Strange Guard` — keeping menus unread is the menu detector's job.
+
+- **A quote-mangled nameplate no longer casts as a second character.** The
+  20260809 casting table carries both `"Tenoyollotzin"` and
+  `'Tenoyollotzin"` — OCR read the opening quote as a single, the mismatch
+  put the read in the unquoted class, and the fuzzy match (which compares
+  only within a quoting class, so a character literally named `"Narrator"`
+  can't merge with true narration) never saw the original. A plate with
+  quote glyphs at *both* ends is now canonicalized to double quotes before
+  the class is decided; a quote on one end only is left alone — that is an
+  apostrophe or a clipped read, not a quoting style.
+
 ### Added
 
 - **UI anchors, as log-only evidence (phase 4a of the OCR plan).** A small
