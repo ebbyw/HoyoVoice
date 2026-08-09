@@ -6,6 +6,22 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **`tools/sweep_frames.py` — the frame-corpus classification A/B, as a
+  tool.** The check that cleared the 0.10.2 world-dialogue fix — classify
+  every saved frame before and after a profile change, diff the outputs,
+  require zero unintended changes — existed only as a scratch script; now
+  it is `ocr` (recording → one raw-OCR json per frame, via the platform's
+  real daemon, cached so a corpus is a one-time cost), `snapshot` (every
+  frame through every profile's full detector set) and `diff`, which prints
+  each moved field and exits 1 if anything moved — so "zero unintended
+  changes" is an exit code, not a claim. Every frame is classified with
+  BOTH games' profiles on purpose: a Genshin band change that moves an HSR
+  menu frame is exactly the regression this exists to catch. Verified on a
+  1560-frame corpus from three recordings: back-to-back snapshots diff
+  clean, and a single planted change is caught and named.
+
 ### Fixed
 
 - **OCR garbage stops earning casting rows.** Windows session logs show `iii`
