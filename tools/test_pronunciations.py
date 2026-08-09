@@ -29,7 +29,7 @@ CASES = [
     # Invented terms both engines read with the flat a of "fat"
     ("The Fatui hold the Northland Bank.",
      "The Fah-too-ee hold the Northland Bank."),
-    ("A Fatus stood guard.", "A Fah-toose stood guard."),
+    ("A Fatuus stood guard.", "A Fah-too-oose stood guard."),
     # pronunciations_exact: the character, not the pastime
     ("Gaming brought the soup.", "Gah-ming brought the soup."),
     ("I spent all night gaming.", "I spent all night gaming."),
