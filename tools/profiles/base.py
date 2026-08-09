@@ -111,6 +111,12 @@ class Profile:
     CHOICES = {"x": (0.66, 1.00), "y": (0.22, 0.62)}
     CHOICE_LEFT_EDGE = (0.68, 0.78)  # option text is left-aligned past the marker
     CHOICE_MIN_HEIGHT = 0.020
+    # Vertical gap that separates two OPTIONS, as opposed to the wrapped
+    # rows of one. None = 1.5x the taller row's height, which works while
+    # OCR reports heights consistently; a game where measured heights
+    # jitter across the option-pitch boundary pins an absolute gap
+    # instead (see genshin.py for the measurement that forced it).
+    CHOICE_GROUP_GAP = None
 
     # --- full-screen narration (centered prose, no nameplate) ---
     NARRATION_BAND = {"x": (0.20, 0.80), "y": (0.25, 0.75)}
@@ -138,11 +144,18 @@ class Profile:
         return max(plates, key=lambda b: b["y"]) if plates else None
 
     def choice_blocks(self, blocks):
-        """Blocks that look like rows of the choice list."""
+        """Blocks that look like rows of the choice list.
+
+        A block with no letters at all is an option's ICON, not its text:
+        Vision returned Genshin's chat-bubble glyph as its own block ('®',
+        x=0.6686 — inside the left-edge band) on the 7-option Katheryne
+        prompt, and it would otherwise join an option as a leading word.
+        Every real option row carries letters."""
         return [b for b in self.speakable(blocks)
                 if in_region(b, self.CHOICES)
                 and self.CHOICE_LEFT_EDGE[0] <= b["x"] <= self.CHOICE_LEFT_EDGE[1]
-                and b["h"] >= self.CHOICE_MIN_HEIGHT]
+                and b["h"] >= self.CHOICE_MIN_HEIGHT
+                and any(c.isalpha() for c in b["text"])]
 
     def is_plate_subtitle(self, block, plate):
         """True if this block is part of the NAMEPLATE rather than speech —
@@ -280,10 +293,23 @@ class Profile:
         options, current = [], []
         prev = None
         for b in state["choices"]:
-            if prev is not None and (prev["y"] - b["y"]) > 1.5 * max(prev["h"],
-                                                                     b["h"]):
-                options.append(" ".join(x["text"] for x in current))
-                current = []
+            if prev is not None:
+                # An absolute gap compares row CENTERS: an icon glyph fused
+                # into a block inflates its height and so shrinks the
+                # bottom-edge gap below the real row pitch (measured: the
+                # Dispatch row at h=0.034 against its neighbors' 0.024),
+                # while the centers keep the drawn pitch. The legacy rule
+                # stays on bottom edges — it predates the measurement and
+                # its games are calibrated to it.
+                if self.CHOICE_GROUP_GAP:
+                    split = ((prev["y"] + prev["h"] / 2)
+                             - (b["y"] + b["h"] / 2)) > self.CHOICE_GROUP_GAP
+                else:
+                    split = (prev["y"] - b["y"]) > 1.5 * max(prev["h"],
+                                                             b["h"])
+                if split:
+                    options.append(" ".join(x["text"] for x in current))
+                    current = []
             current.append(b)
             prev = b
         if current:
