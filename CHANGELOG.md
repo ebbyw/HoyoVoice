@@ -6,6 +6,35 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Fixed
+
+- **A long choice list is read whole, one option at a time.** The Genshin
+  choice band's ceiling was Star Rail's (0.62), kept while unverified
+  because both prompts in the calibration capture were a single two-row
+  option — the `CALIBRATE` note this entry retires. The awaited capture
+  (rec_20260809_143259, Katheryne's 7-option guild menu) shows the stack
+  grows upward from a fixed bottom (~0.277) to cy 0.622 at seven options,
+  so the old ceiling clipped the top option out of the prompt: the session
+  log carries it as a six-option list missing "Claim Daily Commission
+  Reward". The ceiling is now 0.66 — clear of the measured top edge by half
+  a row, with the pitch recorded (an 8th option needs another +0.06, not
+  taken on faith, the same way 0.62 wasn't).
+
+  Grouping rows into options moves to an absolute center-to-center gap
+  (0.034) for Genshin. The height-relative rule (1.5× the taller row) sat
+  on a knife edge: wrapped rows of one option are 0.023 apart and adjacent
+  options 0.044–0.057, but Vision's heights for the same drawn rows span
+  0.018–0.034 — and the log shows three options fused into one ("Check
+  Valiant Chronicles information We meet again, Katheryne…"). Centers, not
+  bottom edges, because an icon glyph fused into a block inflates its box
+  and shrank one real option gap to 0.039 while the drawn pitch stayed
+  0.044. And a block with no letters at all is an option's icon, not its
+  text — Vision returned the chat-bubble glyph as its own `®` block inside
+  the left-edge band, where it joined an option as a leading word. A/B'd
+  over 1725 frames of both games with `tools/sweep_frames.py`: the only
+  frames that moved are the prompt's own, plus one Genshin-profile reading
+  of an HSR gameplay frame — a screen that profile never reads live.
+
 ## [0.10.3] - 2026-08-09
 
 ### Added
