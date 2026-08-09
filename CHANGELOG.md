@@ -6,9 +6,15 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-09
+
 ### Added
 
+- **New pronunciations this release: `Fatui`, `Fatuus`, `Nahida`, `Wayob`, `Wayobs`.** `voices.json` is gitignored and per-machine, so a pull does *not* update anyone's pronunciations — run `python tools/pronounce_names.py --write --custom-words` on **each** machine. The second machine is always the one that reports the fix "not working".
+
 - **`Fatui`** → `Fah-too-ee`, **`Fatuus`** → `Fah-too-oose`. Wrong on *both* engines and the same way, unlike `shaman` or `Archon`: the a is the flat a of "fat" and the t is flapped — misaki `fˈæɾui`, espeak `fˈæɾuːi`, "FAT-oo-ee". The singular also loses a syllable (`fˈæɾuz`, "FAT-ooz", where the word has three). Both are spelled with `-oose` rather than `-oos`, because `-oos` comes out voiced on both engines (`fˈɑtˈuˈuz`, "fah-too-OOZ") where the word ends on a hiss. Capitalised, so `--custom-words` pins them in the OCR vocabulary too — an invented word is what OCR fuses worst.
+
+- **`Nahida`** → `Nah-hee-dah`. Both engines apply English spelling rules end to end: `nˈæhɪdə`, "NAH-hid-uh" — a flat first a and a schwa where the name ends open. `Nah-hee-dah` is `nˈɑhˈidˈɑ` / `nˈɑːhˈiːdˈɑː`. In `FIXES` rather than `TERMS`, being a playable character: the roster fetch lists her, so the coverage report can check her.
 
 - **`Wayob`** → `Wah-yohb`, plus **`Wayobs`** → `Wah-yohbs`. Read as English "way" with a flat "ob" on both engines — misaki `wˈAɑb`, espeak `wˈeɪɑːb`, "WAY-ahb". The plural gets its own entry because substitution is word-bounded, and it has to be spelled `-yohbs`: `Wah-yobes` splits the engines (misaki `wˌɑjˈɑbz`, straight back to the flat ob) where `-yohbs` is `wˈɑjˈObz` / `wˈɑːjˈoʊbz` on both.
 
