@@ -188,7 +188,7 @@ Reading a screen means knowing where that game draws its nameplate, its dialogue
 | Game | Status |
 |---|---|
 | Honkai: Star Rail | Complete — dialogue, narration, lore cards, loading screens, overlays, Quick Read, info screens, chat panels |
-| Genshin Impact | **Most screens** — dialogue, choice prompts, full-screen narration, loading-screen tips, readable articles; all calibrated against a real session. No book/inventory reading UI yet |
+| Genshin Impact | **All screens** — dialogue, choice prompts, full-screen narration, loading-screen tips, readable articles and books opened from the inventory archive; all calibrated against real sessions. The archive books turned out to be the same reading panel the articles use — a 2026-08-09 session read a 60-page play script from it end to end |
 
 `settings.game` picks a profile: `hsr`, `genshin`, or `auto` (the default), which starts on Star Rail and switches when a sustained run of frames carries chrome unique to the other game — Star Rail's `✕ Continue` hint, Genshin's bottom-right UID. The dashboard has the same control, and shows which profile is actually being read in auto mode.
 
