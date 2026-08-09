@@ -164,11 +164,12 @@ TERMS = {
     # and the t is flapped — misaki fˈæɾui, espeak fˈæɾuːi, "FAT-oo-ee".
     # "Fah-too-ee" is fˈɑtˈuˈi / fˈɑːtˈuːˈiː, an open ah and a real t.
     "Fatui": "Fah-too-ee",
-    # Same flat a and flap, and the u collapses to a schwa on both:
-    # fˈæɾəs, "FAT-us". Spelled "-toose" rather than "-toos" for the hiss —
-    # "toos" is a voiced z on both engines (fˈɑtˈuz, "fah-TOOZ"), while
-    # "toose" is fˈɑtˈus / fˈɑːtˈuːs, the sound the word ends on.
-    "Fatus": "Fah-toose",
+    # The singular. Same flat a and flap, and it also loses a syllable:
+    # fˈæɾuz / fˈæɾuːz, "FAT-ooz", where the word has three. "Fah-too-oose"
+    # is fˈɑtˈuˈus / fˈɑːtˈuːˈuːs on both. Spelled "-oose" rather than
+    # "-oos" for the hiss — "-oos" is a voiced z on both engines
+    # (fˈɑtˈuˈuz, "fah-too-OOZ"), where the word ends on an s.
+    "Fatuus": "Fah-too-oose",
     # The one entry here that is only wrong on ONE platform: misaki says
     # ʃˈɑmən, espeak says ʃˈæmən ("SHAM-un", rhyming with salmon), so this
     # reads correctly on macOS and wrong on Windows. "shahmon" is ʃˈɑmən on
@@ -187,6 +188,17 @@ TERMS = {
     # audible. Keep it.
     "Wishpower": "Wish power",
 }
+
+# Entries this file used to ship and has withdrawn. `--write` only ever
+# ADDS, so a retired entry would sit in every voices.json forever — and
+# voices.json is gitignored, which makes "pull the fix" no help and hand
+# editing it on the other machine the only way out. Listed with the exact
+# value we shipped: an entry whose value has since been changed by hand is
+# the user's own and is left alone.
+#
+#   Fatus — not a word in either game. The singular of Fatui is "Fatuus",
+#   which has its own entry above.
+RETIRED = {"Fatus": "Fah-toose"}
 
 # Names that are also ordinary English words. Matching is case-insensitive by
 # default (OCR case jitter shouldn't lose a name), which would respell the
@@ -295,6 +307,11 @@ def merge(path, rosters, custom_words):
     pron = settings.setdefault("pronunciations", {})
     added = {k: v for k, v in {**FIXES, **TERMS}.items() if pron.get(k) != v}
     pron.update(added)                       # hand-written entries win nothing
+    # withdrawn entries go out again, but only where the value is still the
+    # one we shipped — a changed value is the user's own respelling
+    gone = [k for k, v in RETIRED.items() if pron.get(k) == v]
+    for k in gone:
+        pron.pop(k)
     settings["pronunciations"] = dict(sorted(pron.items()))
     settings["pronunciations_exact"] = sorted(
         set(settings.get("pronunciations_exact", [])) | set(EXACT))
@@ -314,10 +331,16 @@ def merge(path, rosters, custom_words):
         # in the recognizer's vocabulary, and pinning it there would be a
         # hint it doesn't need. Capitalisation is the tell.
         cw.update(t for t in TERMS if t[:1].isupper())
+        # a retired term is no longer worth pinning either — unless it is a
+        # real name that a roster also supplies
+        roster_words = {w for names in rosters.values() for name in names
+                        for w in name.split()}
+        cw -= {k for k in gone if k not in roster_words}
         settings["custom_words"] = sorted(w for w in cw if len(w) > 1)
         words = len(settings["custom_words"]) - before
     path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
     print(f"{path}: +{len(added)} pronunciations"
+          + (f", -{len(gone)} retired" if gone else "")
           + (f", +{words} OCR words" if custom_words else ""))
 
 
