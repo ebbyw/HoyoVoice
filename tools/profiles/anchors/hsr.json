@@ -1,0 +1,23 @@
+{
+  "anchors": [
+    {
+      "name": "continue",
+      "template": "hsr/continue.png",
+      "search": {
+        "x": [
+          0.8875,
+          0.9385
+        ],
+        "y": [
+          0.0,
+          0.074
+        ]
+      },
+      "threshold": 0.75,
+      "ref": [
+        960,
+        540
+      ]
+    }
+  ]
+}
