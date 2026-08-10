@@ -6,6 +6,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-08-09
+
 ### Added
 
 - **The downloaded log names its screenshots.** Every event that saves a
@@ -15,8 +17,6 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   alone: ids are internal event numbers the log never printed, so relaying
   the right evidence meant guessing by position in a folder of 300.
 
-### Added
-
 - **`Serenitea`** → `Serenity`. Both engines read the pun's spelling
   literally — `sˌɛɹənˈIɾiə`, "seren-EYE-tee-uh", the tea split into two
   vowels behind an /aɪ/ — where the word is meant to be *heard* as
@@ -25,8 +25,6 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   synthesizer. Word-bounded, so `Serenitea Pot` reads "Serenity Pot".
   Capitalised, so `--custom-words` pins it in the OCR vocabulary. Run
   `python tools/pronounce_names.py --write` on **each** machine.
-
-### Added
 
 - **`Katheryne`** → `Katherine`. The guild receptionist's stylized -yne
   rhymes with "wine" on both engines — misaki `kˈæθəɹɹˌIn`, espeak
