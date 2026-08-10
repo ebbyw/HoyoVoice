@@ -8,6 +8,17 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **`Serenitea`** → `Serenity`. Both engines read the pun's spelling
+  literally — `sˌɛɹənˈIɾiə`, "seren-EYE-tee-uh", the tea split into two
+  vowels behind an /aɪ/ — where the word is meant to be *heard* as
+  "serenity" (`səɹˈɛnəɾi`). Respelled to the ordinary word, the same move
+  as `Reignbow` → `Rainbow`: the pun lives on screen, not in the
+  synthesizer. Word-bounded, so `Serenitea Pot` reads "Serenity Pot".
+  Capitalised, so `--custom-words` pins it in the OCR vocabulary. Run
+  `python tools/pronounce_names.py --write` on **each** machine.
+
+### Added
+
 - **`Katheryne`** → `Katherine`. The guild receptionist's stylized -yne
   rhymes with "wine" on both engines — misaki `kˈæθəɹɹˌIn`, espeak
   `kæθɚɹaɪn`, "kath-er-RYNE" — where the name is plain Catherine. Respelled
