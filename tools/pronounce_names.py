@@ -60,6 +60,12 @@ FIXES = {
     # NOT "ehn-joe", which reads "AYN-joe" (ˈAnʤˈO): a chunk-initial "eh" is
     # /eɪ/ on both engines, the same trap the header records for "Freh".
     "Enjou": "En-joe",
+    # the -yne rhymes with "wine" on both engines (misaki kˈæθəɹɹˌIn, espeak
+    # kæθɚɹaɪn) where the guild receptionist is plain Catherine. Respelled to
+    # the ordinary spelling rather than hyphen chunks: "Kath-er-rin" makes
+    # three stressed syllables (kˈæθˈɜɹˈɪn) where the name has one, and both
+    # engines already read "Katherine" as kˈæθɹɪn / kæθɹɪn.
+    "Katheryne": "Katherine",
     # --- Genshin: pinyin ---
     "Baizhu": "Bye-joo",
     "Beidou": "Bay-doe",
