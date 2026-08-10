@@ -6,6 +6,17 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **`Katheryne`** → `Katherine`. The guild receptionist's stylized -yne
+  rhymes with "wine" on both engines — misaki `kˈæθəɹɹˌIn`, espeak
+  `kæθɚɹaɪn`, "kath-er-RYNE" — where the name is plain Catherine. Respelled
+  to the ordinary spelling rather than hyphen chunks: `Kath-er-rin` makes
+  three stressed syllables (`kˈæθˈɜɹˈɪn`) where the name has one, and both
+  engines already read `Katherine` as `kˈæθɹɪn` / `kæθɹɪn`. Run
+  `python tools/pronounce_names.py --write` on **each** machine —
+  `voices.json` is gitignored, and a pull never updates pronunciations.
+
 ### Fixed
 
 - **A long choice list is read whole, one option at a time.** The Genshin
