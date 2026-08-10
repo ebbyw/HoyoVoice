@@ -365,8 +365,14 @@ def start_webui(shared, port=DASHBOARD_PORT):
         out += ["", "DECISION LOG (oldest first)", ""]
         for e in shared["events"]:
             speed = f" x{e['speed']}" if e.get("speed") else ""
+            # the event id, shown only when a shot was actually saved: it
+            # names the files under captures/shots/ (<id>.jpg, <id>.json),
+            # which is what a bug report needs relayed — "which shot ids?"
+            # was previously unanswerable from the log alone
+            shot = f"  shot #{e['id']}" if e.get("shot") else ""
             out.append(f"  {e['t']}  {(e['speaker'] or '—'):20.20s} "
-                       f"{e['action']:34.34s} {(e['voice'] or ''):10s}{speed}")
+                       f"{e['action']:34.34s} {(e['voice'] or ''):10s}"
+                       f"{speed}{shot}")
             out.append(f"            {e['text']}")
             if e.get("spoken"):     # the line as the synthesizer heard it
                 out.append(f"            ↳ synth heard: {e['spoken']}")
