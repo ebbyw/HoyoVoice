@@ -200,6 +200,13 @@ TERMS = {
     # wˈɑːjˈoʊbz on both.
     "Wayob": "Wah-yohb",
     "Wayobs": "Wah-yohbs",
+    # sˌɛɹənˈIɾiə, "seren-EYE-tee-uh" — the "tea" read as its own two vowels
+    # behind an /aɪ/. The word is a pun on "serenity" and is meant to be
+    # HEARD as it: səɹˈɛnəɾi. Respelled to the ordinary word, the same move
+    # as Reignbow → Rainbow; the pun survives because the pot is on screen,
+    # not because the synthesizer winks. Word-bounded, so "Serenitea Pot"
+    # comes out "Serenity Pot".
+    "Serenitea": "Serenity",
     # --- places. Wrong the same way names are: English spelling rules over
     # pinyin and romaji. They are proper nouns, so --custom-words pins them
     # in the OCR vocabulary too.
