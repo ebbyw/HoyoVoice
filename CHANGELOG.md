@@ -8,6 +8,15 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **The downloaded log names its screenshots.** Every event that saves a
+  frame now carries `shot #<id>` in the decision log, naming the files
+  under `captures/shots/` (`<id>.jpg`, `<id>.json` — the raw OCR blocks).
+  "Which shot ids do you need?" was previously unanswerable from the log
+  alone: ids are internal event numbers the log never printed, so relaying
+  the right evidence meant guessing by position in a folder of 300.
+
+### Added
+
 - **`Serenitea`** → `Serenity`. Both engines read the pun's spelling
   literally — `sˌɛɹənˈIɾiə`, "seren-EYE-tee-uh", the tea split into two
   vowels behind an /aɪ/ — where the word is meant to be *heard* as
