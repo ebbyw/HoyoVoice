@@ -270,7 +270,14 @@ TERMS = {
 #
 #   Fatus — not a word in either game. The singular of Fatui is "Fatuus",
 #   which has its own entry above.
-RETIRED = {"Fatus": "Fah-toose"}
+RETIRED = {
+    "Fatus": "Fah-toose",
+    # superseded by the "Yae" entry: keyed on the surname so standalone "Yae"
+    # and "Miss Yae" are covered, and "Miko" alone already reads right. Left
+    # in voices.json it is dead config — the "Yae" substitution fires first
+    # and the full-name key can never match again.
+    "Yae Miko": "Yah-eh Mee-koh",
+}
 
 # Names that are also ordinary English words. Matching is case-insensitive by
 # default (OCR case jitter shouldn't lose a name), which would respell the
