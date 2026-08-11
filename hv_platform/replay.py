@@ -157,6 +157,12 @@ class Tts:
     def forget_voice(self, voice_id):
         pass
 
+    def voice_style(self, voice_id):
+        # deterministic non-zero tensor: enough for a blend command issued
+        # against the replay dashboard to run the real pipeline end to end
+        import numpy as np
+        return np.ones((510, 1, 256), dtype=np.float32)
+
     def synth(self, text, voice, speed):
         import numpy as np
         time.sleep(SYNTH_MS / 1000)
