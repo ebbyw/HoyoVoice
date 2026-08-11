@@ -6,6 +6,20 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Fixed
+
+- **Standalone `Yae` no longer reads "Yee".** The table keyed the respelling
+  on the full `Yae Miko`, but dialogue says "Yae" and "Miss Yae" more often
+  than the full name, and those read `jˈi` on both engines. The entry is now
+  keyed on `Yae` alone — word-bounded substitution covers the full name too,
+  and `Miko` by itself already reads right (`mˈikO` / `mˈiːkoʊ`), so its half
+  of the old entry is dropped. The requested literal `Ya-ey` was measured and
+  rejected: a chunk-final `ey` is /aɪ/ on both engines — "ya-EYE" — the
+  mirror of the header's `eh`-reads-/eɪ/ trap; `Yah-eh` (`jˌɑˈA` /
+  `jˈɑːˈeɪ`, "yah-ay") is the spelling that lands the sound. Run
+  `python tools/pronounce_names.py --write` on **each** machine —
+  `voices.json` is gitignored, and a pull never updates pronunciations.
+
 ### Added
 
 - **`Diluc`** → `Dee-luke`. Both engines apply English short vowels end to
