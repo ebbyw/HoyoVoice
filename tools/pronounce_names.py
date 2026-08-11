@@ -211,6 +211,18 @@ TERMS = {
     # wˈɑːjˈoʊbz on both.
     "Wayob": "Wah-yohb",
     "Wayobs": "Wah-yohbs",
+    # kwəkjusˈɔɹəs / kwəkjuːsˈɔːɹəs, "kwuh-KYOO-sore-us" — the qu read as
+    # /kw/ and the cu as /kju/, where the bird is "koo-koo". Unhyphenated on
+    # purpose, like "Asha": "Koo-koo-soar-us" makes four stressed chunks and
+    # ends "-USS" (kˈukˈusˈɔɹˌʌs), where "Koocoosaurus" keeps the natural
+    # -saurus stress and schwa on both engines: kˌukusˈɔɹəs /
+    # kˌuːkuːsˈɔːɹəs, "koo-koo-SORE-us". The species name on screen is
+    # usually the short "Qucusaur", wrong the same way (kwəkjˈusɔɹ), and
+    # substitution is word-bounded — every form needs its own entry.
+    "Qucusaurus": "Koocoosaurus",
+    "Qucusauruses": "Koocoosauruses",
+    "Qucusaur": "Koocoosaur",
+    "Qucusaurs": "Koocoosaurs",
     # sˌɛɹənˈIɾiə, "seren-EYE-tee-uh" — the "tea" read as its own two vowels
     # behind an /aɪ/. The word is a pun on "serenity" and is meant to be
     # HEARD as it: səɹˈɛnəɾi. Respelled to the ordinary word, the same move
