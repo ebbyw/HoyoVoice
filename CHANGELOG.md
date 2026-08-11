@@ -39,6 +39,25 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **Voice blending, on a new Voice packs page.** A Kokoro voice is a style
+  tensor in a continuous embedding space, so a weighted average of several
+  is another plausible speaker — the new **Blend voices** control does
+  exactly that arithmetic (`tools/voicepack.py blend()`) and pushes the
+  result through the same install path as an imported pack: verified by
+  synthesizing a real line, auditioned immediately, rolled back on
+  failure. Weights are relative and normalized before mixing (3/1 ≡
+  75%/25%) because an unnormalized sum above 1 audibly overdrives the
+  prosody and below 1 flattens it. The recipe is recorded as the voice's
+  source — in the pack file's metadata and in `voices.json` — and shown as
+  the pill's hover text, so a good mix can be reproduced. Blends of blends
+  work. Style tensors come from a new `Tts.voice_style()` on both backends
+  (macOS reads the HF snapshot's `voices/*.safetensors`, Windows pulls the
+  voice out of `voices-v1.0.bin`), verified end to end on macOS: a
+  0.75×af_bella + 0.25×jf_alpha blend synthesizes 2.4 s of audible audio.
+  **Add voice file** moved to the same page (linked from the dashboard as
+  **Voice packs — add & blend**) — neither importing nor blending is a
+  mid-session activity, and the main page keeps only the live controls.
+
 - **All ~54 of the model's voices are in the voice menu**, not just the 27
   English ones. The other 26 — Spanish, French, Hindi, Italian, Japanese,
   Portuguese and Mandarin speakers — were always in both runtimes'

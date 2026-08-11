@@ -239,6 +239,34 @@ def write_safetensors(path, arr, meta=None):
     tmp.replace(path)                           # never leave a half file behind
 
 
+# --- blending --------------------------------------------------------------
+
+def blend(arrays, weights):
+    """Weighted average of style tensors → one new voice.
+
+    Style vectors live in a continuous embedding space where a convex
+    combination is another plausible speaker, so blending is exactly this
+    one line of arithmetic. Weights are normalized to sum to 1 first: a sum
+    above 1 inflates the vectors' magnitude (overdriven, distorted
+    prosody), below 1 deflates it (flat, mumbly) — normalizing lets the
+    user type weights in any scale, 3/1 meaning the same as 0.75/0.25.
+
+    Returns (blended_tensor, normalized_weights).
+    """
+    if len(arrays) < 2:
+        raise VoiceError("a blend needs at least two voices")
+    if len(arrays) != len(weights):
+        raise VoiceError("each blended voice needs a weight")
+    w = np.asarray(weights, dtype=np.float64)
+    if not np.isfinite(w).all() or (w <= 0).any():
+        raise VoiceError("blend weights must be positive numbers")
+    w = w / w.sum()
+    out = np.zeros(SHAPE, dtype=np.float64)
+    for arr, wi in zip(arrays, w):
+        out += wi * normalize(arr).astype(np.float64)
+    return normalize(out.astype(np.float32)), [float(x) for x in w]
+
+
 # --- naming ----------------------------------------------------------------
 
 _SLUG = re.compile(r"[^a-z0-9]+")
@@ -265,12 +293,15 @@ def make_id(name, taken=()):
     return candidate
 
 
-def install(src, dest_dir, name=None, key=None, taken=()):
+def install(src, dest_dir, name=None, key=None, taken=(), source=None):
     """Verify a voice file and write it into dest_dir as <id>.safetensors.
 
     Returns (voice_id, path). Raises VoiceError with a user-facing reason.
-    The caller still has to prove the voice actually synthesizes — that
-    needs the engine, and is the half of verification this module can't do.
+    `source` overrides the provenance recorded in the file's metadata —
+    a blend passes its recipe here, where the temp filename would say
+    nothing. The caller still has to prove the voice actually synthesizes —
+    that needs the engine, and is the half of verification this module
+    can't do.
     """
     src = Path(src)
     arr = normalize(read(src, key))
@@ -278,5 +309,5 @@ def install(src, dest_dir, name=None, key=None, taken=()):
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"{voice_id}.safetensors"
-    write_safetensors(dest, arr, {"source": src.name})
+    write_safetensors(dest, arr, {"source": source or src.name})
     return voice_id, dest
