@@ -6,6 +6,21 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **`Qucusaurus` (and `Qucusaur`, both plurals) → "koo-koo-SORE-us".** Both
+  engines read the qu as /kw/ and the cu as /kju/ — `kwəkjusˈɔɹəs`,
+  "kwuh-KYOO-sore-us" — where the bird is "koo-koo". Respelled unhyphenated
+  (`Koocoosaurus`), the same move as `Asha`: the chunked
+  `Koo-koo-soar-us` makes four stressed syllables ending "-USS", where the
+  single word keeps the natural -saurus stress and schwa on both engines
+  (`kˌukusˈɔɹəs` / `kˌuːkuːsˈɔːɹəs`). The short species form `Qucusaur` and
+  both plurals are wrong the same way and substitution is word-bounded, so
+  all four get entries. Capitalised terms, so `--custom-words` pins them in
+  the OCR vocabulary. Run `python tools/pronounce_names.py --write` on
+  **each** machine — `voices.json` is gitignored, and a pull never updates
+  pronunciations.
+
 ### Fixed
 
 - **Standalone `Yae` no longer reads "Yee".** The table keyed the respelling
