@@ -161,6 +161,29 @@ class Tts:
     def forget_voice(self, voice_id):
         self.custom.pop(voice_id, None)
 
+    def voice_style(self, voice_id):
+        """The style tensor behind a voice: a registered pack's file, or the
+        packaged model's own voices/<id>.safetensors in the HF cache (the
+        same file mlx-audio loads when generate() gets the id)."""
+        try:
+            import voicepack
+        except ImportError:      # imported outside live.py, which adds tools/
+            import sys
+            sys.path.insert(
+                0, str(Path(__file__).resolve().parent.parent / "tools"))
+            import voicepack
+        path = self.custom.get(voice_id)
+        if path is None:
+            from huggingface_hub import hf_hub_download
+            try:                 # the model is already downloaded; stay offline
+                path = hf_hub_download("prince-canuma/Kokoro-82M",
+                                       f"voices/{voice_id}.safetensors",
+                                       local_files_only=True)
+            except Exception:
+                path = hf_hub_download("prince-canuma/Kokoro-82M",
+                                       f"voices/{voice_id}.safetensors")
+        return voicepack.normalize(voicepack.read(path))
+
     def synth(self, text, voice, speed):
         voice = self.custom.get(voice, voice)
         segs = [self.np.array(r.audio) for r in

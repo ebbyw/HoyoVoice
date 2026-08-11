@@ -4,6 +4,7 @@ Log (with voice used + screenshot hover-previews), casting with instant
 re-read and per-character mute, pause/resume, test speech, analytics.
 """
 import logging
+import math
 import os
 import platform
 import re
@@ -50,11 +51,10 @@ VOICE_CATALOG = [
     "zm_yunjian", "zm_yunxi", "zm_yunxia", "zm_yunyang",
 ]  # af_nicole omitted: broken in the packaged model
 
-PAGE = """<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HoyoVoice</title><style>
+STYLE = """
 body{font:14px -apple-system,sans-serif;background:#14151a;color:#e8e8ec;margin:0;padding:16px}
 h1{font-size:18px;margin:0 0 12px}h2{font-size:14px;color:#9aa;margin:18px 0 6px}
+h1 a{color:#8ab4f8;font-size:13px;font-weight:normal;text-decoration:none;margin-left:8px}
 table{border-collapse:collapse;width:100%}td,th{padding:4px 8px;text-align:left;border-bottom:1px solid #26272e;vertical-align:top}
 .act-spoken{color:#7ec97e}.act-skip{color:#888}.act-yield{color:#d9a441}.act-always{color:#888}
 .act-choice{color:#8ab4f8}
@@ -73,7 +73,11 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
 .shot{position:relative;text-decoration:none}
 .shot img{display:none;position:absolute;right:0;bottom:22px;width:340px;border:1px solid #444;border-radius:6px;z-index:10}
 .shot:hover img{display:block}
-</style></head><body>
+"""
+
+PAGE = """<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoyoVoice</title><style>__STYLE__</style></head><body>
 <h1>HoyoVoice <span class="muted" style="font-size:12px;font-weight:normal">v__VERSION__</span>
 <button id="observeBtn" onclick="toggleObserve()">Pause</button>
 <button id="recordBtn" onclick="toggleRecord()">⏺ Record</button></h1>
@@ -99,15 +103,7 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
       <button onclick="say()">Speak</button>
     </div>
     <div style="margin-top:8px">
-      <span class="muted">Add voice file</span>
-      <input type="file" id="voiceFile" accept=".pt,.pth,.safetensors,.npy,.npz,.bin"
-             style="max-width:190px" title="a Kokoro voice pack: .pt, .safetensors, .npy, .npz or .bin">
-      <input id="voiceName" placeholder="name (optional)" size="12" autocomplete="off">
-      <input id="voiceKey" placeholder="voice in pack" size="10" autocomplete="off"
-             title="only for a file holding several voices — the name of the one you want">
-      <button onclick="addVoice()">Add &amp; verify</button>
-      <span id="voiceMsg" class="muted"></span>
-      <div id="customVoices" class="muted" style="margin-top:4px"></div>
+      <a href="/voices" style="color:#8ab4f8" title="import Kokoro voice packs or blend the voices you have into new ones">Voice packs — add &amp; blend →</a>
     </div>
   </div>
   <div>
@@ -137,7 +133,7 @@ button{cursor:pointer}button:hover{border-color:#7ec97e}
 
 <script>
 let hidden=false, observing=true, recOn=false, lastCastFp='';
-let lastVoicesFp='', lastVoiceMsg='';
+let lastVoicesFp='';
 function toggleRecord(){post('/api/record',{on:!recOn});}
 function setRecDir(){post('/api/recdir',{dir:document.getElementById('recDir').value});}
 function setGame(){post('/api/game',{game:document.getElementById('gameSel').value});}
@@ -182,22 +178,6 @@ function addChar(){const n=document.getElementById('newChar').value.trim();
   document.getElementById('newChar').value='';
   lastCastFp='';}
 function replay(id){post('/api/replay',{id:id});}
-function addVoice(){
-  const f=document.getElementById('voiceFile');
-  const fd=new FormData();
-  if(f.files.length) fd.append('file',f.files[0]);
-  else{const p=prompt('Path to a voice-pack file on this machine:'); if(!p) return; fd.append('path',p);}
-  fd.append('name',document.getElementById('voiceName').value.trim());
-  fd.append('key',document.getElementById('voiceKey').value.trim());
-  const msg=document.getElementById('voiceMsg');
-  msg.textContent='uploading…'; msg.className='muted';
-  fetch('/api/addvoice',{method:'POST',body:fd})
-    .then(r=>{if(!r.ok) throw new Error(r.status===413?'that file is too large':'upload failed');
-              f.value='';})
-    .catch(e=>{msg.textContent=e.message; msg.className='paused';});
-}
-function delVoice(v){if(confirm('Remove '+v+'? Characters cast to it are re-cast to a built-in voice.'))
-  post('/api/delvoice',{voice:v});}
 function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML;}
 document.addEventListener('change',e=>{
   const t=e.target;
@@ -271,15 +251,6 @@ async function tick(){
       if(!el.options.length||voicesFp!==lastVoicesFp) el.innerHTML=opts(el.value||'af_heart');
     }
     if(voicesFp!==lastVoicesFp){lastVoicesFp=voicesFp; lastCastFp='';}
-    const vi=s.voice_import||{};
-    const vmsg=document.getElementById('voiceMsg');
-    if(vi.msg!==lastVoiceMsg){lastVoiceMsg=vi.msg;
-      vmsg.textContent=vi.msg||'';
-      vmsg.className=vi.state==='error'?'paused':(vi.state==='ok'?'live':'muted');}
-    document.getElementById('customVoices').innerHTML=s.custom_voices.length
-      ?'installed: '+s.custom_voices.map(v=>'<span class="pill">'+esc(v)+
-        ' <a href="#" onclick="delVoice(\\''+esc(v)+'\\');return false" title="remove">✕</a></span>').join('')
-      :'';
     // log refreshes every poll; held while a screenshot preview is open
     // or while the user is selecting text to copy
     const sel=window.getSelection();
@@ -297,7 +268,125 @@ async function tick(){
 }
 document.getElementById('sayText').value='';
 tick();
-</script></body></html>"""
+</script></body></html>""".replace("__STYLE__", STYLE)
+
+VOICES_PAGE = """<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HoyoVoice — voice packs</title><style>__STYLE__</style></head><body>
+<h1>Voice packs <span class="muted" style="font-size:12px;font-weight:normal">v__VERSION__</span>
+<a href="/">← dashboard</a></h1>
+<div style="max-width:680px">
+<div id="voiceMsg" class="muted" style="min-height:18px"></div>
+
+<h2>Add voice file</h2>
+<div>
+  <input type="file" id="voiceFile" accept=".pt,.pth,.safetensors,.npy,.npz,.bin"
+         style="max-width:220px" title="a Kokoro voice pack: .pt, .safetensors, .npy, .npz or .bin">
+  <input id="voiceName" placeholder="name (optional)" size="12" autocomplete="off">
+  <input id="voiceKey" placeholder="voice in pack" size="10" autocomplete="off"
+         title="only for a file holding several voices — the name of the one you want">
+  <button onclick="addVoice()">Add &amp; verify</button>
+</div>
+<div class="muted" style="margin-top:4px">a Kokoro voice pack: .pt, .safetensors, .npy, .npz or .bin —
+verified by actually synthesizing with it, then auditioned out loud. Leave the picker empty to type a
+path on the machine running HoyoVoice instead.</div>
+
+<h2>Blend voices</h2>
+<div class="muted" style="margin-bottom:6px">a weighted mix of any voices in the menu, saved as a new
+voice. Weights are relative and get normalized — 3 and 1 mean 75% and 25%.</div>
+<div id="blendRows"></div>
+<div style="margin-top:6px">
+  <button onclick="addRow()">+ voice</button>
+  <input id="blendName" placeholder="name (optional)" size="12" autocomplete="off">
+  <button onclick="blend()">Blend &amp; verify</button>
+</div>
+
+<h2>Installed <span class="muted">(hover one for its source)</span></h2>
+<div id="customVoices" class="muted">none yet</div>
+
+<h2>Test a voice</h2>
+<div>
+  <input id="sayText" placeholder="type any line to hear it spoken…" size="28" autocomplete="off">
+  <select id="sayVoice"></select>
+  <button onclick="say()">Speak</button>
+</div>
+</div>
+<script>
+let voices=[], lastVoicesFp='', lastVoiceMsg=null;
+function post(url,body){return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});}
+function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML;}
+const vname=x=>{const i=x.indexOf('_');
+  return x.charAt(i+1).toUpperCase()+x.slice(i+2)+' ('+x.slice(0,i).toUpperCase()+')';};
+const opts=v=>voices.map(x=>'<option value="'+x+'"'+(x===v?' selected':'')+'>'+vname(x)+'</option>').join('');
+function fillSelect(el){
+  if(!voices.length||document.activeElement===el) return;
+  if(!el.options.length||el.dataset.fp!==lastVoicesFp){el.innerHTML=opts(el.value||'af_heart');el.dataset.fp=lastVoicesFp;}}
+function addRow(){
+  const d=document.createElement('div');d.className='part';d.style.marginTop='4px';
+  d.innerHTML='<select></select> <span class="muted">weight</span> '+
+    '<input type="number" step="0.05" min="0.01" value="1" style="width:70px"> '+
+    '<button data-role="rmrow" title="remove this voice from the mix">✕</button>';
+  document.getElementById('blendRows').appendChild(d);
+  fillSelect(d.querySelector('select'));
+}
+function blend(){
+  const parts=[...document.querySelectorAll('#blendRows .part')].map(d=>({
+    voice:d.querySelector('select').value, weight:parseFloat(d.querySelector('input').value)}));
+  const msg=document.getElementById('voiceMsg');
+  if(parts.some(p=>!p.voice||!(p.weight>0))){
+    msg.textContent='every row needs a voice and a positive weight'; msg.className='paused'; return;}
+  msg.textContent='blending…'; msg.className='muted';
+  post('/api/blendvoice',{name:document.getElementById('blendName').value.trim(),parts:parts})
+    .then(async r=>{if(!r.ok){const j=await r.json().catch(()=>({}));
+      throw new Error(j.error||'blend failed');}})
+    .catch(e=>{msg.textContent=e.message; msg.className='paused';});
+}
+function addVoice(){
+  const f=document.getElementById('voiceFile');
+  const fd=new FormData();
+  if(f.files.length) fd.append('file',f.files[0]);
+  else{const p=prompt('Path to a voice-pack file on this machine:'); if(!p) return; fd.append('path',p);}
+  fd.append('name',document.getElementById('voiceName').value.trim());
+  fd.append('key',document.getElementById('voiceKey').value.trim());
+  const msg=document.getElementById('voiceMsg');
+  msg.textContent='uploading…'; msg.className='muted';
+  fetch('/api/addvoice',{method:'POST',body:fd})
+    .then(r=>{if(!r.ok) throw new Error(r.status===413?'that file is too large':'upload failed');
+              f.value='';})
+    .catch(e=>{msg.textContent=e.message; msg.className='paused';});
+}
+function say(){post('/api/say',{text:document.getElementById('sayText').value,
+  voice:document.getElementById('sayVoice').value});}
+document.addEventListener('click',e=>{
+  const t=e.target;
+  if(t.dataset.role==='rmrow'&&document.querySelectorAll('#blendRows .part').length>2)
+    t.closest('.part').remove();
+  if(t.dataset.role==='delvoice'){e.preventDefault();
+    const v=decodeURIComponent(t.dataset.v);
+    if(confirm('Remove '+v+'? Characters cast to it are re-cast to a built-in voice.'))
+      post('/api/delvoice',{voice:v});}
+});
+async function tick(){
+  try{
+    const s=await (await fetch('/api/state')).json();
+    voices=s.voices; lastVoicesFp=voices.join(',');
+    for(const el of document.querySelectorAll('#blendRows select, #sayVoice')) fillSelect(el);
+    const vi=s.voice_import||{};
+    if(vi.msg!==lastVoiceMsg){lastVoiceMsg=vi.msg;
+      const m=document.getElementById('voiceMsg');
+      m.textContent=vi.msg||'';
+      m.className=vi.state==='error'?'paused':(vi.state==='ok'?'live':'muted');}
+    const cs=s.custom_sources||{};
+    document.getElementById('customVoices').innerHTML=s.custom_voices.length
+      ? s.custom_voices.map(v=>'<span class="pill" title="'+esc(cs[v]||'')+'">'+esc(v)+
+        ' <a href="#" data-role="delvoice" data-v="'+encodeURIComponent(v)+'" title="remove">✕</a></span>').join('')
+      : 'none yet';
+  }catch(err){}
+  setTimeout(tick,1000);
+}
+addRow(); addRow();
+tick();
+</script></body></html>""".replace("__STYLE__", STYLE)
 
 
 def start_webui(shared, port=DASHBOARD_PORT):
@@ -314,6 +403,10 @@ def start_webui(shared, port=DASHBOARD_PORT):
     @app.get("/")
     def index():
         return PAGE.replace("__VERSION__", VERSION)
+
+    @app.get("/voices")
+    def voices_page():
+        return VOICES_PAGE.replace("__VERSION__", VERSION)
 
     @app.get("/shots/<path:name>")
     def shot(name):
@@ -419,6 +512,9 @@ def start_webui(shared, port=DASHBOARD_PORT):
             "unknown": sorted(shared["unknown"]),
             "voices": catalog(),
             "custom_voices": sorted(shared["voices"].get("custom_voices", {})),
+            "custom_sources": {
+                k: v.get("source", "") for k, v in
+                shared["voices"].get("custom_voices", {}).items()},
             "voice_import": dict(shared["voice_import"]),
             "metrics": shared["metrics_fn"](),
             "observing": shared["observing"]["on"],
@@ -521,6 +617,36 @@ def start_webui(shared, port=DASHBOARD_PORT):
             state="busy", voice=None,
             msg=f"verifying {Path(src).name}…")
         shared["commands"].put(("addvoice", str(src), name, key))
+        return jsonify(ok=True)
+
+    @app.post("/api/blendvoice")
+    def blendvoice():
+        """Mix voices already in the menu into a new one.
+
+        Only validates and queues: the style tensors and the engine that
+        proves the result synthesizes both live on the orchestrator
+        thread. The result comes back through /api/state, same as an
+        imported pack.
+        """
+        d = request.get_json() or {}
+        try:
+            parts = [(str(p["voice"]), float(p["weight"]))
+                     for p in (d.get("parts") or [])]
+        except (TypeError, KeyError, ValueError):
+            return jsonify(ok=False, error="malformed blend request"), 400
+        if not 2 <= len(parts) <= 8:
+            return jsonify(ok=False, error="a blend needs 2–8 voices"), 400
+        known = catalog()
+        for v, w in parts:
+            if v not in known:
+                return jsonify(ok=False, error=f"unknown voice {v!r}"), 400
+            if not math.isfinite(w) or w <= 0:
+                return jsonify(ok=False,
+                               error="weights must be positive numbers"), 400
+        name = (d.get("name") or "").strip() or None
+        shared["voice_import"].update(
+            state="busy", voice=None, msg="blending…")
+        shared["commands"].put(("blendvoice", name, parts))
         return jsonify(ok=True)
 
     @app.post("/api/delvoice")
