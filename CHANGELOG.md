@@ -6,6 +6,14 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **`Diluc`** → `Dee-luke`. Both engines apply English short vowels end to
+  end — `dˈɪlʌk`, "DILL-uck" — where the name is "dee-LUKE". Respelled, both
+  vowels land on both engines: misaki `dˈilˈuk`, espeak `dˈiːlˈuːk`. Run
+  `python tools/pronounce_names.py --write` on **each** machine —
+  `voices.json` is gitignored, and a pull never updates pronunciations.
+
 ## [0.10.4] - 2026-08-09
 
 ### Added
