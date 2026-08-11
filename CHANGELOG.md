@@ -24,6 +24,18 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **All ~54 of the model's voices are in the voice menu**, not just the 27
+  English ones. The other 26 — Spanish, French, Hindi, Italian, Japanese,
+  Portuguese and Mandarin speakers — were always in both runtimes'
+  packaged voice data (the macOS snapshot's `voices/` directory, Windows's
+  `voices-v1.0.bin`); only the dashboard's `VOICE_CATALOG` hid them. Both
+  backends pin the phonemizer to American English (`lang_code="a"` on
+  macOS, `lang="en-us"` on Windows) regardless of voice prefix, so these
+  speak English text as differently-accented speakers — a timbre choice,
+  not a language switch, and worth auditioning before casting since their
+  English ranges from pleasant accent to barely intelligible. `af_nicole`
+  stays out: broken in the packaged model.
+
 - **`Diluc`** → `Dee-luke`. Both engines apply English short vowels end to
   end — `dˈɪlʌk`, "DILL-uck" — where the name is "dee-LUKE". Respelled, both
   vowels land on both engines: misaki `dˈilˈuk`, espeak `dˈiːlˈuːk`. Run
