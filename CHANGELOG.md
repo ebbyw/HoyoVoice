@@ -16,7 +16,9 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   of the old entry is dropped. The requested literal `Ya-ey` was measured and
   rejected: a chunk-final `ey` is /aɪ/ on both engines — "ya-EYE" — the
   mirror of the header's `eh`-reads-/eɪ/ trap; `Yah-eh` (`jˌɑˈA` /
-  `jˈɑːˈeɪ`, "yah-ay") is the spelling that lands the sound. Run
+  `jˈɑːˈeɪ`, "yah-ay") is the spelling that lands the sound. The old
+  full-name key is retired, so `--write` also prunes it from `voices.json`
+  instead of leaving dead config. Run
   `python tools/pronounce_names.py --write` on **each** machine —
   `voices.json` is gitignored, and a pull never updates pronunciations.
 
