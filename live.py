@@ -1153,7 +1153,7 @@ def register_custom_voices(speech):
         VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
 
 
-def install_voice(speech, src, name=None, key=None):
+def install_voice(speech, src, name=None, key=None, source=None):
     """Verify a voice-pack file, install it, and prove it makes sound.
 
     Two halves of verification, and the second is the one that matters: the
@@ -1165,7 +1165,7 @@ def install_voice(speech, src, name=None, key=None):
     is rolled back, leaving no half-installed voice behind.
     """
     voice_id, dest = voicepack.install(
-        src, CUSTOM_VOICES, name=name, key=key,
+        src, CUSTOM_VOICES, name=name, key=key, source=source,
         taken=set(VOICE_CATALOG) | set(VOICES.get("custom_voices", {})))
     try:
         speech.tts.register_voice(voice_id, dest)
@@ -1185,7 +1185,8 @@ def install_voice(speech, src, name=None, key=None):
         raise
     VOICES.setdefault("custom_voices", {})[voice_id] = {
         # posix separators: voices.json is portable between the two platforms
-        "file": dest.relative_to(STATE).as_posix(), "source": Path(src).name}
+        "file": dest.relative_to(STATE).as_posix(),
+        "source": source or Path(src).name}
     VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
     print(f"[voice] installed {voice_id} from {Path(src).name}", flush=True)
     return voice_id, audio
@@ -1684,6 +1685,38 @@ def handle_commands(speech, recent_lines):
             finally:
                 if src.parent == UPLOADS:             # browser upload: temp
                     src.unlink(missing_ok=True)
+        elif cmd[0] == "blendvoice":
+            _, name, parts = cmd
+            tmp = None
+            try:
+                styles = [speech.tts.voice_style(v) for v, _ in parts]
+                arr, weights = voicepack.blend(styles, [w for _, w in parts])
+                recipe = " + ".join(f"{w:.2f}*{v}" for (v, _), w
+                                    in zip(parts, weights))
+                # write the mix as an ordinary pack file so it goes through
+                # the same install path as an imported one: same id rules,
+                # same synthesize-and-hear-it verification, same rollback
+                UPLOADS.mkdir(parents=True, exist_ok=True)
+                tmp = UPLOADS / "blend.safetensors"
+                voicepack.write_safetensors(tmp, arr, {"source": recipe})
+                voice_id, audio = install_voice(
+                    speech, tmp, name=name or "blend", source=recipe)
+                speech.play(audio)
+                add_event(f"blended voice {voice_id} = {recipe}", "spoken",
+                          None, SMOKE_LINE, voice_id)
+                voice_import.update(state="ok", voice=voice_id,
+                                    msg=f"added {voice_id} ({recipe}) — "
+                                        "auditioning it now")
+            except voicepack.VoiceError as exc:
+                voice_import.update(state="error", voice=None, msg=str(exc))
+                print(f"[voice] blend rejected: {exc}", flush=True)
+            except Exception as exc:                  # engine/IO failure
+                voice_import.update(state="error", voice=None,
+                                    msg=f"{type(exc).__name__}: {exc}")
+                print(f"[voice] blend failed: {exc}", flush=True)
+            finally:
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
         elif cmd[0] == "delvoice":
             voice_id = cmd[1]
             pack = VOICES.get("custom_voices", {}).pop(voice_id, None)

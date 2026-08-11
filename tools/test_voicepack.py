@@ -187,6 +187,40 @@ def main():
     if marker.exists():
         bad += _fail("hostile .pt", "IT RAN THE PAYLOAD")
 
+    # --- blending: a convex combination, whatever scale the weights use ---
+    b = a_voice(7)
+    mix, w = voicepack.blend([arr, b], [1, 1])
+    if not np.allclose(mix, (arr + b) / 2, atol=1e-6):
+        bad += _fail("blend 1/1", "not the mean of the two voices")
+    if w != [0.5, 0.5]:
+        bad += _fail("blend 1/1", f"weights not normalized: {w}")
+    mix3, w3 = voicepack.blend([arr, b], [3, 1])
+    if not np.allclose(mix3, 0.75 * arr + 0.25 * b, atol=1e-6):
+        bad += _fail("blend 3/1", "3/1 should mean 75%/25%")
+    same, _ = voicepack.blend([arr, b], [0.75, 0.25])
+    if not np.allclose(mix3, same, atol=1e-6):
+        bad += _fail("blend scale", "3/1 and 0.75/0.25 should be identical")
+    # a (510, 256) input is accepted, like everywhere else in this module
+    flat_mix, _ = voicepack.blend([arr.reshape(SHAPE[0], SHAPE[2]), b], [1, 1])
+    if not np.allclose(flat_mix, mix, atol=1e-6):
+        bad += _fail("blend flat input", "(510, 256) input changed the result")
+    bad += check("blend of one", lambda: voicepack.blend([arr], [1]),
+                 want_error="at least two")
+    bad += check("blend weight count", lambda: voicepack.blend([arr, b], [1]),
+                 want_error="needs a weight")
+    bad += check("blend zero weight", lambda: voicepack.blend([arr, b], [1, 0]),
+                 want_error="positive")
+    bad += check("blend negative weight",
+                 lambda: voicepack.blend([arr, b], [1, -2]),
+                 want_error="positive")
+    bad += check("blend NaN weight",
+                 lambda: voicepack.blend([arr, b], [1, float("nan")]),
+                 want_error="positive")
+    # opposite voices cancel to silence; the all-zeros check must catch it
+    bad += check("blend that cancels",
+                 lambda: voicepack.blend([arr, -arr], [1, 1]),
+                 want_error="all zeros")
+
     # --- ids ---
     cases = [("af_bella", (), "af_bella"),        # already Kokoro-shaped
              ("My Voice!", (), "cu_my_voice"),    # spaces and punctuation
@@ -210,6 +244,15 @@ def main():
         "<Q", path.read_bytes()[:8])[0]])
     if meta.get("__metadata__", {}).get("source") != "af_test.pt":
         bad += _fail("install", "lost the source filename")
+
+    # a blend installs through the same path, carrying its recipe as the
+    # source instead of the meaningless temp filename
+    recipe = "0.75*af_one + 0.25*am_two"
+    _, bpath = voicepack.install(pt, dest, name="mix", source=recipe)
+    bmeta = json.loads(bpath.read_bytes()[8:8 + struct.unpack(
+        "<Q", bpath.read_bytes()[:8])[0]])
+    if bmeta.get("__metadata__", {}).get("source") != recipe:
+        bad += _fail("install source override", "lost the blend recipe")
 
     print("voicepack: " + ("all checks passed" if not bad else f"{bad} FAILED"))
     return bad

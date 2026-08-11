@@ -56,6 +56,10 @@ Behavioral contracts:
         # (510, 1, 256) float32 .safetensors written by tools/voicepack.py);
         # after this, synth() must accept voice_id like any built-in voice
     Tts.forget_voice(voice_id)           # undo a registration
+    Tts.voice_style(voice_id) -> np.float32 (510, 1, 256)
+        # the style tensor behind any voice synth() accepts — packaged or
+        # registered — read from wherever this platform keeps it. This is
+        # what voice blending mixes; it never touches the engine itself.
 
     Player.play(wav_path, audio, samplerate)   # audio = float32 array;
         # backends use whichever of path/array is cheaper for them

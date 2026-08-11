@@ -476,6 +476,23 @@ class Tts:
     def forget_voice(self, voice_id):
         self.custom.pop(voice_id, None)
 
+    def voice_style(self, voice_id):
+        """The style tensor behind a voice: a registered pack's array, or
+        the packaged voice pulled straight out of voices-v1.0.bin (an npz
+        voicepack.read() already knows how to open)."""
+        arr = self.custom.get(voice_id)
+        if arr is not None:
+            return arr.copy()
+        try:
+            import voicepack
+        except ImportError:      # imported outside live.py, which adds tools/
+            sys.path.insert(
+                0, str(Path(__file__).resolve().parent.parent / "tools"))
+            import voicepack
+        models = Path(__file__).resolve().parent.parent / "models"
+        return voicepack.normalize(
+            voicepack.read(models / self.VOICES, key=voice_id))
+
     def synth(self, text, voice, speed):
         voice = self.custom.get(voice, voice)
         samples, sr = self.kokoro.create(text, voice=voice, speed=speed,
