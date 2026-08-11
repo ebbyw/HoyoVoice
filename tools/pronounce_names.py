@@ -97,7 +97,14 @@ FIXES = {
     "Sangonomiya Kokomi": "Sahn-go-no-mee-yah Ko-ko-mee",
     "Sayu": "Sah-yoo",
     "Shikanoin Heizou": "Shee-kah-no-een Hay-zoh",
-    "Yae Miko": "Yah-eh Mee-koh",
+    # keyed on the surname alone: dialogue says "Yae" and "Miss Yae" more
+    # often than the full name, and the old "Yae Miko" key left those reading
+    # jˈi, "Yee". Word-bounded substitution covers "Yae Miko" too, and "Miko"
+    # by itself already reads mˈikO / mˈiːkoʊ — no entry needed. The literal
+    # "Ya-ey" is NOT the respelling: a chunk-final "ey" is /aɪ/ on both
+    # engines ("ya-EYE"), the same trap as "eh" in the header, mirrored.
+    # "Yah-eh" is jˌɑˈA / jˈɑːˈeɪ — "yah-ay", both vowels land.
+    "Yae": "Yah-eh",
     "Yumemizuki Mizuki": "Yoo-meh-mee-zoo-kee Mee-zoo-kee",
     # --- Genshin: everywhere else ---
     "Chiori": "Chee-oh-ree",
