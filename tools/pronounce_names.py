@@ -103,6 +103,10 @@ FIXES = {
     "Chiori": "Chee-oh-ree",
     "Citlali": "Seet-lah-lee",
     "Dehya": "Deh-yah",
+    # both engines apply English short vowels end to end: dˈɪlʌk, "DILL-uck",
+    # where the name is "dee-LUKE". "Dee-luke" is dˈilˈuk / dˈiːlˈuːk on the
+    # two engines — both vowels land.
+    "Diluc": "Dee-luke",
     "Escoffier": "Ess-koff-yay",
     "Faruzan": "Fah-roo-zahn",
     "Freminet": "Frem-ee-nay",
