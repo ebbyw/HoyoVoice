@@ -22,6 +22,7 @@ _default = get_profile(DEFAULT)
 
 classify = _default.classify
 classify_chat = _default.classify_chat
+classify_comms = _default.classify_comms
 classify_infoscreen = _default.classify_infoscreen
 classify_loading = _default.classify_loading
 classify_lore_screen = _default.classify_lore_screen
