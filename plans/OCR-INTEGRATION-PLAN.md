@@ -101,6 +101,26 @@ The Genshin-Subtitles finding: they don't trust OCR output at all — they fuzzy
 
 Real constraints, hence experimental: datamined text cannot ship in the public repo (the language packs are fan-datamined; Genshin-Subtitles is Apache-2.0 but the *data* isn't theirs to license) — it must be a local-only optional asset like voices.json, seeded by the user; English TextMap is large, so the n-gram index needs a memory budget (their FNV-1a hashing approach is the reference); player-name interpolation (`{NICKNAME}` → the Trailblazer's nameplate) needs a template-aware matcher or those lines will never match exactly. Prototype offline first: run the matcher over replay transcripts and measure match rate + wrong-match rate before it goes anywhere near the live path. A wrong snap is worse than a fusion — it reads a *different* line confidently.
 
+**Direction settled 2026-08-12 (OCR-stack review):** this phase is the agreed
+next ceiling-raiser after 4b — it kills *all* residual OCR defects for matched
+lines regardless of font, engine, or platform, where any recognizer-side work
+only shrinks them. The "blocked on data" framing softens to "local-only
+seeding by design": the user seeds the TextMap locally exactly like
+voices.json, nothing ships in the repo, and the offline prototype
+(matcher over existing replay transcripts, measuring match rate and
+wrong-match rate) needs no live-path work at all. Also weighed and settled in
+the same review: acquiring the Genshin font to "help OCR read". Neither
+Apple Vision nor Windows.Media.Ocr is trainable, so the font buys nothing
+there; fine-tuning the RapidOCR rec model on synthetic renders in the game
+font is real but days of pipeline work, and the open Windows book-page bug
+(`hum`/`Ium` rows) smells like detector/frame, not glyph shape — diagnosis
+still waits on the Windows `captures/shots/*.json`. The font's cheap,
+worthwhile use is a synthetic ground-truth eval corpus (phase 6's "labeled
+corpus" without hand-labeling): render known lines in the real font at game
+sizes over captured backgrounds, keep the font local-only (miHoYo/HanYi
+license — never commit it). Fine-tune only if rec errors survive 4b + the
+book-page diagnosis + TextMap snapping.
+
 ## Phase 6 (backlog) — Florence-2 as offline arbiter
 
 Replay-harness-only: batch low-confidence lines from the regression corpus through Florence-2-base to auto-generate ground-truth labels, so Phases 1–5 get scored against labels instead of eyeballs. Never in the live path. Do whenever labeling by hand gets annoying.
@@ -113,7 +133,7 @@ Replay-harness-only: batch low-confidence lines from the regression corpus throu
 | 1 rec model | small | word fusions | fusion count ↓, 0 classify regressions | **shipped 0.7.3** — 333 → 144 fusions on 81 shots, zero regressions |
 | 2 change gate | medium | 154ms/frame burn, recording-load tearing | ≥60% OCR calls skipped on static dialogue | **shipped 0.7.3** — 23%, and the target was wrong (see Baseline) |
 | 3 confidence | small | stabilization latency/stalls | time-to-spoken ↓, no new false fires | **shipped 0.7.3** — ~0.12s, no lines lost |
-| 4 anchors/ROI | large | OCR speed, remaining Genshin screens, chrome heuristics | screens ship as data, detector cost ↓ | **4a shipped** (log-only, measured) — see [plans/ANCHORS.md](ANCHORS.md); 4b/4c pending its trust gates |
+| 4 anchors/ROI | large | OCR speed, remaining Genshin screens, chrome heuristics | screens ship as data, detector cost ↓ | **4a shipped** (log-only, measured); **4b implemented 2026-08-12** behind `settings.anchor_roi` (off by default) — replay decisions byte-identical on/off on this Mac; the Windows `ocr_ms` measurement is still owed before it defaults on. See [plans/ANCHORS.md](ANCHORS.md); 4c pending captures |
 | 5 TextMap | experiment | everything OCR, latency ceiling | match rate ≥90%, wrong-match ~0 on replay corpus | blocked on data |
 | 6 arbiter | backlog | corpus labeling | labeled corpus | not needed yet |
 

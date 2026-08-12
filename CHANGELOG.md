@@ -8,6 +8,31 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **Anchor ROI cropping (OCR plan phase 4b), off by default behind
+  `settings.anchor_roi`.** When the matched anchor chrome implies a screen
+  kind, OCR now reads only that kind's ROI — detector cost scales with
+  area, and the ROI is the bottom two-thirds of the frame (the union of
+  every band the profile needs: bands read off the profiles, HSR
+  `y ≤ 0.62`, Genshin `y ≤ 0.66`, both full-width; derivations in
+  plans/ANCHORS.md). The crop is written lossless (PNG — the frame is
+  already one JPEG generation old, and a second lossy pass softens
+  exactly the glyphs the crop exists to read) and every returned box is
+  remapped to full-frame coordinates at the OCR call boundary, so
+  classify and everything downstream never see crop space. The rules the
+  change gate paid for apply unchanged: no anchor match → full frame
+  (absence is weak evidence), and a bounded crop run
+  (`ANCHOR_MAX_CROP_RUN`, ~2s) forces a periodic full-frame read so a
+  wrong "crop here" can defer, never latch. Verified by replaying a
+  Genshin and an HSR recording with the setting off and on, against an
+  off-vs-off control pair: wall-clock replay flips a handful of marginal
+  VAD-gate lines between ANY two runs (the audio bed carries the
+  original session's TTS), and every on-vs-off difference site also
+  differed off-vs-off — no systematic change, details in
+  plans/ANCHORS.md. Off by default until the `ocr_ms` drop is measured
+  on the Windows box, which is where the win matters (~554ms/frame
+  RapidOCR there; expected ~35–40% off the detector). `roi_crops` on
+  the dashboard metrics shows the crop volume.
+
 - **`Snezhnaya` → "snezh-NAH-yuh" (and `Snezhnayan(s)` → "-yun(s)").** Both
   engines read the raw name as `snˈɛʒnAə`, "snezh-NAY-uh" — the zh survives
   but "naya" collapses to /neɪə/. `Snezh-nah-yuh` is `snˈɛʒnˈɑjˈʌ` /
@@ -21,34 +46,6 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   so `--custom-words` pins them in the OCR vocabulary. Run
   `python tools/pronounce_names.py --write` on **each** machine —
   `voices.json` is gitignored, and a pull never updates pronunciations.
-
-### Changed
-
-- **OCR stack review pass (four small fixes).** (1) The Windows RapidOCR
-  path re-ran the full OCR on the raw frame whenever the
-  background-flattened pass read nothing — a safety net for screens the
-  filter hurts, but textless frames (loading, fades, overworld at night)
-  arrive in long runs, and the net doubled per-frame cost exactly there.
-  It now runs on every 4th consecutive empty frame instead of all of
-  them: a filter-hurt screen is still seen within ~0.5s (under the
-  2-read stabilization it needs anyway), and the bound means the net can
-  never latch shut — the change gate's MAX_SKIP_RUN medicine. (2) The
-  native Windows engine reported `confidence: 1.0` because it exposes
-  none; live.py's confidence-aware stabilization read that as "the
-  recognizer vouches for this" and skipped the sentence-streaming
-  cushion read — the most trusted treatment, on the least accurate
-  engine. It now reports a neutral 0.90 (below CONF_TRUSTED, above
-  CONF_SHAKY) so no confidence rule fires on a made-up number. (3) The
-  mac daemon hands Vision the file URL directly instead of decoding
-  through NSImage/AppKit, and pins the recognizer revision so replay
-  results stay comparable across macOS updates — output verified
-  byte-identical on real capture shots. (4) Casting a voice from the
-  dashboard now rewrites the OCR lexicon and restarts the Vision daemon,
-  so a newly cast name helps recognition immediately instead of after
-  the next app restart (Windows skips the restart — neither engine there
-  reads the lexicon, and the model reload costs seconds).
-
-### Added
 
 - **Genshin comms messages are read (Snezhnaya 6.x, "Eye of Graeae").**
   The new update delivers lines over the top of open gameplay with the
@@ -101,6 +98,69 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   the OCR vocabulary. Run `python tools/pronounce_names.py --write` on
   **each** machine — `voices.json` is gitignored, and a pull never updates
   pronunciations.
+
+- **Voice blending, on a new Voice packs page.** A Kokoro voice is a style
+  tensor in a continuous embedding space, so a weighted average of several
+  is another plausible speaker — the new **Blend voices** control does
+  exactly that arithmetic (`tools/voicepack.py blend()`) and pushes the
+  result through the same install path as an imported pack: verified by
+  synthesizing a real line, auditioned immediately, rolled back on
+  failure. Weights are relative and normalized before mixing (3/1 ≡
+  75%/25%) because an unnormalized sum above 1 audibly overdrives the
+  prosody and below 1 flattens it. The recipe is recorded as the voice's
+  source — in the pack file's metadata and in `voices.json` — and shown as
+  the pill's hover text, so a good mix can be reproduced. Blends of blends
+  work. Style tensors come from a new `Tts.voice_style()` on both backends
+  (macOS reads the HF snapshot's `voices/*.safetensors`, Windows pulls the
+  voice out of `voices-v1.0.bin`), verified end to end on macOS: a
+  0.75×af_bella + 0.25×jf_alpha blend synthesizes 2.4 s of audible audio.
+  **Add voice file** moved to the same page (linked from the dashboard as
+  **Voice packs — add & blend**) — neither importing nor blending is a
+  mid-session activity, and the main page keeps only the live controls.
+
+- **All ~54 of the model's voices are in the voice menu**, not just the 27
+  English ones. The other 26 — Spanish, French, Hindi, Italian, Japanese,
+  Portuguese and Mandarin speakers — were always in both runtimes'
+  packaged voice data (the macOS snapshot's `voices/` directory, Windows's
+  `voices-v1.0.bin`); only the dashboard's `VOICE_CATALOG` hid them. Both
+  backends pin the phonemizer to American English (`lang_code="a"` on
+  macOS, `lang="en-us"` on Windows) regardless of voice prefix, so these
+  speak English text as differently-accented speakers — a timbre choice,
+  not a language switch, and worth auditioning before casting since their
+  English ranges from pleasant accent to barely intelligible. `af_nicole`
+  stays out: broken in the packaged model.
+
+- **`Diluc`** → `Dee-luke`. Both engines apply English short vowels end to
+  end — `dˈɪlʌk`, "DILL-uck" — where the name is "dee-LUKE". Respelled, both
+  vowels land on both engines: misaki `dˈilˈuk`, espeak `dˈiːlˈuːk`. Run
+  `python tools/pronounce_names.py --write` on **each** machine —
+  `voices.json` is gitignored, and a pull never updates pronunciations.
+
+### Changed
+
+- **OCR stack review pass (four small fixes).** (1) The Windows RapidOCR
+  path re-ran the full OCR on the raw frame whenever the
+  background-flattened pass read nothing — a safety net for screens the
+  filter hurts, but textless frames (loading, fades, overworld at night)
+  arrive in long runs, and the net doubled per-frame cost exactly there.
+  It now runs on every 4th consecutive empty frame instead of all of
+  them: a filter-hurt screen is still seen within ~0.5s (under the
+  2-read stabilization it needs anyway), and the bound means the net can
+  never latch shut — the change gate's MAX_SKIP_RUN medicine. (2) The
+  native Windows engine reported `confidence: 1.0` because it exposes
+  none; live.py's confidence-aware stabilization read that as "the
+  recognizer vouches for this" and skipped the sentence-streaming
+  cushion read — the most trusted treatment, on the least accurate
+  engine. It now reports a neutral 0.90 (below CONF_TRUSTED, above
+  CONF_SHAKY) so no confidence rule fires on a made-up number. (3) The
+  mac daemon hands Vision the file URL directly instead of decoding
+  through NSImage/AppKit, and pins the recognizer revision so replay
+  results stay comparable across macOS updates — output verified
+  byte-identical on real capture shots. (4) Casting a voice from the
+  dashboard now rewrites the OCR lexicon and restarts the Vision daemon,
+  so a newly cast name helps recognition immediately instead of after
+  the next app restart (Windows skips the restart — neither engine there
+  reads the lexicon, and the model reload costs seconds).
 
 ### Fixed
 
@@ -192,45 +252,6 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   `jˈɑːˈeɪ`, "yah-ay") is the spelling that lands the sound. The old
   full-name key is retired, so `--write` also prunes it from `voices.json`
   instead of leaving dead config. Run
-  `python tools/pronounce_names.py --write` on **each** machine —
-  `voices.json` is gitignored, and a pull never updates pronunciations.
-
-### Added
-
-- **Voice blending, on a new Voice packs page.** A Kokoro voice is a style
-  tensor in a continuous embedding space, so a weighted average of several
-  is another plausible speaker — the new **Blend voices** control does
-  exactly that arithmetic (`tools/voicepack.py blend()`) and pushes the
-  result through the same install path as an imported pack: verified by
-  synthesizing a real line, auditioned immediately, rolled back on
-  failure. Weights are relative and normalized before mixing (3/1 ≡
-  75%/25%) because an unnormalized sum above 1 audibly overdrives the
-  prosody and below 1 flattens it. The recipe is recorded as the voice's
-  source — in the pack file's metadata and in `voices.json` — and shown as
-  the pill's hover text, so a good mix can be reproduced. Blends of blends
-  work. Style tensors come from a new `Tts.voice_style()` on both backends
-  (macOS reads the HF snapshot's `voices/*.safetensors`, Windows pulls the
-  voice out of `voices-v1.0.bin`), verified end to end on macOS: a
-  0.75×af_bella + 0.25×jf_alpha blend synthesizes 2.4 s of audible audio.
-  **Add voice file** moved to the same page (linked from the dashboard as
-  **Voice packs — add & blend**) — neither importing nor blending is a
-  mid-session activity, and the main page keeps only the live controls.
-
-- **All ~54 of the model's voices are in the voice menu**, not just the 27
-  English ones. The other 26 — Spanish, French, Hindi, Italian, Japanese,
-  Portuguese and Mandarin speakers — were always in both runtimes'
-  packaged voice data (the macOS snapshot's `voices/` directory, Windows's
-  `voices-v1.0.bin`); only the dashboard's `VOICE_CATALOG` hid them. Both
-  backends pin the phonemizer to American English (`lang_code="a"` on
-  macOS, `lang="en-us"` on Windows) regardless of voice prefix, so these
-  speak English text as differently-accented speakers — a timbre choice,
-  not a language switch, and worth auditioning before casting since their
-  English ranges from pleasant accent to barely intelligible. `af_nicole`
-  stays out: broken in the packaged model.
-
-- **`Diluc`** → `Dee-luke`. Both engines apply English short vowels end to
-  end — `dˈɪlʌk`, "DILL-uck" — where the name is "dee-LUKE". Respelled, both
-  vowels land on both engines: misaki `dˈilˈuk`, espeak `dˈiːlˈuːk`. Run
   `python tools/pronounce_names.py --write` on **each** machine —
   `voices.json` is gitignored, and a pull never updates pronunciations.
 
