@@ -36,6 +36,7 @@ from profiles import (ProfileSelector, narration_self_certain,  # noqa: E402
 from change_gate import ChangeGate  # noqa: E402
 from anchors import AnchorPack, decode_half  # noqa: E402
 from casting_filter import canonical_quotes, junk_speaker  # noqa: E402
+from pronounce_names import NPC_GENDERS  # noqa: E402
 from vad import CHUNK, SileroVAD  # noqa: E402
 import voicepack  # noqa: E402
 from webui import VOICE_CATALOG, start_webui  # noqa: E402
@@ -1211,6 +1212,25 @@ def install_voice(speech, src, name=None, key=None, source=None):
     return voice_id, audio
 
 
+def guess_gender(speaker):
+    """Documented gender first; name shape only as a last resort.
+
+    settings.genders carries the playable roster's own gender record
+    (bodyType, written by tools/pronounce_names.py --write) and NPC_GENDERS
+    ships the named NPCs no roster lists. The suffix guess below stays for
+    genuinely unknown speakers, but it must never outrank a documented
+    entry: it read Paimon — "-on", so "male" — in a male voice for a whole
+    session before she was recast by hand."""
+    n = speaker.rstrip('"”').strip()
+    table = {**NPC_GENDERS, **VOICES.get("settings", {}).get("genders", {})}
+    g = {k.lower(): v for k, v in table.items()}.get(n.lower())
+    if g in ("female", "male"):
+        return g
+    fem = n.lower().endswith(("a", "ia", "ie", "elle", "ette", "ina",
+                              "yn", "i"))
+    return "female" if fem else "male"
+
+
 def pick_voice(speaker):
     # No nameplate, the game's own unquoted narrator label, or an
     # organization/location "speaker" ("The Xianzhou Alliance") → narrator.
@@ -1232,11 +1252,9 @@ def pick_voice(speaker):
         return VOICES["defaults"]["narrator"], 1.0
     with open(UNKNOWN_LOG, "a") as f:
         f.write(speaker + "\n")
-    # best-effort gender guess from name shape, then claim a distinct voice;
-    # shows as "(auto)" in Casting — override anytime
-    n = speaker.rstrip('"”').strip().lower()
-    fem = n.endswith(("a", "ia", "ie", "elle", "ette", "ina", "yn", "i"))
-    return auto_cast(speaker, "female" if fem else "male"), 1.0
+    # documented gender (roster/NPC table) or name-shape guess, then claim
+    # a distinct voice; shows as "(auto)" in Casting — override anytime
+    return auto_cast(speaker, guess_gender(speaker)), 1.0
 
 
 class Speech:
