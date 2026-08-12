@@ -37,6 +37,29 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **Paimon auto-casts female — documented gender now beats the name-shape
+  guess.** Session hoyovoice-20260812-084224 (0.10.4, macOS) logged
+  `[auto-cast] Paimon → am_liam (male guess)`: Genshin's most common
+  speaker read in a male voice until recast by hand. The auto-caster's
+  gender guess was a name-shape suffix heuristic and nothing else — "-on"
+  is not on the feminine suffix list — and no documented gender could
+  overrule it: the roster fetch (`tools/pronounce_names.py`) collected
+  names only, and Paimon isn't even in it, because both rosters list
+  PLAYABLE characters exclusively. Two-part fix. The Genshin roster's own
+  gender record (`bodyType`: GIRL/LADY/LOLI female, BOY/MALE male — 119
+  characters as of today) now merges into `settings.genders` on `--write`,
+  and a shipped `NPC_GENDERS` table covers the named NPCs no roster lists
+  (Paimon, Enjou, Katheryne — "-yne" trips the same suffix wire — and
+  Gilgamesh). `pick_voice` consults documented gender first,
+  case-insensitively, and falls back to the suffix guess only for
+  genuinely unknown names; StarRailRes documents no gender, so HSR names
+  keep the fallback. Paimon is fixed by the shipped table alone — no
+  fetch needed — but run `python tools/pronounce_names.py --write` on
+  **each** machine to get the roster genders; `voices.json` is gitignored.
+  Pinned by `tools/test_gender_guess.py` (Paimon → female, including
+  case-jittered and quote-bearing nameplates; documented-male Venti beats
+  the "-i is feminine" guess; unknown names still get the heuristic).
+
 - **An OCR ghost box no longer splices itself into a line — or gets the
   same line spoken four times.** During the Snezhnograd station cutscene
   (rec_20260812_083939, shots #289/#292/#310/#313) Vision returned Paimon's
