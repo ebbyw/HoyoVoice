@@ -62,6 +62,27 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **A dialogue-advance click can no longer silence a streamed first
+  sentence.** "I was a disappointment. I never got into an art school…"
+  (2026-08-12, 10:00 log) lost its first sentence: sentence streaming put
+  the prefix through the VAD gate right at line start, where the advance
+  click — centre-panned against quiet music — measured mid+13.0 side+1.8
+  with VAD peak 0.00. That clears the decisive centre-burst cut (11.2dB
+  over side against the 8.0 threshold), so the sentence was skipped as
+  voiced; the full line then arrived as an extension and only the
+  remainder was spoken. The speaker was five-for-five unvoiced at that
+  point, and the false skip also wrote a `v` into his prior, which is why
+  the fix does NOT key on `never_voiced`: a decisive burst with no
+  corroboration at all (VAD peak < 0.15, no usually-voiced record) must
+  now also LAST like speech — ≥ 0.35s of smoothed windows holding
+  ENERGY_MID_BURST over baseline. The click sustains ~0.26s including the
+  smoothing overlap; even a one-word VO line sustains ~0.5s. Corroborated
+  bursts are believed exactly as before, so the thirteen-session
+  measurements behind the 8.0 cut — and the Kokoro-Paimon vocoder case
+  the decisive rule exists for, whose VO runs seconds — keep their skips.
+  The skip and speak paths both log `sustain=` now, so the next
+  borderline case is measurable from the session log alone.
+
 - **Paimon auto-casts female — documented gender now beats the name-shape
   guess.** Session hoyovoice-20260812-084224 (0.10.4, macOS) logged
   `[auto-cast] Paimon → am_liam (male guess)`: Genshin's most common
