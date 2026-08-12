@@ -9,9 +9,13 @@ half-scale grayscale decode of the frame (the same draft-mode decode the
 change gate uses). Design and the coordinate-space gotcha table:
 plans/ANCHORS.md.
 
-Phase (a): matches are log-only evidence. Nothing downstream reads them.
 Presence of an anchor is strong evidence; absence is weak (motion blur or
 a fade dents a score for a frame) — anchors may gate COST, never speech.
+Phase (a) made matches log-only evidence; phase (b) adds the cost gate:
+an anchor can carry an `roi` — the union of every band its screen kind
+needs — and live.py (behind settings.anchor_roi) then OCRs only that
+crop, remapping the returned boxes to full-frame coordinates before
+anything downstream sees them. No match → full frame, today's behavior.
 
 Spec file, one per game (tools/profiles/anchors/<game>.json):
 
@@ -19,7 +23,8 @@ Spec file, one per game (tools/profiles/anchors/<game>.json):
                   "template": "hsr/continue.png",
                   "search": {"x": [0.86, 1.0], "y": [0.0, 0.10]},
                   "threshold": 0.75,
-                  "ref": [960, 540]}]}
+                  "ref": [960, 540],
+                  "roi": {"x": [0.0, 1.0], "y": [0.0, 0.62]}}]}
 
 `search` is Vision-normalized (origin bottom-left, 0-1) like every band
 in tools/profiles/. `ref` is the half-scale decode size the template was
@@ -96,6 +101,38 @@ def _ncc(window, tmpl):
     return float(scores[idx]), (int(idx[1]), int(idx[0]))
 
 
+def crop_frame(path, roi, out_path):
+    """Write the ROI of a full-res frame to out_path and return the crop
+    rect (cx0, cy0, cw, ch) in full-frame Vision space — the exact rect
+    remap_box() needs — or None when the frame can't be read whole (torn
+    mid-rewrite) or the crop would be degenerate. None means "OCR the full
+    frame", never "skip OCR".
+
+    PNG, not JPEG: the frame is already one lossy generation old, and a
+    second pass softens exactly the small glyphs the crop exists to read.
+    compress_level=1 keeps the encode a few ms. The returned rect is
+    re-normalized from the PIXEL rect, so remap stays exact under the
+    int() rounding of the crop edges."""
+    try:
+        data = Path(path).read_bytes()
+    except OSError:
+        return None
+    if not (len(data) > 1024 and data[:2] == b"\xff\xd8"
+            and data[-2:] == b"\xff\xd9"):
+        return None
+    try:
+        img = Image.open(io.BytesIO(data))
+        W, H = img.size
+        x0, y0, x1, y1 = _to_px(roi, W, H)
+        if x1 - x0 < 8 or y1 - y0 < 8:
+            return None
+        img.crop((x0, y0, x1, y1)).save(out_path, format="PNG",
+                                        compress_level=1)
+    except Exception:
+        return None
+    return (x0 / W, (H - y1) / H, (x1 - x0) / W, (y1 - y0) / H)
+
+
 def remap_box(block, crop):
     """A daemon box normalized to a CROP → full-frame normalized.
     `crop` is (cx0, cy0, cw, ch) in full-frame Vision space. The daemons
@@ -112,12 +149,13 @@ def remap_box(block, crop):
 
 
 class Anchor:
-    def __init__(self, name, template, search, threshold, ref):
+    def __init__(self, name, template, search, threshold, ref, roi=None):
         self.name = name
         self.template = template          # float32 gray, half-scale px
         self.search = search              # Vision-normalized region
         self.threshold = float(threshold)
         self.ref = tuple(ref)             # (W, H) the template was cut at
+        self.roi = roi                    # screen kind's OCR band union, or None
         self.scale_warned = False
 
     def match(self, gray):
@@ -151,7 +189,8 @@ class AnchorPack:
                 tmpl = np.asarray(Image.open(png).convert("L"),
                                   dtype=np.float32)
                 self.anchors.append(Anchor(a["name"], tmpl, a["search"],
-                                           a["threshold"], a["ref"]))
+                                           a["threshold"], a["ref"],
+                                           a.get("roi")))
             except Exception as e:
                 print(f"[anchors] {game}/{a.get('name', '?')} unloadable "
                       f"({e}) — skipped", flush=True)
@@ -167,6 +206,19 @@ class AnchorPack:
             if ok:
                 out[a.name] = score
         return out
+
+    def roi_for(self, names):
+        """Union ROI the matched anchor set implies, or None. Presence is
+        strong evidence, so every matched anchor with an ROI votes and the
+        union keeps each voter's bands visible; an anchor without an ROI
+        (or an empty match set) implies nothing and the frame stays whole."""
+        rois = [a.roi for a in self.anchors if a.name in names and a.roi]
+        if not rois:
+            return None
+        return {"x": (min(r["x"][0] for r in rois),
+                      max(r["x"][1] for r in rois)),
+                "y": (min(r["y"][0] for r in rois),
+                      max(r["y"][1] for r in rois))}
 
 
 # ---------------------------------------------------------------------

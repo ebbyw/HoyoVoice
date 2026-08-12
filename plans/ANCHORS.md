@@ -185,6 +185,51 @@ Trust gate to pass before (c): replayed decisions byte-identical with the
 setting on vs off across the regression recordings, and a measured `ocr_ms`
 drop on the Windows box.
 
+#### Implemented — 2026-08-12
+
+- ROI values are band unions read off the profiles, not guesses.
+  HSR `continue` → `y [0, 0.62]`, full width: bottom hint/UID strip
+  (y<0.08), dialogue fallback (0.08–0.21), plate (0.18–0.31), choices
+  (0.22–0.62 ceiling). Genshin `auto` → `y [0, 0.66]`, full width: hint
+  strip (0–0.10), dialogue (0.10–0.21), plate (0.204–0.28), comms plate
+  band, choices (0.22–0.66 ceiling). Both are "the bottom two-thirds",
+  which is where the ~35–40% detector-cut expectation comes from.
+- The crop is written as PNG (`captures/live_crop.png`,
+  `compress_level=1`): the frame is already one JPEG generation old, and
+  a second lossy pass softens exactly the small glyphs the crop exists
+  to read. `crop_frame()` re-normalizes the returned rect from the
+  PIXEL crop, so `remap_box()` is exact under `int()` edge rounding —
+  pinned in `tools/test_anchors.py`.
+- Anchor matching moved BEFORE the OCR call (it has to be, to pay for
+  cropping) and keys off the STICKY game profile, not the fresh
+  classify: during a game switch the old game's chrome stops matching,
+  so the frames the switch decision needs are read whole.
+- An empty CROPPED read does not count as a `lost_frames` torn frame —
+  the crop was cut from a verified-complete JPEG, so `[]` is a
+  genuinely empty ROI (fade, chrome-before-text). It still short-
+  circuits the frame like an empty full read always has.
+- `ANCHOR_MAX_CROP_RUN = 12` (~2s at 6fps), same number and same reason
+  as the change gate's `MAX_SKIP_RUN`: a wrong "crop here" must be
+  bounded, not latched. `roi_crops` on the dashboard metrics carries
+  the skip volume.
+- Replay trust gate (this Mac): **"byte-identical" turned out to be the
+  wrong bar for this harness, and the honest gate passed instead.**
+  Wall-clock replay is not deterministic: two runs with the setting OFF
+  (same file, same seed, rec_20260812_083939 110–150s Genshin and
+  rec_20260727_174535 110–150s HSR) flip the same marginal lines the
+  on-vs-off comparison flips — a spoke-then-yielded vs skipped-as-voiced
+  Paimon line, a sentence-streaming split point, ±0.3dB on every audio
+  gate reading, differing `voiced_history` — because the VAD gate reads
+  the audio bed on wall-clock time, and the bed carries the original
+  session's TTS (the replay.py caveat). The gate that means something:
+  every on-vs-off difference site also differs off-vs-off. That held.
+  The single crop-specific artifact outside the noise floor was Vision
+  reading one line's mid-sentence punctuation differently on the crop
+  ("Here we are." vs "Here we are:") — normalize_text erases it for
+  dedupe and both runs skipped the line as voiced. The Windows `ocr_ms`
+  half of the gate is still owed — replay a scroll-heavy recording
+  there after pulling, with `anchor_roi: true` in voices.json.
+
 ### (c) A screen ships as data
 
 Rebuild one Genshin screen — the book/inventory reading UI is the candidate,

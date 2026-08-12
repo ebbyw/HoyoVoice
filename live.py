@@ -34,7 +34,8 @@ sys.path.insert(0, str(ROOT / "tools"))
 from profiles import (ProfileSelector, narration_self_certain,  # noqa: E402
                       split_camel)
 from change_gate import ChangeGate  # noqa: E402
-from anchors import AnchorPack, decode_half  # noqa: E402
+from anchors import (AnchorPack, crop_frame, decode_half,  # noqa: E402
+                     remap_box)
 from casting_filter import canonical_quotes, junk_speaker  # noqa: E402
 from pronounce_names import NPC_GENDERS  # noqa: E402
 from vad import CHUNK, SileroVAD  # noqa: E402
@@ -327,35 +328,48 @@ stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
          "anchor_ms": deque(maxlen=200), "started": time.time()}
 
 # UI anchors — pixel evidence of game chrome, matched before/without OCR.
-# Phase (a) of plans/ANCHORS.md: LOG-ONLY. Nothing downstream reads the
-# result; the log lines and score distributions are what earn (or refuse)
-# phase (b)'s ROI cropping. Packs are cached per game; a game without
-# anchor data gets an empty pack and zero behavior change.
+# Phase (a) of plans/ANCHORS.md made matches log-only; phase (b) — behind
+# settings.anchor_roi, off by default — lets a matched anchor's ROI crop
+# the frame before OCR, because detector cost scales with area. The rules
+# that must hold (paid for once already, by the change gate): absence of
+# an anchor is weak evidence, so no match → full frame, today's behavior;
+# and a bounded crop run, because a wrong "crop here" latches exactly like
+# a wrong "unchanged" — text appearing outside the crop is invisible, and
+# nothing inside the crop will ever disagree. Packs are cached per game; a
+# game without anchor data gets an empty pack and zero behavior change.
 anchor_packs = {}
-anchor_state = {"enabled": True, "matched": ()}
+anchor_state = {"enabled": True, "roi": False, "matched": (),
+                "crop_run": 0, "crops": 0}
+# Consecutive cropped reads before one full-frame read re-arms the set
+# (~2s at 6fps) — the same medicine, and the same number, as the change
+# gate's MAX_SKIP_RUN, and for the same reason.
+ANCHOR_MAX_CROP_RUN = 12
+CROP = FRAME.parent / "live_crop.png"
 
 
 def match_anchors(profile_name):
-    """Match the current frame against the active game's anchor pack and
-    log when the SET of matched anchors changes. Called only on frames
-    that paid for a fresh OCR — a gate-unchanged frame provably didn't
-    change where text was, and chrome moves even less than text."""
+    """Match the current frame against the active game's anchor pack, log
+    when the SET of matched anchors changes, and return the ROI the
+    matched set implies (Vision-normalized union, or None). Called only on
+    frames about to pay for a fresh OCR — a gate-unchanged frame provably
+    didn't change where text was, and chrome moves even less than text."""
     pack = anchor_packs.get(profile_name)
     if pack is None:
         pack = anchor_packs[profile_name] = AnchorPack(profile_name)
     if not pack.anchors:
-        return
+        return None
     t0 = time.perf_counter()
     try:
         hits = pack.match(decode_half(FRAME))
     except Exception:
-        return                      # a torn frame is OCR's problem, not ours
+        return None                 # a torn frame is OCR's problem, not ours
     stats["anchor_ms"].append(int((time.perf_counter() - t0) * 1000))
     matched = tuple(sorted(hits))
     if matched != anchor_state["matched"]:
         anchor_state["matched"] = matched
         shown = "  ".join(f"{n}={hits[n]:.2f}" for n in matched) or "none"
         print(f"[anchors] {profile_name}: {shown}", flush=True)
+    return pack.roi_for(matched)
 
 
 def frame_is_dark():
@@ -450,6 +464,7 @@ def metrics():
         "anchor_avg_ms": (int(sum(stats["anchor_ms"])
                               / len(stats["anchor_ms"]))
                           if stats["anchor_ms"] else 0),
+        "roi_crops": anchor_state["crops"],
         "lost_frames": lost_frames["n"],
         "lines_per_min": round(stats["spoken"] / mins, 1),
     }
@@ -1913,9 +1928,14 @@ def main():
     gate.enabled = bool(VOICES.get("settings", {}).get("change_gate", True))
     gate.frac = float(VOICES.get("settings", {}).get("change_gate_frac",
                                                      gate.frac))
-    # settings.anchors: false silences the log-only anchor matching
+    # settings.anchors: false silences anchor matching entirely;
+    # settings.anchor_roi: true additionally lets a matched anchor CROP
+    # the frame to its screen kind's ROI before OCR (phase 4b, off by
+    # default until the Windows ocr_ms win is measured)
     anchor_state["enabled"] = bool(VOICES.get("settings", {})
                                    .get("anchors", True))
+    anchor_state["roi"] = bool(VOICES.get("settings", {})
+                               .get("anchor_roi", False))
     global LATE_YIELD
     LATE_YIELD = bool(VOICES.get("settings", {}).get("late_yield", True))
 
@@ -2170,12 +2190,41 @@ def main():
             if gate.unchanged(FRAME, latest_ocr["text_blocks"]):
                 blocks = latest_ocr["blocks"]
                 fresh_read = False
+                was_crop = False
             else:
+                # Anchors are matched BEFORE OCR so a match can pay for its
+                # cost: with settings.anchor_roi on, matched chrome implies
+                # a screen kind and OCR reads only that kind's ROI. The
+                # pack is the STICKY game's — pre-OCR there is no fresh
+                # classify — which is right: during a game switch the old
+                # game's chrome stops matching, so the frames the switch
+                # decision needs are read whole.
+                roi = (match_anchors(game.profile.name)
+                       if anchor_state["enabled"] else None)
+                crop = None
+                if roi is not None and anchor_state["roi"]:
+                    if anchor_state["crop_run"] >= ANCHOR_MAX_CROP_RUN:
+                        # deferred long enough — read the whole frame so
+                        # text outside the crop can't stay invisible, and
+                        # re-arm (the change gate's MAX_SKIP_RUN medicine)
+                        anchor_state["crop_run"] = 0
+                    else:
+                        crop = crop_frame(FRAME, roi, CROP)
                 t0 = time.time()
-                blocks = ocr.recognize(FRAME)
+                blocks = ocr.recognize(CROP if crop else FRAME)
                 if blocks is None:      # daemon died; it respawned itself
                     continue
                 stats["ocr_ms"].append(int((time.time() - t0) * 1000))
+                was_crop = crop is not None
+                if was_crop:
+                    anchor_state["crop_run"] += 1
+                    anchor_state["crops"] += 1
+                    # the daemon normalizes to the image it was handed —
+                    # remap here, at the call boundary, so NOTHING
+                    # downstream ever sees crop-normalized coordinates
+                    blocks = [remap_box(b, crop) for b in blocks]
+                else:
+                    anchor_state["crop_run"] = 0
                 latest_ocr["blocks"] = blocks
                 latest_ocr["text_blocks"] = None    # until classify sets it
                 fresh_read = True
@@ -2185,15 +2234,17 @@ def main():
                 # the screen is empty. Counting it as evidence made reader
                 # panels look closed while they were plainly on screen —
                 # which stopped the read and dropped its queue.
-                lost_frames["n"] += 1
+                # A CROPPED read is the exception: the crop was cut from a
+                # verified-complete frame, so [] is a genuinely empty ROI
+                # (a fade, dialogue chrome up before text) — not a lost
+                # frame, but still no evidence to act on.
+                if not was_crop:
+                    lost_frames["n"] += 1
                 continue
 
             # which game's layout to read this frame with (sticky; only
             # switches on sustained chrome from another game)
             screens = game.observe(blocks)
-
-            if fresh_read and anchor_state["enabled"]:
-                match_anchors(screens.name)
 
             # --- Reading-mode screens (Quick Read books, info/profile
             # screens, message/group-chat panels): incremental reading ---
