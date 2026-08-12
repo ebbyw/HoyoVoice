@@ -3,7 +3,7 @@
 check the names against.
 
     python tools/pronounce_names.py                  # audit: what Kokoro says now vs. with the fix
-    python tools/pronounce_names.py --write          # merge FIXES into voices.json
+    python tools/pronounce_names.py --write          # merge FIXES + roster genders into voices.json
     python tools/pronounce_names.py --custom-words   # also feed every roster name to the OCR vocabulary
 
 Kokoro phonemizes English spelling rules, so Chinese and Japanese names come
@@ -41,12 +41,33 @@ ROOT = Path(__file__).resolve().parent.parent
 # names (facts, and HoYoverse's marks either way) plus our own respellings —
 # not their files. Project Yatta / Amber (gi.yatta.moe) and Mar-7th's
 # StarRailRes (AGPL-3.0) are the upstreams; credit belongs to them.
+# The Genshin roster documents each character's gender as `bodyType` —
+# five rig names, two genders. StarRailRes documents no gender at all, so
+# HSR names carry None and the auto-caster keeps its name-shape fallback
+# for them.
+BODY_GENDER = {"GIRL": "female", "LADY": "female", "LOLI": "female",
+               "BOY": "male", "MALE": "male"}
+
 ROSTERS = {
     "genshin": ("https://gi.yatta.moe/api/v2/en/avatar",
-                lambda d: [v["name"] for v in d["data"]["items"].values()]),
+                lambda d: {v["name"]: BODY_GENDER.get(v.get("bodyType"))
+                           for v in d["data"]["items"].values()}),
     "hsr": ("https://raw.githubusercontent.com/Mar-7th/StarRailRes/"
             "master/index_min/en/characters.json",
-            lambda d: [v["name"] for v in d.values()]),
+            lambda d: {v["name"]: None for v in d.values()}),
+}
+
+# The rosters list PLAYABLE characters only, so the NPCs with spoken forms
+# below have no documented gender to fetch. Without an entry here the
+# auto-caster falls back to a name-shape suffix guess — which read Paimon,
+# the single most common speaker in Genshin, in a MALE voice for a whole
+# session (hoyovoice-20260812-084224: "-on" is not on the feminine suffix
+# list). Katheryne trips the same wire: "-yne" isn't "-yn".
+NPC_GENDERS = {
+    "Paimon": "female",
+    "Enjou": "male",
+    "Katheryne": "female",
+    "Gilgamesh": "male",
 }
 
 # name -> what the synthesizer should hear. Only names Kokoro gets WRONG are
@@ -334,9 +355,10 @@ def fetch(game):
     # yatta 403s the default urllib agent
     req = urllib.request.Request(url, headers={"User-Agent": "HoyoVoice/roster"})
     with urllib.request.urlopen(req, timeout=30) as r:
-        names = parse(json.loads(r.read().decode()))
+        roster = parse(json.loads(r.read().decode()))
     # placeholders ("{NICKNAME}") and the trailblazer's variants aren't names
-    return sorted({n for n in names if n and "{" not in n})
+    return dict(sorted((n, g) for n, g in roster.items()
+                       if n and "{" not in n))
 
 
 def load_g2p():
@@ -434,6 +456,17 @@ def merge(path, rosters, custom_words):
     settings["pronunciations"] = dict(sorted(pron.items()))
     settings["pronunciations_exact"] = sorted(
         set(settings.get("pronunciations_exact", [])) | set(EXACT))
+    # documented genders for the auto-caster: the roster's bodyType plus the
+    # shipped NPC table. Same rule as pronunciations — the documented value
+    # wins, so --write carries a correction through; a deliberate voice
+    # choice lives in "characters" via recasting, not here.
+    genders = settings.setdefault("genders", {})
+    shipped_g = dict(NPC_GENDERS)
+    for names in rosters.values():
+        shipped_g.update({n: g for n, g in names.items() if g})
+    g_added = {k: v for k, v in shipped_g.items() if genders.get(k) != v}
+    genders.update(g_added)
+    settings["genders"] = dict(sorted(genders.items()))
     words = 0
     if custom_words:
         cw = set(settings.get("custom_words", []))
@@ -461,7 +494,7 @@ def merge(path, rosters, custom_words):
         settings["custom_words"] = sorted(w for w in cw if len(w) > 1)
         words = len(settings["custom_words"]) - before
     path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
-    print(f"{path}: +{len(added)} pronunciations"
+    print(f"{path}: +{len(added)} pronunciations, +{len(g_added)} genders"
           + (f", -{len(gone)} retired" if gone else "")
           + (f", +{words} OCR words" if custom_words else ""))
 
