@@ -18,7 +18,7 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from anchors import (Anchor, AnchorPack, _ncc, _to_px,  # noqa: E402
-                     decode_half, remap_box)
+                     crop_frame, decode_half, remap_box)
 
 
 def make_frame(W=960, H=540):
@@ -98,6 +98,70 @@ def test_decode_half_rejects_torn_jpeg():
 def test_pack_without_data_is_empty():
     pack = AnchorPack("no-such-game")
     assert pack.anchors == [] and pack.match(None) == {}
+    assert pack.roi_for(()) is None
+
+
+def test_roi_for_union_and_absence():
+    _, glyph = make_frame()
+    pack = AnchorPack("no-such-game")
+    pack.anchors = [
+        Anchor("a", glyph, {"x": (0, 1), "y": (0, 1)}, 0.9, (960, 540),
+               roi={"x": [0.0, 0.5], "y": [0.0, 0.62]}),
+        Anchor("b", glyph, {"x": (0, 1), "y": (0, 1)}, 0.9, (960, 540),
+               roi={"x": [0.4, 1.0], "y": [0.1, 0.7]}),
+        Anchor("c", glyph, {"x": (0, 1), "y": (0, 1)}, 0.9, (960, 540)),
+    ]
+    # union keeps every matched voter's bands visible
+    assert pack.roi_for(("a", "b")) == {"x": (0.0, 1.0), "y": (0.0, 0.7)}
+    assert pack.roi_for(("a",)) == {"x": (0.0, 0.5), "y": (0.0, 0.62)}
+    # an anchor without an ROI implies nothing — even when matched
+    assert pack.roi_for(("c",)) is None
+    assert pack.roi_for(()) is None
+
+
+def test_crop_frame_rect_matches_remap(tmp_path=None):
+    """The rect crop_frame returns must be the exact inverse of the
+    daemon's crop-normalization: a feature at a known full-frame position,
+    OCR'd inside the crop, must remap to that same position."""
+    import tempfile
+    W, H = 1920, 1080
+    rng = np.random.default_rng(11)
+    frame = rng.integers(0, 80, (H, W)).astype(np.uint8)
+    d = Path(tempfile.mkdtemp())
+    src, out = d / "frame.jpg", d / "crop.png"
+    Image.fromarray(frame).save(src, format="JPEG", quality=90)
+    roi = {"x": (0.0, 1.0), "y": (0.0, 0.62)}
+    crop = crop_frame(src, roi, out)
+    assert crop is not None
+    cx0, cy0, cw, ch = crop
+    # bottom 62% of the frame: crop rect sits on the bottom edge
+    assert cx0 == 0.0 and cy0 == 0.0 and cw == 1.0
+    assert abs(ch - 0.62) < 2.0 / H          # int() rounding, at most a px
+    px_w, px_h = Image.open(out).size
+    assert (px_w, px_h) == (W, H - int((1 - 0.62) * H))
+    # a block filling the crop's top-left quarter, as the daemon would
+    # normalize it to the CROP, remaps into the ROI's own top-left quarter
+    b = remap_box({"text": "t", "confidence": 1.0,
+                   "x": 0.0, "y": 0.5, "w": 0.5, "h": 0.5}, crop)
+    assert b["x"] == cx0 and abs(b["y"] - (cy0 + 0.5 * ch)) < 1e-9
+    assert abs(b["w"] - 0.5 * cw) < 1e-9 and abs(b["h"] - 0.5 * ch) < 1e-9
+
+
+def test_crop_frame_refuses_torn_and_degenerate():
+    import tempfile
+    W, H = 1920, 1080
+    rng = np.random.default_rng(13)
+    frame = rng.integers(0, 80, (H, W)).astype(np.uint8)
+    d = Path(tempfile.mkdtemp())
+    src, out = d / "frame.jpg", d / "crop.png"
+    Image.fromarray(frame).save(src, format="JPEG", quality=90)
+    torn = d / "torn.jpg"
+    torn.write_bytes(src.read_bytes()[:-100])
+    roi = {"x": (0.0, 1.0), "y": (0.0, 0.62)}
+    assert crop_frame(torn, roi, out) is None       # torn → full-frame OCR
+    assert crop_frame(d / "gone.jpg", roi, out) is None
+    tiny = {"x": (0.5, 0.5005), "y": (0.0, 0.62)}   # degenerate width
+    assert crop_frame(src, tiny, out) is None
 
 
 if __name__ == "__main__":
