@@ -285,6 +285,15 @@ ENERGY_SIDE_FLAT = 2.5        # AND side must stay flat — music swells raise
 # this cut 18 of 1107 spoken lines (1.6%) become voiced, and 27 of the 46
 # known-voiced ones are reachable without the VAD agreeing at all.
 ENERGY_DECISIVE_OVER_SIDE = 8.0
+# A decisive burst with NO speechiness at all must also hold its rise this
+# long. The dialogue-advance click is mid-panned against quiet music and
+# scored mid+13.0 side+1.8 — decisive on the numbers — but was over in
+# ~0.2s of elevated windows; a one-word VO line holds ~0.5s. 0.35 sits
+# between them with the overlap-inflation (~0.13s) already spent. Only
+# applied when the VAD saw nothing (peak < 0.15) and the speaker has no
+# usually-voiced record: with either corroboration the burst is believed
+# as before, so the measured vocoder-VO cases keep their skips.
+ENERGY_SUSTAIN_S = 0.35
 
 # --- shared state for the dashboard ---
 events = deque(maxlen=200)
@@ -924,23 +933,35 @@ def tts_text(text):
 
 
 def center_burst(t_line):
-    """(mid_delta_dB, side_delta_dB): energy rise after the line appeared vs
-    the pre-line baseline. VO shows as mid rising with side staying flat."""
+    """(mid_delta_dB, side_delta_dB, sustain_s): energy rise after the line
+    appeared vs the pre-line baseline, and for how long the mid channel held
+    that rise. VO shows as mid rising with side staying flat.
+
+    sustain_s is what tells a centre-panned SFX transient from voiceover
+    when neither carries any speechiness: the dialogue-advance click that
+    skipped "I was a disappointment." (2026-08-12, mid+13.0 side+1.8,
+    VAD peak 0.00) is over in a few 32ms blocks, while even a one-word VO
+    line holds its rise for half a second. Counted as smoothed 160ms
+    windows sitting ENERGY_MID_BURST over baseline — overlapping windows,
+    so a transient's tail inflates the count by up to ~0.13s, which the
+    threshold accounts for."""
     base_m = [m for t, m, s in energy_history if t_line - 9 <= t < t_line - 1.5]
     base_s = [s for t, m, s in energy_history if t_line - 9 <= t < t_line - 1.5]
     cur = [(m, s) for t, m, s in energy_history if t >= t_line - 1.2]
     if len(base_m) < 30 or len(cur) < 8:
-        return 0.0, 0.0
+        return 0.0, 0.0, 0.0
     base_m.sort()
     base_s.sort()
     bm, bs = base_m[len(base_m) // 2], base_s[len(base_s) // 2]
     mids = [m for m, s in cur]
     sides = [s for m, s in cur]
 
-    def smooth_max(xs):
-        return max(sum(xs[i:i + 5]) / 5 for i in range(max(1, len(xs) - 4)))
+    def smoothed(xs):
+        return [sum(xs[i:i + 5]) / 5 for i in range(max(1, len(xs) - 4))]
 
-    return smooth_max(mids) - bm, smooth_max(sides) - bs
+    sm, ss = smoothed(mids), smoothed(sides)
+    sustain = sum(1 for x in sm if x - bm >= ENERGY_MID_BURST) * 0.032
+    return max(sm) - bm, max(ss) - bs, sustain
 
 
 def normalize_text(s):
@@ -2722,7 +2743,7 @@ def main():
                     time.sleep(0.1)
             # center-energy layer: catches VO the VAD can't recognize as
             # speech (vocoder/robot voices) — mid-channel burst, flat side
-            mid_up, side_up = center_burst(t_stable)
+            mid_up, side_up, sustain = center_burst(t_stable)
             # center SFX (explosions, magic flashes) are mid-panned like VO —
             # demand at least faint speechiness so booms don't count
             vad_peak = max((p for t, p in vad_history
@@ -2741,10 +2762,25 @@ def main():
             # which is the exact case this layer exists for.
             decisive = mid_up - side_up >= ENERGY_DECISIVE_OVER_SIDE
             if not voiced and center_energy_voiced(mid_up, side_up, vad_peak):
-                voiced = True
-                print(f"[voiced — center energy] mid+{mid_up:.1f}dB "
-                      f"side+{side_up:.1f}dB peak={vad_peak:.2f}"
-                      f"{' decisive' if decisive else ''}", flush=True)
+                # believed outright with any corroboration — faint
+                # speechiness or a usually-voiced record. With neither, the
+                # burst must also LAST like speech: a dialogue-advance
+                # click is decisive on the numbers (mid+13.0 side+1.8
+                # against quiet music) but over in ~0.2s, and it silenced
+                # a streamed first sentence ("I was a disappointment.")
+                # whose speaker the game had never voiced.
+                if (vad_peak >= 0.15 or usually_voiced(state["speaker"])
+                        or sustain >= ENERGY_SUSTAIN_S):
+                    voiced = True
+                    print(f"[voiced — center energy] mid+{mid_up:.1f}dB "
+                          f"side+{side_up:.1f}dB peak={vad_peak:.2f} "
+                          f"sustain={sustain:.2f}s"
+                          f"{' decisive' if decisive else ''}", flush=True)
+                else:
+                    print(f"[center burst too brief for VO — speaking] "
+                          f"mid+{mid_up:.1f}dB side+{side_up:.1f}dB "
+                          f"sustain={sustain:.2f}s < {ENERGY_SUSTAIN_S}s",
+                          flush=True)
             synth_thread.join()
             if ext_base and not voiced:
                 # the remainder continues a line we're still speaking —
