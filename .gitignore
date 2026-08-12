@@ -5,7 +5,11 @@ voices.json
 voices_custom/
 
 # environments & caches
+# the trailing slash matches a directory only, and a worktree under
+# .claude/worktrees/ borrows the venv as a SYMLINK — which the slash form
+# lets straight into `git add -A`
 .venv/
+.venv
 __pycache__/
 *.pyc
 .DS_Store

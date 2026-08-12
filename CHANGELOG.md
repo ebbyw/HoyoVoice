@@ -189,6 +189,29 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **A choice option whose first word OCR keeps mangling is read once, not
+  once per mangling.** Vision fuses Genshin's choice bullet into the
+  option's first word, and the prompt stays on screen for as long as the
+  player takes to click it — the gate re-OCRs the whole time, because the
+  controller hints beside the bubble flicker even while the text doesn't.
+  One static option, "I'll go rescue them.", came back as `T'ul` / `@ILL` /
+  `I'I` / `TIL` / `TU` / `rIgo` / `TIl` across ten reads in 40 seconds
+  (2026-08-12 15:48 Snezhnaya session, shots 795–804; the dialogue line
+  under it and the classification were identical on every one of them —
+  only the first word moved). An option is short, so a wrong first word
+  drags whole-string similarity under the 0.9 cutoff that suppresses a
+  re-read (`tugorescuethem` against `rigorescuethem` is 0.86): the prompt
+  read as a new option, re-armed, and was spoken again. Prompt identity is
+  now decided by `same_option`, which falls back to comparing the option
+  with its first word dropped — the part OCR gets right. The same test
+  guards the pending prompt's stale clock, which was also failing to
+  recognize the option still on screen. Two guards against the opposite
+  error, dropping a real option as a repeat: the tail must be at least 12
+  characters, so "Yes." and "No." can never collapse onto each other, and
+  the whole-string comparison still runs first. The single garbled read
+  stands — the word under the bullet is genuinely unrecoverable, and the
+  repeats were the complaint.
+
 - **An option under a long voiced line is no longer dropped as "too
   late".** The stale window (8s) started counting at arming, and arming
   happens when the line under the option clears the gate — which for a

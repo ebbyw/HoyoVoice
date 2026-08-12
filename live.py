@@ -1054,6 +1054,38 @@ def same_line(a, b, cutoff=0.9):
     return difflib.SequenceMatcher(None, a, b).ratio() >= cutoff
 
 
+# An option's tail has to be this many characters before it may stand in for
+# the whole option: "Yes." and "No." differ only in their first word, and
+# collapsing two short options onto each other would silently drop one.
+OPTION_TAIL_MIN = 12
+
+
+def same_option(a, b):
+    """same_line for choice options, and blind to the first word.
+
+    Vision fuses Genshin's choice bullet into the first word of the option
+    and returns a different blob almost every pass. One static prompt —
+    "I'll go rescue them." — came back as T'ul / @ILL / I'I / TIL / TU /
+    rIgo / TIl across ten reads in 40s (2026-08-12 15:48, shots 795-804),
+    the screen never changing: the gate re-OCRs because the controller
+    hints beside the bubble flicker, and the mangling lands on "I'll" every
+    time. An option is short, so a wrong first word drags the whole-string
+    ratio under same_line's 0.9 (tu… vs rI… is 0.86) — the prompt then
+    reads as a NEW option, re-arms and is spoken a second and third time.
+    The tail is the part OCR gets right, so it decides.
+    """
+    if same_line(normalize_text(a), normalize_text(b)):
+        return True
+    ta, tb = option_tail(a), option_tail(b)
+    return (len(ta) >= OPTION_TAIL_MIN and len(tb) >= OPTION_TAIL_MIN
+            and same_line(ta, tb))
+
+
+def option_tail(s):
+    """An option's normalized text with its first word dropped."""
+    return normalize_text(" ".join(s.split()[1:]))
+
+
 def remember_line(recent_lines, speaker, norm, stack=False):
     """Put a line into the dedupe window. A DIALOGUE line replaces the
     window — "immediately before" is the contract (see DEDUP_WINDOW), and
@@ -1972,7 +2004,7 @@ def main():
     last_unknown_logged = None
     last_notice_logged = None
     choice_prev = ""            # last frame's options (settle check)
-    choice_logged = None        # last prompt written to the log
+    choice_logged = None        # last prompt handled — RAW words, not a norm
     pending_choice = None       # lone option waiting for the line below it
     # long ago: an option held before we have ever spoken shouldn't wait
     speech_busy_t = time.monotonic() - 60.0
@@ -2423,11 +2455,17 @@ def main():
             # sighting. Handled before the branches below so a prompt is
             # logged even when the line under it is skipped.
             opts = state["choices"]
-            opts_norm = normalize_text(" ".join(opts))
+            opts_raw = " ".join(opts)
+            opts_norm = normalize_text(opts_raw)
             settled = bool(opts_norm) and opts_norm == choice_prev
-            fresh = settled and not same_line(opts_norm, choice_logged)
+            # `choice_logged` keeps the WORDS of the prompt already handled,
+            # not its norm: same_option has to be able to drop the first one
+            # (see there — the bullet is fused into it and re-read the same
+            # prompt aloud).
+            fresh = settled and not (choice_logged
+                                     and same_option(opts_raw, choice_logged))
             if fresh and len(opts) > 2:
-                choice_logged = opts_norm
+                choice_logged = opts_raw
                 add_event("choice prompt (not read)", "choice", None,
                           " · ".join(opts), shot=True)
             elif fresh:
@@ -2444,7 +2482,7 @@ def main():
                 # flag and its clock. Nothing that has to survive a frame
                 # could: the read only ever landed if arming and a gap in
                 # the talking happened to fall on the same pass.
-                choice_logged = opts_norm
+                choice_logged = opts_raw
                 # Two options join with an ellipsis: punctuation only, no
                 # invented words, and Kokoro reads it as the beat between
                 # alternatives. `opts` (not the joined text) rides along so
@@ -2452,7 +2490,7 @@ def main():
                 # game echoes whichever ONE the player picks as the next
                 # dialogue line, and the joined norm would never match it.
                 pending_choice = {"text": " … ".join(opts), "opts": opts,
-                                  "seen": opts_norm, "armed": False,
+                                  "seen": opts_raw, "armed": False,
                                   "line": normalize_text(state["dialogue"]),
                                   "t": time.monotonic()}
             if pending_choice:
@@ -2500,13 +2538,13 @@ def main():
                 # dropped as too late while the NPC was still speaking —
                 # two in a row in the 2026-08-12 11:52 Snezhnaya session.
                 if (pending_choice["armed"]
-                        and same_line(opts_norm, pending_choice["seen"])):
+                        and same_option(opts_raw, pending_choice["seen"])):
                     pending_choice["t"] = time.monotonic()
                 if time.monotonic() - pending_choice["t"] > (
                         CHOICE_STALE_AFTER if pending_choice["armed"]
                         else CHOICE_PENDING_TTL):
                     if (not pending_choice["armed"]
-                            and same_line(opts_norm, pending_choice["seen"])):
+                            and same_option(opts_raw, pending_choice["seen"])):
                         # 20s and the line under it never cleared the gate —
                         # but the prompt is STILL ON SCREEN, so the game is
                         # waiting on the player and OCR may simply never
@@ -2521,7 +2559,7 @@ def main():
                         # already gone
                         add_event("choice prompt (not read — too late)",
                                   "choice", None, pending_choice["text"])
-                        choice_logged = normalize_text(pending_choice["text"])
+                        choice_logged = pending_choice["text"]
                         pending_choice = None
             if (pending_choice and pending_choice["armed"]
                     and not speech.playing
@@ -2543,7 +2581,7 @@ def main():
                 audio, speed, _ = speech.synth(text, voice, base_speed)
                 speech.play(audio)          # not qr: a late VO should cut it
                 stats["spoken"] += 1
-                choice_logged = normalize_text(text)
+                choice_logged = text
                 last_spoken_norm = normalize_text(text)
                 # into the dedupe window: picking an option usually makes
                 # the game say it back as a dialogue line, which would
