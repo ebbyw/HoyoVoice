@@ -6,6 +6,32 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Changed
+
+- **OCR stack review pass (four small fixes).** (1) The Windows RapidOCR
+  path re-ran the full OCR on the raw frame whenever the
+  background-flattened pass read nothing — a safety net for screens the
+  filter hurts, but textless frames (loading, fades, overworld at night)
+  arrive in long runs, and the net doubled per-frame cost exactly there.
+  It now runs on every 4th consecutive empty frame instead of all of
+  them: a filter-hurt screen is still seen within ~0.5s (under the
+  2-read stabilization it needs anyway), and the bound means the net can
+  never latch shut — the change gate's MAX_SKIP_RUN medicine. (2) The
+  native Windows engine reported `confidence: 1.0` because it exposes
+  none; live.py's confidence-aware stabilization read that as "the
+  recognizer vouches for this" and skipped the sentence-streaming
+  cushion read — the most trusted treatment, on the least accurate
+  engine. It now reports a neutral 0.90 (below CONF_TRUSTED, above
+  CONF_SHAKY) so no confidence rule fires on a made-up number. (3) The
+  mac daemon hands Vision the file URL directly instead of decoding
+  through NSImage/AppKit, and pins the recognizer revision so replay
+  results stay comparable across macOS updates — output verified
+  byte-identical on real capture shots. (4) Casting a voice from the
+  dashboard now rewrites the OCR lexicon and restarts the Vision daemon,
+  so a newly cast name helps recognition immediately instead of after
+  the next app restart (Windows skips the restart — neither engine there
+  reads the lexicon, and the model reload costs seconds).
+
 ### Added
 
 - **Genshin comms messages are read (Snezhnaya 6.x, "Eye of Graeae").**

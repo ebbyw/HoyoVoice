@@ -4,7 +4,6 @@
 
 import Foundation
 import Vision
-import AppKit
 
 setbuf(stdout, nil)
 
@@ -21,19 +20,23 @@ if CommandLine.arguments.count > 1,
 
 while let line = readLine(strippingNewline: true) {
     let url = URL(fileURLWithPath: line)
-    guard let img = NSImage(contentsOf: url),
-          let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-        print("[]")
-        continue
-    }
     let req = VNRecognizeTextRequest()
     req.recognitionLevel = .accurate
     req.usesLanguageCorrection = true
     req.recognitionLanguages = ["en-US"]
+    // Pin the recognizer revision so results are stable across macOS
+    // updates — the replay corpus and the profiles' measured bands assume
+    // the same recognizer that produced them.
+    if #available(macOS 13.0, *) {
+        req.revision = VNRecognizeTextRequestRevision3
+    }
     if !customWords.isEmpty {
         req.customWords = customWords
     }
-    let handler = VNImageRequestHandler(cgImage: cg, options: [:])
+    // Vision decodes straight from the URL — no NSImage/AppKit round trip.
+    // An unreadable file (torn mid-rewrite) throws and reports [], which
+    // live.py counts as a lost frame, same as before.
+    let handler = VNImageRequestHandler(url: url, options: [:])
     do { try handler.perform([req]) } catch {
         print("[]")
         continue

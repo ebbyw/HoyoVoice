@@ -12,7 +12,8 @@ Engines (HOYOVOICE_OCR_ENGINE = auto | rapid | windows, default auto):
            onnxruntime (already a project dependency).
   windows  Windows.Media.Ocr via the winsdk package. Built into Windows
            10/11, nothing to download, but exposes no confidence (reported
-           as 1.0) and only word-level rects (unioned per line).
+           as WIN_CONF, a neutral 0.90) and only word-level rects (unioned
+           per line).
   auto     rapid if importable, else windows.
 
 argv[1] (optional): custom-words file. Apple Vision uses it as a
@@ -137,8 +138,11 @@ class RapidEngine:
     def __init__(self):
         from rapidocr_onnxruntime import RapidOCR
         from PIL import Image
+        import numpy as np
         self.Image = Image
+        self.np = np
         self.mode = "cpu"
+        self.empty_run = 0        # consecutive frames both passes read nothing
         kw = _rec_override()
         if kw:
             print(f"[ocrd_win] rec model: "
@@ -162,11 +166,23 @@ class RapidEngine:
         with self.Image.open(io.BytesIO(data)) as img:
             W, H = img.size
         # RapidOCR takes an ndarray directly, so no re-encode round trip
-        import numpy as np
         flat = _flatten_background(data)
-        result, _ = self.ocr(np.stack([flat] * 3, axis=-1))
-        if not result:            # safety net for screens the filter hurts
-            result, _ = self.ocr(data)
+        result, _ = self.ocr(self.np.stack([flat] * 3, axis=-1))
+        if not result:
+            # Safety net for screens the flattening filter hurts — but not
+            # on every frame. Textless frames arrive in long runs (loading,
+            # fades, overworld at night), and an unconditional second pass
+            # doubled the per-frame cost exactly there. Throttle it to every
+            # 4th empty frame: a filter-hurt screen is still seen within 3
+            # frames (~0.5s at 6fps sampling, under the 2-read stabilization
+            # it needs anyway), and the bound means a persistent empty run
+            # can never latch the net shut — same medicine as the change
+            # gate's MAX_SKIP_RUN.
+            if self.empty_run % 4 == 0:
+                result, _ = self.ocr(data)
+            self.empty_run = 0 if result else self.empty_run + 1
+        else:
+            self.empty_run = 0
         blocks = []
         for box, text, score in result or []:
             xs = [p[0] for p in box]
@@ -181,6 +197,15 @@ class RapidEngine:
                 "h": (y1 - y0) / H,
             })
         return blocks
+
+
+# Windows.Media.Ocr exposes no confidence. Reporting 1.0 made live.py's
+# confidence-aware stabilization treat every read as vouched-for (its
+# CONF_TRUSTED path skips the sentence-streaming cushion read), on the
+# *least* accurate engine we ship. 0.90 sits in the neutral band — below
+# CONF_TRUSTED (0.97), above CONF_SHAKY (0.85) — so the default cushions
+# apply and no confidence rule ever fires on a made-up number.
+WIN_CONF = 0.90
 
 
 class WindowsEngine:
@@ -269,7 +294,7 @@ class WindowsEngine:
             y1 = max(r.y + r.height for r in rects)
             blocks.append({
                 "text": line.text,
-                "confidence": 1.0,           # engine exposes none
+                "confidence": WIN_CONF,      # engine exposes none — see above
                 "x": x0 / W, "w": (x1 - x0) / W,
                 "y": 1.0 - y1 / H,           # → bottom-left origin
                 "h": (y1 - y0) / H,
