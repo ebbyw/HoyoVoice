@@ -33,6 +33,22 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   RapidOCR there; expected ~35–40% off the detector). `roi_crops` on
   the dashboard metrics shows the crop volume.
 
+- **`Stuzha` → "STOO-zha", and `maam` → "mam".** Both engines read the
+  Nod-Krai name as `stˈʌʒə`, "STUH-zhuh": the zh is already right and the u
+  is the /ʌ/ of "cut" where the Russian Стужа has the /uː/ of "stool".
+  `Stoozha` is `stˈuʒə` on both — the one wrong vowel fixed and nothing else
+  moved. Unhyphenated deliberately: `Stoo-zhah` is `stˈuʒˈɑ`, a second
+  stressed chunk and an open final a where the name ends on a schwa, and
+  `Stoo-zhuh` (`stˈuʒˈʌ`) buys the same stress for the right vowel. She is
+  on neither playable roster, so the entry sits with the other NPCs; the
+  auto-caster's shape fallback already reads a final "-a" as feminine, so
+  no gender entry was added. "ma'am" as the game writes it needs no entry —
+  it is `mˈæm` on both engines already — but the apostrophe-less form an
+  OCR miss leaves behind is `mˈɑm`, "mahm" with the open a of "father", so
+  `maam` → `mam` is the entry that fires. Run
+  `python tools/pronounce_names.py --write` on **each** machine —
+  `voices.json` is gitignored, and a pull never updates pronunciations.
+
 - **`Snezhnaya` → "snezh-NAH-yuh" (and `Snezhnayan(s)` → "-yun(s)").** Both
   engines read the raw name as `snˈɛʒnAə`, "snezh-NAY-uh" — the zh survives
   but "naya" collapses to /neɪə/. `Snezh-nah-yuh` is `snˈɛʒnˈɑjˈʌ` /
