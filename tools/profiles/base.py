@@ -252,22 +252,25 @@ class Profile:
                 state["choices"].append(b)
 
         # Drop ghost duplicates: the text fade-in makes Vision sometimes
-        # return BOTH a stale partial and the full line as overlapping boxes
-        # on one row — keep only the widest box where horizontal spans overlap
-        rows = {}
-        for b in state["dialogue"]:
-            rows.setdefault(self._row(b), []).append(b)
+        # return BOTH a stale partial and the full line as overlapping boxes.
+        # Judged on the boxes' real geometry, not on row buckets: a ghost is
+        # a SECOND reading of text already covered by a kept box, and it can
+        # sit anywhere the drawn text sits — rec_20260812_083939 returned a
+        # double-height re-read of row one ("Wow, its so majestic Just
+        # Flyin") straddling the gap between the two real rows, so row
+        # quantization filed it alone in its own bucket and it sailed into
+        # the middle of the assembled line. Widest first: the widest box of
+        # an overlap cluster is the fullest reading of that text.
         kept = []
-        for row in rows.values():
-            row.sort(key=lambda b: -b["w"])
-            chosen = []
-            for b in row:
-                x0, x1 = b["x"], b["x"] + b["w"]
-                if any(max(0.0, min(x1, c["x"] + c["w"]) - max(x0, c["x"]))
-                       > 0.6 * b["w"] for c in chosen):
-                    continue
-                chosen.append(b)
-            kept.extend(chosen)
+        for b in sorted(state["dialogue"], key=lambda b: -b["w"]):
+            x0, x1 = b["x"], b["x"] + b["w"]
+            y0, y1 = b["y"], b["y"] + b["h"]
+            if any(max(0.0, min(x1, c["x"] + c["w"]) - max(x0, c["x"]))
+                   > 0.6 * b["w"]
+                   and max(0.0, min(y1, c["y"] + c["h"]) - max(y0, c["y"]))
+                   > 0.5 * min(b["h"], c["h"]) for c in kept):
+                continue
+            kept.append(b)
         state["dialogue"] = kept
 
         # Merge: rows top-to-bottom, fragments left-to-right within a row

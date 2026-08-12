@@ -1042,6 +1042,21 @@ def window_verdict(new_norm, speaker, recent_lines):
             return True, None        # drop a row, leaving just a tail
         if len(o) >= 30 and o in new_norm and len(new_norm) - len(o) <= 25:
             return True, None   # long recent line wrapped in OCR ghost-junk
+        # pure insertion: the new line IS the recent line with junk spliced
+        # into the middle — an OCR ghost box re-reading a row it already
+        # read lands between the real rows and breaks the contiguity the
+        # substring check above needs ("…leave Paimon [Wow, its so majestic
+        # Just Flyin] out of breath"). A 25-char splice into an 83-char line
+        # also scores 0.869, under the 0.90 ratio. Only equal/delete opcodes
+        # means the recent line survives IN ORDER and IN FULL; ≤3 equal runs
+        # keeps this to real splices — a coincidental subsequence of a
+        # genuinely new line would be shredded into many fragments.
+        if len(o) >= 30 and len(o) < len(new_norm) <= 2 * len(o):
+            ops = difflib.SequenceMatcher(None, new_norm, o,
+                                          autojunk=False).get_opcodes()
+            if (all(op[0] in ("equal", "delete") for op in ops)
+                    and sum(1 for op in ops if op[0] == "equal") <= 3):
+                return True, None
         # fuzzy tail: OCR jitter re-reads the last visual row with a
         # near-miss ("thereetoo" vs "thereatoo") that exact substring
         # checks can't catch
