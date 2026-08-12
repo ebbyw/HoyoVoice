@@ -411,6 +411,10 @@ class AudioCapture:
 class OcrDaemon:
     """tools/ocrd_win.py subprocess — same line protocol as the mac daemon."""
 
+    # neither Windows engine reads the lexicon (see ocrd_win.py), so a
+    # casting change is no reason to pay a multi-second model reload
+    uses_custom_words = False
+
     def __init__(self, root, custom_words):
         self.root = Path(root)
         self.custom_words = Path(custom_words)
