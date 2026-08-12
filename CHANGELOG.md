@@ -164,6 +164,19 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **A choice option no longer reads its bubble icon aloud.** Vision fuses
+  the option marker into the first text block, and the misread varies by
+  frame: shot #35 (2026-08-12) spoke "registered sign — Feeling better
+  now?" from `® Feeling better now?`, and the shots corpus also holds
+  `® Inspection?` and `# Goodbye.`. Options now strip 1–2 leading
+  SYMBOL-class characters at the point where choice rows are joined
+  (`option_text` in profiles/base.py) — by class, not literal glyph,
+  because the icon reads differently every time. Leading quotes,
+  ellipses, dots, parens and brackets survive: "...Is that so?" and
+  "(Say nothing)" are real option text. Swept all 351 captured shots
+  through both profiles: exactly the four icon-fused strings change,
+  nothing else — no speaker, dialogue, or trust decision moved.
+
 - **The mac OCR daemon wedged after ~45 seconds of dialogue — every frame
   then read as lost and nothing was spoken.** The URL-decode change in
   the review pass above (`VNImageRequestHandler(url:)`) turned out to

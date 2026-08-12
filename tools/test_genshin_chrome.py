@@ -106,8 +106,42 @@ FRAMES = [
 ]
 
 
+# The chat-bubble glyph on a choice option fuses into the first OCR block
+# and reads as a stray symbol — shot #35 (2026-08-12) said '® Feeling
+# better now?' aloud ("registered sign feeling better now"); the shots
+# corpus also holds '® Inspection?' and '# Goodbye.', so the misread
+# varies and the strip must be by symbol class, not by literal glyph.
+# Leading quotes, ellipses and parens are real option text and survive.
+# Geometry is shot #35's: option at x=0.669 y=0.264 with a Paimon line
+# under it.
+CHOICE_ICON_CASES = [
+    ("® Feeling better now?", "Feeling better now?"),
+    ("# Goodbye.", "Goodbye."),
+    ("...Is that so?", "...Is that so?"),
+    ("(Say nothing)", "(Say nothing)"),
+    ('"You\'re welcome."', '"You\'re welcome."'),
+]
+
+
+def choice_frame(option_text):
+    return [
+        block("Paimon", 0.5, 0.212, w=0.057, h=0.028),
+        block("Looks like you get what you pay for, huh!",
+              0.5, 0.155, w=0.45, h=0.033),
+        {"text": option_text, "confidence": 1.0,
+         "x": 0.669, "y": 0.25, "w": 0.15, "h": 0.028},
+        block("• Auto", 0.836, 0.064, w=0.052, h=0.033),
+        block("Confirm", 0.911, 0.062, w=0.054, h=0.025),
+    ]
+
+
 def main():
     bad = 0
+    for raw, want in CHOICE_ICON_CASES:
+        got = GENSHIN.classify(choice_frame(raw))["choices"]
+        if got != [want]:
+            print(f"FAIL choice icon {raw!r}: want [{want!r}], got {got}")
+            bad += 1
     for name, blocks, speaker, dialogue in FRAMES:
         state = GENSHIN.classify(blocks)
         got = (state["speaker"], state["dialogue"])
@@ -127,7 +161,7 @@ def main():
         if GENSHIN.trusts_dialogue(blocks) is not want:
             print(f"FAIL trust {name}: want {want}")
             bad += 1
-    total = 2 * len(FRAMES)
+    total = 2 * len(FRAMES) + len(CHOICE_ICON_CASES)
     print(f"{total - bad}/{total} ok")
     return 1 if bad else 0
 
