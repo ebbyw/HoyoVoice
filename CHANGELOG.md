@@ -164,6 +164,25 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **The mac OCR daemon wedged after ~45 seconds of dialogue — every frame
+  then read as lost and nothing was spoken.** The URL-decode change in
+  the review pass above (`VNImageRequestHandler(url:)`) turned out to
+  leak one file descriptor per request, permanently open on
+  `live_frame.jpg`: 242 leaked fds observed on a live session's daemon,
+  right at zsh's default 256 limit, after which every `open()` fails
+  instantly — Vision throws in ~2ms, the daemon answers `[]` forever,
+  and the app counts `lost_frames` at full frame rate (the session's
+  metrics read `ocr_avg_ms: 2`, `lost_frames: 2732`, one line spoken at
+  startup before the limit hit). The daemon now decodes the frame itself
+  via CGImageSource (`ShouldCache=false`) inside a per-frame
+  autoreleasepool and hands Vision a bare CGImage: 0 leaked fds over a
+  510-frame soak, output byte-identical to the previous binary. Vision
+  on macOS 26.5 also retains ~6 MB RSS per recognized frame regardless
+  of how the image is handed over — mostly purgeable, so footprint grows
+  far slower than RSS — and a footprint-bounded self-recycle
+  (1.5 GB → clean exit, live.py's existing respawn path restarts it)
+  insures against that ever becoming real dirty memory on a future OS.
+
 - **A dialogue-advance click can no longer silence a streamed first
   sentence.** "I was a disappointment. I never got into an art school…"
   (2026-08-12, 10:00 log) lost its first sentence: sentence streaming put
