@@ -111,10 +111,19 @@ class AudioCapture:
 class OcrDaemon:
     """Apple Vision daemon (tools/ocrd): image path in, JSON blocks out."""
 
+    # Vision reads the custom-words lexicon at spawn, so a casting change
+    # can be picked up by restarting the daemon (cheap here — ocrd starts
+    # in well under a second, unlike the Windows model load)
+    uses_custom_words = True
+
     def __init__(self, root, custom_words):
         self.root = Path(root)
         self.custom_words = Path(custom_words)
         self.proc = None
+        self._spawn()
+
+    def restart(self):
+        self.kill()
         self._spawn()
 
     def _spawn(self):
