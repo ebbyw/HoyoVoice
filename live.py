@@ -214,9 +214,13 @@ CHOICE_VO_LOOKBACK = 1.0
 # moment the line under it clears the gate, or dropped when the next line
 # fires; this only catches the case where that line never gets there.
 CHOICE_PENDING_TTL = 20.0
-# Once the line under it has cleared the gate, the option waits for a gap
-# in the talking. If the scene runs on without one for this long, the read
-# would arrive as an interruption several beats late — drop it instead.
+# Once the line under it has cleared the gate AND the option has left the
+# screen, it waits this long for a gap in the talking before being dropped
+# — past that, the read would arrive as an interruption several beats
+# late. While the prompt is still visible the clock refreshes every frame:
+# the game is paused waiting for the player, so no wait is "late", and
+# counting from arming raced the under-line's own voiceover (armed at
+# gate-fire ≈ VO start, so every option under a >8s voiced line lost).
 CHOICE_STALE_AFTER = 8.0
 # How long to keep looking for a line under the option before giving up and
 # reading it anyway. There may be nothing to wait for: a wordless "..." (or
@@ -2384,11 +2388,13 @@ def main():
             latest_ocr["text_blocks"] = (state.get("boxes")
                                          if state["dialogue"] else None)
 
-            # Choice prompts. A LONE option is read aloud: with nothing to
-            # choose between, the game isn't offering a menu so much as
-            # putting words in the player character's mouth, and it reads as
-            # part of the scene. Two or more ARE a menu — reading those would
-            # narrate a UI — so they're logged and left unspoken.
+            # Choice prompts. Up to TWO options are read aloud: a lone
+            # option is the game putting words in the player character's
+            # mouth, and a pair still reads as the player weighing their
+            # answer — both land as part of the scene (the two-option read
+            # is a user preference, 2026-08-12; it was previously lone-only).
+            # Three or more ARE a menu — reading those would narrate a UI —
+            # so they're logged and left unspoken.
             #
             # Either way it takes the same read twice: the option list renders
             # all at once rather than typing, but OCR still jitters the first
@@ -2398,7 +2404,7 @@ def main():
             opts_norm = normalize_text(" ".join(opts))
             settled = bool(opts_norm) and opts_norm == choice_prev
             fresh = settled and not same_line(opts_norm, choice_logged)
-            if fresh and len(opts) > 1:
+            if fresh and len(opts) > 2:
                 choice_logged = opts_norm
                 add_event("choice prompt (not read)", "choice", None,
                           " · ".join(opts), shot=True)
@@ -2417,7 +2423,14 @@ def main():
                 # could: the read only ever landed if arming and a gap in
                 # the talking happened to fall on the same pass.
                 choice_logged = opts_norm
-                pending_choice = {"text": opts[0], "armed": False,
+                # Two options join with an ellipsis: punctuation only, no
+                # invented words, and Kokoro reads it as the beat between
+                # alternatives. `opts` (not the joined text) rides along so
+                # each option can enter the dedupe window separately — the
+                # game echoes whichever ONE the player picks as the next
+                # dialogue line, and the joined norm would never match it.
+                pending_choice = {"text": " … ".join(opts), "opts": opts,
+                                  "seen": opts_norm, "armed": False,
                                   "line": normalize_text(state["dialogue"]),
                                   "t": time.monotonic()}
             if pending_choice:
@@ -2447,6 +2460,19 @@ def main():
                 if (not pending_choice["armed"]
                         and same_line(fired_norm, pending_choice["line"])):
                     pending_choice["armed"] = True
+                    pending_choice["t"] = time.monotonic()
+                # While the option is still ON SCREEN the read cannot be
+                # "late" — the game is paused waiting for the player. The
+                # stale clock must measure time since the option LEFT the
+                # screen (the scene moved on), so it refreshes on every
+                # frame that still shows the prompt. Without this the 8s
+                # window raced the under-line's own voiceover: arming
+                # happens at gate-fire, which is the START of the VO, so
+                # any option under a line voiced longer than ~8s was
+                # dropped as too late while the NPC was still speaking —
+                # two in a row in the 2026-08-12 11:52 Snezhnaya session.
+                if (pending_choice["armed"]
+                        and same_line(opts_norm, pending_choice["seen"])):
                     pending_choice["t"] = time.monotonic()
                 if time.monotonic() - pending_choice["t"] > (
                         CHOICE_STALE_AFTER if pending_choice["armed"]
@@ -2479,10 +2505,15 @@ def main():
                 stats["spoken"] += 1
                 choice_logged = normalize_text(text)
                 last_spoken_norm = normalize_text(text)
-                # into the dedupe window: picking a lone option usually makes
+                # into the dedupe window: picking an option usually makes
                 # the game say it back as a dialogue line, which would
-                # otherwise be read a second time
-                recent_lines.append({"speaker": spk, "norm": last_spoken_norm})
+                # otherwise be read a second time. Each option enters
+                # SEPARATELY — the echo is whichever one the player picked,
+                # and a joined two-option norm matches neither.
+                for opt in pending_choice["opts"]:
+                    recent_lines.append(
+                        {"speaker": spk,
+                         "norm": normalize_text(fix_ocr_text(opt))})
                 pending_choice = None
                 yield_event_id = add_event(
                     "choice (read)", "spoken", spk, text, voice, speed,
