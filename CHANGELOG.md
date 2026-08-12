@@ -6,6 +6,33 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **Anchor ROI cropping (OCR plan phase 4b), off by default behind
+  `settings.anchor_roi`.** When the matched anchor chrome implies a screen
+  kind, OCR now reads only that kind's ROI — detector cost scales with
+  area, and the ROI is the bottom two-thirds of the frame (the union of
+  every band the profile needs: bands read off the profiles, HSR
+  `y ≤ 0.62`, Genshin `y ≤ 0.66`, both full-width; derivations in
+  plans/ANCHORS.md). The crop is written lossless (PNG — the frame is
+  already one JPEG generation old, and a second lossy pass softens
+  exactly the glyphs the crop exists to read) and every returned box is
+  remapped to full-frame coordinates at the OCR call boundary, so
+  classify and everything downstream never see crop space. The rules the
+  change gate paid for apply unchanged: no anchor match → full frame
+  (absence is weak evidence), and a bounded crop run
+  (`ANCHOR_MAX_CROP_RUN`, ~2s) forces a periodic full-frame read so a
+  wrong "crop here" can defer, never latch. Verified by replaying a
+  Genshin and an HSR recording with the setting off and on, against an
+  off-vs-off control pair: wall-clock replay flips a handful of marginal
+  VAD-gate lines between ANY two runs (the audio bed carries the
+  original session's TTS), and every on-vs-off difference site also
+  differed off-vs-off — no systematic change, details in
+  plans/ANCHORS.md. Off by default until the `ocr_ms` drop is measured
+  on the Windows box, which is where the win matters (~554ms/frame
+  RapidOCR there; expected ~35–40% off the detector). `roi_crops` on
+  the dashboard metrics shows the crop volume.
+
 ### Changed
 
 - **OCR stack review pass (four small fixes).** (1) The Windows RapidOCR
