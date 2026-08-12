@@ -101,8 +101,9 @@ game = ProfileSelector(VOICES.get("settings", {}).get("game", "auto"),
 SAMPLE_FPS = 6
 STABLE_READS = 2
 # OCR confidence thresholds for stabilization (classify() reports the
-# weakest block that made the line; engines without confidences say 1.0,
-# which leaves behavior exactly as before). Measured on real captures: a
+# weakest block that made the line; an engine without confidences reports
+# a flat 0.90 — inside the neutral band below, where no rule fires).
+# Measured on real captures: a
 # settled line reads at 0.98+, a mid-fade / half-rendered one visibly lower.
 CONF_TRUSTED = 0.97           # skip the sentence-streaming cushion read
 CONF_SHAKY = 0.85             # earn one extra sighting before speaking
@@ -305,6 +306,11 @@ recording = {"on": False, "t0": None, "clips": [], "raw": None,
              "parts": []}
 record_request = {"want": None}
 device_request = {"want": None}
+# set by casting edits (assign/delete): the OCR lexicon file is stale.
+# Only DASHBOARD edits raise it — auto-cast also adds characters, but
+# restarting the daemon every time a new NPC speaks would be churn for a
+# name the recognizer already managed to read once.
+lexicon_stale = {"flag": False}
 unknown_speakers = set()
 if UNKNOWN_LOG.exists():
     unknown_speakers.update(
@@ -1668,6 +1674,7 @@ def handle_commands(speech, recent_lines):
             VOICES["characters"][char].setdefault("speed", 1.0)
             VOICES["characters"][char].pop("auto", None)   # now user-chosen
             VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+            lexicon_stale["flag"] = True
             print(f"[cast] {char} → {voice}", flush=True)
             for e in reversed(events):
                 if e["speaker"] == char and e["can_replay"]:
@@ -1720,6 +1727,7 @@ def handle_commands(speech, recent_lines):
                 UNKNOWN_LOG.write_text("\n".join(
                     n for n in UNKNOWN_LOG.read_text().splitlines()
                     if n.strip() and n.strip() != char) + "\n")
+            lexicon_stale["flag"] = True
             print(f"[deleted] {char}", flush=True)
         elif cmd[0] == "addvoice":
             _, src, name, key = cmd
@@ -1957,6 +1965,17 @@ def main():
         while True:
             time.sleep(0.03)
             handle_commands(speech, recent_lines)
+            if lexicon_stale["flag"]:
+                # casting changed: rewrite the lexicon and, where the OCR
+                # engine actually reads it (Apple Vision), restart the
+                # daemon so a newly cast name helps recognition NOW rather
+                # than after the next app restart
+                lexicon_stale["flag"] = False
+                custom_words_file()
+                if getattr(ocr, "uses_custom_words", False):
+                    ocr.restart()
+                    print("[ocr] lexicon refreshed — daemon restarted",
+                          flush=True)
             now = time.monotonic()
             if speech.playing:
                 # when our voice was last busy — a held choice option waits
