@@ -103,6 +103,35 @@ CASES = [
 ]
 
 
+# A key ending in a period ("Ms.") takes no trailing \b — between "." and the
+# following space there is no word boundary, and the old pattern demanded one,
+# so such an entry never fired. Pinned with an injected map rather than the
+# real table: asserting a new table entry would fail every install that
+# hasn't re-run pronounce_names.py --write (see the note at the end of CASES).
+BOUNDARY_CASES = [
+    ("Ms. Herta is waiting.", "Miss Herta is waiting."),
+    # case jitter is still covered
+    ("ms. herta", "Miss herta"),
+    # the key must not reach inside a longer token
+    ("Realms. Herta counts three.", "Realms. Herta counts three."),
+]
+
+
+def check_period_boundary():
+    saved = live.VOICES
+    live.VOICES = {"settings": {"pronunciations": {"Ms.": "Miss"}}}
+    try:
+        bad = 0
+        for line, want in BOUNDARY_CASES:
+            got = live.spoken_form(line)
+            if got != want:
+                print(f"FAIL {line!r}\n  want {want!r}\n  got  {got!r}")
+                bad += 1
+        return bad
+    finally:
+        live.VOICES = saved
+
+
 def main():
     bad = 0
     pron = live.VOICES.get("settings", {}).get("pronunciations", {})
@@ -114,12 +143,14 @@ def main():
         if got != want:
             print(f"FAIL {line!r}\n  want {want!r}\n  got  {got!r}")
             bad += 1
+    bad += check_period_boundary()
     exact = live.VOICES["settings"].get("pronunciations_exact", [])
     for name in exact:
         if name not in pron:
             print(f"FAIL {name!r} is in pronunciations_exact with no spoken form")
             bad += 1
-    print(f"{len(CASES) + len(exact) - bad}/{len(CASES) + len(exact)} ok")
+    total = len(CASES) + len(BOUNDARY_CASES) + len(exact)
+    print(f"{total - bad}/{total} ok")
     return 1 if bad else 0
 
 
