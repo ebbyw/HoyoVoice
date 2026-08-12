@@ -138,6 +138,15 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Changed
 
+- **Two-option prompts are now read aloud, not just lone ones.** A pair
+  of options still reads as the player weighing their answer rather than
+  as a menu (user preference, 2026-08-12); three or more remain
+  logged-only UI. The two texts join with an ellipsis — punctuation, not
+  invented words, and Kokoro reads it as the beat between alternatives.
+  Each option enters the dedupe window separately, because the game
+  echoes whichever ONE the player picks as the next dialogue line and a
+  joined norm would match neither.
+
 - **OCR stack review pass (four small fixes).** (1) The Windows RapidOCR
   path re-ran the full OCR on the raw frame whenever the
   background-flattened pass read nothing — a safety net for screens the
@@ -163,6 +172,19 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   reads the lexicon, and the model reload costs seconds).
 
 ### Fixed
+
+- **An option under a long voiced line is no longer dropped as "too
+  late".** The stale window (8s) started counting at arming, and arming
+  happens when the line under the option clears the gate — which for a
+  voiced line is the *start* of its voiceover, not the end. Any option
+  sitting over a line voiced longer than ~8s was deterministically
+  dropped mid-sentence ("choice prompt (not read — too late)" twice in
+  a row in the 2026-08-12 11:52 Snezhnaya session, both under long
+  voiced lines, while the short-VO "Feeling better now?" case read
+  fine). The clock now refreshes on every frame the prompt is still on
+  screen — the game is paused waiting for the player, so no wait is
+  late — and only runs once the option leaves the screen, which is the
+  scene-moved-on case the 8s bound was written for.
 
 - **A choice option no longer reads its bubble icon aloud.** Vision fuses
   the option marker into the first text block, and the misread varies by
