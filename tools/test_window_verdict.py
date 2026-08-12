@@ -74,6 +74,34 @@ CASES = [
     ("unrelated line", w(("Paimon", "This is the spot")), "Leyla",
      "Hmm. Just as I thought.", "new"),
     ("empty window", [], "Leyla", "Master Ororon said so.", "new"),
+
+    # --- pure insertion: an OCR ghost box splices a re-read of one row
+    # into the middle of a line already spoken. Verbatim from
+    # rec_20260812_083939: the splice lands mid-line, so the substring
+    # rule can't see the recent line contiguously, and a 25-char splice
+    # into an 83-char line scores 0.869 — under the 0.90 ratio. With a
+    # 1-deep window each miss evicts the clean entry, so the clean line
+    # and its ghost variant ping-ponged and the same line was spoken
+    # four times in fifteen seconds.
+    ("ghost splice mid-line is a dup",
+     w(("Paimon", "Wow, it's so majestic! Just flying from one side to the"
+        " other would probably leave Paimon out of breath…")), "Paimon",
+     "Wow, it s so majestic! Just flying from one side to the other would"
+     " probably leave Paimon Wow, its so majestic Just Flyin out of breath…",
+     "dup"),
+    ("ghost splice with different jitter is still a dup",
+     w(("Paimon", "Wow, it's so majestic! Just flying from one side to the"
+        " other would probably leave Paimon out of breath…")), "Paimon",
+     "Wow, it's so majestic! Just flying from one side to the other would"
+     " probably leave Paimon Wow, it's so majestic! just flyin out of"
+     " breath…", "dup"),
+    # a genuinely new line that shares phrases with the recent one is NOT
+    # a splice: the recent line does not survive in order and in full
+    ("shared phrasing is not a splice",
+     w(("Paimon", "Wow, it's so majestic! Just flying from one side to the"
+        " other would probably leave Paimon out of breath…")), "Paimon",
+     "Just flying from one side of Dragonspine to the other would leave"
+     " anyone out of breath, honestly.", "new"),
 ]
 
 
