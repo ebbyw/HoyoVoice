@@ -186,6 +186,19 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   late — and only runs once the option leaves the screen, which is the
   scene-moved-on case the 8s bound was written for.
 
+- **An option can no longer die unarmed while its prompt is still on
+  screen.** The first session after the fix above hit the OTHER expiry
+  path (12:02:49): arming compares the fired line against a norm of the
+  line-under captured when the option first settled — but the bubble
+  renders whole while that line is still typewriting (or while the
+  previous line is still up), so the frozen snapshot never matched the
+  completed line and the option sat unarmed to its 20s TTL. Two
+  repairs: the tracked line-under now follows the box as it types
+  instead of freezing the first sighting, and if the TTL expires with
+  the prompt visibly still on screen anyway, the option is armed and
+  read at the next quiet gap rather than dropped — a rare talk-over
+  beats a skipped line, which is this repo's standing preference.
+
 - **A choice option no longer reads its bubble icon aloud.** Vision fuses
   the option marker into the first text block, and the misread varies by
   frame: shot #35 (2026-08-12) spoke "registered sign — Feeling better

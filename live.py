@@ -2434,19 +2434,25 @@ def main():
                                   "line": normalize_text(state["dialogue"]),
                                   "t": time.monotonic()}
             if pending_choice:
-                if not pending_choice["armed"] and not pending_choice["line"]:
-                    # NOTHING under the bubble to wait for. The line below
-                    # is a wordless "..." (or the box is empty, or OCR can't
-                    # read it) — it normalizes to nothing, and same_line()
-                    # never matches an empty string, so the wait below could
-                    # never end and the option was never read at all.
-                    # Prefer a real line if one turns up: the bubble renders
-                    # whole while the line under it is still typing, so an
-                    # empty first sighting is often just early.
+                if not pending_choice["armed"]:
+                    # The bubble floats above whatever the box below shows
+                    # RIGHT NOW, and it renders whole while that line is
+                    # still typing — or while the PREVIOUS line is still up.
+                    # A norm frozen at the option's first settle therefore
+                    # never matches the completed line that fires, and the
+                    # option sat unarmed to its 20s TTL and dropped as "too
+                    # late" while the player was still on the screen
+                    # (12:02:49, 2026-08-12: option over "It must be a
+                    # pretty powerful one…" — the line fired at 12:02:30,
+                    # but against a mid-typewriter snapshot). Track the
+                    # line as it grows instead of freezing the first
+                    # sighting; the empty case ("…", or OCR reading
+                    # nothing) keeps its grace-then-arm.
                     below = normalize_text(state["dialogue"])
                     if below:
                         pending_choice["line"] = below
-                    elif (time.monotonic() - pending_choice["t"]
+                    elif (not pending_choice["line"]
+                            and time.monotonic() - pending_choice["t"]
                             >= CHOICE_EMPTY_GRACE):
                         pending_choice["armed"] = True
                         pending_choice["t"] = time.monotonic()
@@ -2477,12 +2483,24 @@ def main():
                 if time.monotonic() - pending_choice["t"] > (
                         CHOICE_STALE_AFTER if pending_choice["armed"]
                         else CHOICE_PENDING_TTL):
-                    # armed but never found a gap to speak in (the scene ran
-                    # on), or the line under it never cleared the gate at all
-                    add_event("choice prompt (not read — too late)", "choice",
-                              None, pending_choice["text"])
-                    choice_logged = normalize_text(pending_choice["text"])
-                    pending_choice = None
+                    if (not pending_choice["armed"]
+                            and same_line(opts_norm, pending_choice["seen"])):
+                        # 20s and the line under it never cleared the gate —
+                        # but the prompt is STILL ON SCREEN, so the game is
+                        # waiting on the player and OCR may simply never
+                        # manage that line. A rare talk-over beats a skipped
+                        # line: arm it and read at the next quiet gap, same
+                        # as if the line had fired.
+                        pending_choice["armed"] = True
+                        pending_choice["t"] = time.monotonic()
+                    else:
+                        # armed but never found a gap to speak in (the scene
+                        # ran on), or the line never fired and the prompt is
+                        # already gone
+                        add_event("choice prompt (not read — too late)",
+                                  "choice", None, pending_choice["text"])
+                        choice_logged = normalize_text(pending_choice["text"])
+                        pending_choice = None
             if (pending_choice and pending_choice["armed"]
                     and not speech.playing
                     and now - speech_busy_t >= CHOICE_LEAD_IN
