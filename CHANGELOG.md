@@ -6,6 +6,22 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Added
+
+- **`Snezhnaya` → "snezh-NAH-yuh" (and `Snezhnayan(s)` → "-yun(s)").** Both
+  engines read the raw name as `snˈɛʒnAə`, "snezh-NAY-uh" — the zh survives
+  but "naya" collapses to /neɪə/. `Snezh-nah-yuh` is `snˈɛʒnˈɑjˈʌ` /
+  `snˈɛʒnˈɑːjˈʌ`: every vowel lands and the ʒ is kept, which is what the
+  ear-gloss "nehj" reaches for (a hard /ʤ/ variant, `Snej-nah-yuh`, was
+  measured and recorded in the table comment as the swap if ʒ doesn't
+  convince by ear). Chunked despite the stress cost because the
+  unhyphenated tails pronounce their h (`Snezh-nahyah` is "snezh-NAH-hee-uh").
+  The adjective is wrong the same way and substitution is word-bounded, so
+  `Snezhnayan` and `Snezhnayans` get their own entries. Capitalised terms,
+  so `--custom-words` pins them in the OCR vocabulary. Run
+  `python tools/pronounce_names.py --write` on **each** machine —
+  `voices.json` is gitignored, and a pull never updates pronunciations.
+
 ### Changed
 
 - **OCR stack review pass (four small fixes).** (1) The Windows RapidOCR
