@@ -37,6 +37,30 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **An OCR ghost box no longer splices itself into a line — or gets the
+  same line spoken four times.** During the Snezhnograd station cutscene
+  (rec_20260812_083939, shots #289/#292/#310/#313) Vision returned Paimon's
+  two-row line plus a THIRD, double-height box re-reading row one ("Wow,
+  its so majestic Just Flyin") that sat straddling the gap between the real
+  rows. The existing ghost filter compares boxes within LINE_H row buckets,
+  and the straddler quantized into row two's bucket where it overlapped
+  nothing horizontally — so it assembled into the middle of the line. The
+  garbage variant then beat every dedupe rule (a 25-char mid-line splice
+  into an 83-char line scores 0.869 against the 0.90 ratio, and breaks the
+  contiguity the substring rules need), and with the deliberately 1-deep
+  window each miss evicted the clean entry: clean line and ghost variant
+  ping-ponged, and one line went out four times in fifteen seconds, over
+  Paimon's own voiceover. Two independent fixes, either sufficient for this
+  recording: the ghost filter now judges overlap on the boxes' real
+  geometry instead of row buckets (kills the ghost at the source — replayed
+  against all 303 captured shots, the only dialogue that changes is this
+  ghost line, four shots of it), and `window_verdict` gained a
+  pure-insertion rule — a line that is a recent line with junk spliced in,
+  surviving in order and in full, is a dup, not news. Replay A/B over the
+  failing 32 seconds: unpatched re-fires the line three times after first
+  speak; patched re-fires zero and stops polluting Paimon's voiced prior
+  with repeat observations of one line.
+
 - **A pronunciation key ending in a period could never match.** The
   substitution wrapped every key in `\b…\b`, and after a trailing period the
   closing `\b` demands a word character where the following space is — so a
