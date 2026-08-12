@@ -8,6 +8,31 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **Genshin comms messages are read (Snezhnaya 6.x, "Eye of Graeae").**
+  The new update delivers lines over the top of open gameplay with the
+  sender's nameplate anchored to the LEFT edge of the line instead of
+  centered, in a stylized font. Measured off shot #127 (2026-08-12): the
+  plate sits at cx=0.401 — well left of the regular plate band's 0.45
+  floor — so `find_plate` never took it, the line fell to the plate-less
+  fallback band, and the no-story-chrome gate dropped it
+  (`skipped (unknown speaker, no story chrome)` in the session log). A
+  comms message floats over the live HUD, so there is no chrome to demand;
+  the new `classify_comms` detector uses the geometry itself as the trust
+  signal — exactly one plate-shaped block in the plate band, in the
+  left-anchored x-band (0.30–0.45, whose ceiling is the regular band's
+  floor, so a plate is either centered or comms, never both), anchored
+  within (−0.02, +0.06) of the dialogue rows' left edge (the sender icon
+  isn't OCR'd, which offsets the plate text 0.023 right), and nothing else
+  in the band. The stylized font reads at conf 0.5 and misreads "Graeae"
+  as "Gnaeae" — the plate slot already takes weak reads (PLATE_MIN_CONF
+  0.3, the Tenoyollotzin precedent) and the caster's fuzzy speaker match
+  owns the misspelling once the sender is cast. Wired into the
+  unknown-speaker skip path only, so regular dialogue is untouched; swept
+  against all 351 captured shots, the detector fires on exactly the one
+  comms frame and nothing else. One frame of evidence so far — multi-row
+  messages and other senders will need their own measurements when they
+  appear.
+
 - **`Ms.` → "Miss", `Imagenae` → "imagine-nay", `Gilgamesh` → "gil-GAH-mesh".**
   `Ms.` is Windows-only and the worst kind of wrong: espeak reads the LETTERS
   — `ˌɛmˈɛs`, "em-ess" (misaki says `mˈɪz`); "Miss" is `mˈɪs` on both. It is

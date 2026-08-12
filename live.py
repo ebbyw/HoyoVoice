@@ -2455,17 +2455,29 @@ def main():
                          or (spk or "").lower() == "narrator"
                          or spk in VOICES.get("always_voiced", []))
                 if not known and not screens.trusts_dialogue(blocks):
-                    # visible in the log (once per line): silent drops here
-                    # made missing-speaker/missing-hint issues undiagnosable.
-                    # Keyed on TEXT ONLY — the speaker read jitters too
-                    # ("Goldy" / "MysteriousGoldy") and would defeat this.
-                    utext = normalize_text(state["dialogue"])
-                    if utext and not same_line(utext, last_unknown_logged):
-                        last_unknown_logged = utext
-                        add_event("skipped (unknown speaker, no story chrome)",
-                                  "skip", spk, state["dialogue"], shot=True)
-                    candidate, candidate_count = None, 0
-                    continue
+                    # a comms message floats over the live HUD with no
+                    # chrome at all — its left-anchored plate geometry is
+                    # the trust signal instead, and it carries the speaker
+                    # find_plate's centered band can't take
+                    comms = screens.classify_comms(blocks)
+                    if comms:
+                        state = {"speaker": comms[0], "dialogue": comms[1],
+                                 "choices": []}
+                        screen_kind = "comms"
+                    else:
+                        # visible in the log (once per line): silent drops
+                        # here made missing-speaker/missing-hint issues
+                        # undiagnosable. Keyed on TEXT ONLY — the speaker
+                        # read jitters too ("Goldy" / "MysteriousGoldy")
+                        # and would defeat this.
+                        utext = normalize_text(state["dialogue"])
+                        if utext and not same_line(utext, last_unknown_logged):
+                            last_unknown_logged = utext
+                            add_event(
+                                "skipped (unknown speaker, no story chrome)",
+                                "skip", spk, state["dialogue"], shot=True)
+                        candidate, candidate_count = None, 0
+                        continue
 
             miss_streak = 0          # a real read: the line is on screen
             state["speaker"] = normalize_speaker(state["speaker"])
