@@ -498,6 +498,62 @@ class Genshin(Profile):
             state["choices"] = []
         return state
 
+    # Comms message (Snezhnaya 6.x): a line delivered over the top of open
+    # gameplay — the Eye of Graeae's "You have a new message…" — with the
+    # nameplate anchored to the LEFT edge of its line instead of centered.
+    # Measured off shot #127 (2026-08-12): plate "Eye of Gnaeae" cy=0.213
+    # cx=0.401, left edge 0.361, conf 0.5 (the stylized font reads weakly,
+    # same as the quoted plates PLATE_MIN_CONF exists for); line cy=0.169
+    # cx=0.500, left edge 0.337, conf 1.0. The plate's cx sits well left of
+    # PLATE_X's 0.45 floor, so find_plate never takes it, the line falls to
+    # the plate-less fallback band, and the no-story-chrome gate drops it.
+    # The x-band's 0.45 ceiling is PLATE_X's floor, so a plate is either
+    # centered or comms, never both.
+    COMMS_PLATE_X = (0.30, 0.45)
+    # plate left edge relative to the line's: the plate text starts 0.023
+    # right of the line (the sender icon isn't OCR'd); centered plates over
+    # a full-width line start far further in.
+    COMMS_ALIGN = (-0.02, 0.06)
+
+    def classify_comms(self, blocks):
+        """(speaker, line) for a comms message overlay, or None.
+
+        There is no chrome to demand — the message floats over the live HUD
+        — so the geometry itself is the trust signal: exactly one short
+        plate-shaped block in the plate band, anchored to the left edge of
+        the dialogue rows below it, and nothing else in the band. Boards
+        and shop grids fill their bands with more than one block."""
+        if self.is_menu(blocks):
+            return None
+        pool = [b for b in blocks if b["confidence"] >= self.PLATE_MIN_CONF
+                and b["text"].strip() not in self.IGNORE]
+        band = [b for b in pool
+                if self.PLATE_Y[0] <= b["y"] + b["h"] / 2 <= self.PLATE_Y[1]]
+        plates = [b for b in band
+                  if self.COMMS_PLATE_X[0] <= b["x"] + b["w"] / 2
+                  < self.COMMS_PLATE_X[1] and b["w"] <= self.PLATE_MAX_W]
+        # one plate, and the band holds NOTHING else: a second block in the
+        # band is a board/menu label column, not a sender
+        if len(plates) != 1 or len(band) != 1:
+            return None
+        plate = plates[0]
+        dlg_top = plate["y"] - 0.004
+        dlg_bot = max(plate["y"] - self.DIALOGUE_SPAN, self.DIALOGUE_MIN_Y)
+        rows = [b for b in self.speakable(blocks)
+                if dlg_bot <= b["y"] + b["h"] / 2 <= dlg_top
+                and self.DIALOGUE_X[0] <= b["x"] + b["w"] / 2
+                <= self.DIALOGUE_X[1]]
+        if not rows:
+            return None
+        if not (self.COMMS_ALIGN[0]
+                <= plate["x"] - min(b["x"] for b in rows)
+                <= self.COMMS_ALIGN[1]):
+            return None
+        rows.sort(key=lambda b: (round((1 - (b["y"] + b["h"] / 2))
+                                       / self.LINE_H), b["x"]))
+        text = " ".join(b["text"] for b in rows)
+        return (plate["text"], text) if len(text) >= 12 else None
+
     def is_plate_subtitle(self, block, plate):
         # boxed layout only — see SUBTITLE_PLATE_MIN_CY
         if plate["y"] + plate["h"] / 2 < self.SUBTITLE_PLATE_MIN_CY:

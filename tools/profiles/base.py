@@ -421,6 +421,11 @@ class Profile:
         """In-game reading panel. Returns ordered body-line texts or None."""
         return None
 
+    def classify_comms(self, blocks):
+        """Comms message over open gameplay (left-anchored nameplate).
+        Returns (speaker, line) or None."""
+        return None
+
     def classify_infoscreen(self, blocks):
         """Profile/info screens. Returns body texts in reading order."""
         return None
