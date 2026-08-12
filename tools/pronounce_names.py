@@ -66,6 +66,13 @@ FIXES = {
     # three stressed syllables (kˈæθˈɜɹˈɪn) where the name has one, and both
     # engines already read "Katherine" as kˈæθɹɪn / kæθɹɪn.
     "Katheryne": "Katherine",
+    # Windows only, like "shaman": misaki already says ɡˈɪlɡəmˌɛʃ, espeak
+    # says ɡˈɪlɡAməʃ — "GIL-gay-mush", an /eɪ/ in the middle and the last
+    # syllable swallowed. "Gil-gah-mesh" is ɡˈɪlɡˈɑmˈɛʃ / ɡˈɪlɡˈɑːmˈɛʃ:
+    # three stressed chunks rather than misaki's schwa, but the open ah is
+    # the reading asked for by ear. "Gilgah-mesh" keeps the schwa
+    # (ɡˈɪlɡəmˈɛʃ on both) and was rejected for it.
+    "Gilgamesh": "Gil-gah-mesh",
     # --- Genshin: pinyin ---
     "Baizhu": "Bye-joo",
     "Beidou": "Bay-doe",
@@ -176,6 +183,25 @@ FIXES = {
 # go into the OCR vocabulary under --custom-words, since a word the recognizer
 # has never seen is the one it fuses into its neighbour.
 TERMS = {
+    # Windows only, and the worst kind of wrong: espeak reads "Ms." as the
+    # LETTERS — ˌɛmˈɛs, "em-ess" (misaki says mˈɪz). "Miss" is mˈɪs on both.
+    # A key ending in a period needs the boundary handling in
+    # live.spoken_form() and check() below: \b after "\." would demand a word
+    # character where the following space is, and the entry would never fire.
+    # The other honorifics were measured and left OUT: "Mrs." is already
+    # mˈɪsɪz ("misses") and "Dr." already dˈɑktəɹ / dˈɑːktɚ on both engines —
+    # entries would change nothing. So were "Aeon"/"Aeons", already
+    # ˈiɑn(z) / ˈiːɑːn(z), "EE-on(z)", on both.
+    "Ms.": "Miss",
+    # ˈɪmɪʤnˌi / ˈɪmɪʤnˌiː on the two engines — "IM-ij-nee", the middle
+    # vowel dropped and the ending read as -ee. The word should be heard as
+    # "imagine" plus "-ay". The literal "imagine-ay" is NOT the respelling: a
+    # standalone "ay" chunk is /aɪ/ on both engines ("im-AJ-in-EYE"), the
+    # same trap as "eh" and "ey" in the header. "Imagin-nay" is ɪmˈæʤɪnnˈA
+    # on both — the doubled n is a held /n/, not a syllable. "Imadgi-nay"
+    # (ɪmˈæʤinˈA) avoids the doubling but shifts the third vowel to /i/,
+    # "im-AJ-ee-nay", and was rejected for it.
+    "Imagenae": "Imagin-nay",
     # unhyphenated on purpose: "aa-shah" phonemizes to ˈɑˌɑʃˌɑ, an extra
     # syllable, and "Ah-shah" splits the two engines (misaki ˌɑʃˈɑ, espeak
     # ˈɑːʃˈɑː). "Ahshaa" is ˈɑʃɑ on both.
@@ -386,7 +412,9 @@ def check(path, sample):
         print("  every name and term in the table is present")
     out = sample
     for word, spoken in pron.items():
-        out = re.sub(rf"\b{re.escape(word)}\b", spoken, out,
+        # mirrors live.spoken_form(): a key ending in "." takes no trailing \b
+        tail = r"\b" if word[-1:].isalnum() else ""
+        out = re.sub(rf"\b{re.escape(word)}{tail}", spoken, out,
                      flags=0 if word in exact else re.IGNORECASE)
     print(f"\n  in:  {sample}\n  out: {out}")
     return 0
@@ -420,8 +448,11 @@ def merge(path, rosters, custom_words):
         # invented words are what OCR fuses worst — but only the invented
         # ones. A term that is an ordinary English word ("shaman") is already
         # in the recognizer's vocabulary, and pinning it there would be a
-        # hint it doesn't need. Capitalisation is the tell.
-        cw.update(t for t in TERMS if t[:1].isupper())
+        # hint it doesn't need. Capitalisation is the tell — and the key has
+        # to be a plain word, or the "Ms." honorific entry would pin a
+        # period-bearing token the recognizer can never emit.
+        cw.update(t for t in TERMS
+                  if t[:1].isupper() and PLAIN_WORD.fullmatch(t))
         # a retired term is no longer worth pinning either — unless it is a
         # real name that a roster also supplies
         roster_words = {w for names in rosters.values() for name in names

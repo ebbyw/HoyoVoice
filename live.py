@@ -810,7 +810,11 @@ def spoken_form(text):
     settings = VOICES.get("settings", {})
     exact = set(settings.get("pronunciations_exact", []))
     for word, spoken in settings.get("pronunciations", {}).items():
-        text = re.sub(rf"\b{re.escape(word)}\b", spoken, text,
+        # a key ending in "." ("Ms.") can't take a trailing \b: between the
+        # period and the following space there is no word boundary, so the
+        # entry would never fire. The period is its own right edge.
+        tail = r"\b" if word[-1:].isalnum() else ""
+        text = re.sub(rf"\b{re.escape(word)}{tail}", spoken, text,
                       flags=0 if word in exact else re.IGNORECASE)
     for pat, rep in _INTERJECTIONS:
         text = pat.sub(_keep_case(rep), text)

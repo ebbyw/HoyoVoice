@@ -8,6 +8,20 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **`Ms.` → "Miss", `Imagenae` → "imagine-nay", `Gilgamesh` → "gil-GAH-mesh".**
+  `Ms.` is Windows-only and the worst kind of wrong: espeak reads the LETTERS
+  — `ˌɛmˈɛs`, "em-ess" (misaki says `mˈɪz`); "Miss" is `mˈɪs` on both. It is
+  also the first pronunciation key ending in a period, which exposed a
+  matcher bug (see Fixed). `Imagenae` read "IM-ij-nee" (`ˈɪmɪʤnˌi`) on both
+  engines; the literal `imagine-ay` was rejected because a standalone "ay"
+  chunk is /aɪ/ ("im-AJ-in-EYE"), the same trap as chunk-final "eh" —
+  `Imagin-nay` is `ɪmˈæʤɪnnˈA` on both. `Gilgamesh` is Windows-only like
+  `shaman`: espeak said `ɡˈɪlɡAməʃ`, "GIL-gay-mush". Measured and left OUT as
+  no-ops: `Mrs.` (already "misses" on both), `Dr.` (already "doctor" on
+  both), and `Aeon`/`Aeons` (already "EE-on(z)" on both). Run
+  `python tools/pronounce_names.py --write` on **each** machine —
+  `voices.json` is gitignored, and a pull never updates pronunciations.
+
 - **`Qucusaurus` (and `Qucusaur`, both plurals) → "koo-koo-SORE-us".** Both
   engines read the qu as /kw/ and the cu as /kju/ — `kwəkjusˈɔɹəs`,
   "kwuh-KYOO-sore-us" — where the bird is "koo-koo". Respelled unhyphenated
@@ -22,6 +36,15 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   pronunciations.
 
 ### Fixed
+
+- **A pronunciation key ending in a period could never match.** The
+  substitution wrapped every key in `\b…\b`, and after a trailing period the
+  closing `\b` demands a word character where the following space is — so a
+  key like `Ms.` silently never fired. The right edge of a period-final key
+  is now the period itself; word-final keys keep the boundary they had. Same
+  fix mirrored in `pronounce_names.py --check`, and `--custom-words` now
+  skips period-bearing keys instead of pinning `Ms.` into the OCR vocabulary
+  as a token the recognizer can never emit.
 
 - **Standalone `Yae` no longer reads "Yee".** The table keyed the respelling
   on the full `Yae Miko`, but dialogue says "Yae" and "Miss Yae" more often
