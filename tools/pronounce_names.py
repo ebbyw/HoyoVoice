@@ -87,6 +87,14 @@ FIXES = {
     # three stressed syllables (kˈæθˈɜɹˈɪn) where the name has one, and both
     # engines already read "Katherine" as kˈæθɹɪn / kæθɹɪn.
     "Katheryne": "Katherine",
+    # Nod-Krai, and Russian: Стужа, "STOO-zha". Both engines read the u as
+    # the /ʌ/ of "cut" — stˈʌʒə, "STUH-zhuh"; the zh is already right.
+    # "Stoozha" is stˈuʒə on both: the one wrong vowel fixed and nothing
+    # else moved. Unhyphenated on purpose, like "Asha" below — "Stoo-zhah"
+    # is stˈuʒˈɑ, a second stressed chunk and an open final a where the name
+    # ends on a schwa, and "Stoo-zhuh" (stˈuʒˈʌ) buys the same stress for
+    # the right vowel.
+    "Stuzha": "Stoozha",
     # Windows only, like "shaman": misaki already says ɡˈɪlɡəmˌɛʃ, espeak
     # says ɡˈɪlɡAməʃ — "GIL-gay-mush", an /eɪ/ in the middle and the last
     # syllable swallowed. "Gil-gah-mesh" is ɡˈɪlɡˈɑmˈɛʃ / ɡˈɪlɡˈɑːmˈɛʃ:
@@ -214,6 +222,12 @@ TERMS = {
     # entries would change nothing. So were "Aeon"/"Aeons", already
     # ˈiɑn(z) / ˈiːɑːn(z), "EE-on(z)", on both.
     "Ms.": "Miss",
+    # "ma'am" as written is already mˈæm on both engines and needs no entry.
+    # What needs one is the form the OCR leaves when it misses the
+    # apostrophe: "maam" is mˈɑm on both, "mahm" with the open a of
+    # "father". "mam" is mˈæm. Lowercase like "shaman" — it is a common
+    # noun, and a capitalised replacement mid-sentence reads as a name.
+    "maam": "mam",
     # ˈɪmɪʤnˌi / ˈɪmɪʤnˌiː on the two engines — "IM-ij-nee", the middle
     # vowel dropped and the ending read as -ee. The word should be heard as
     # "imagine" plus "-ay". The literal "imagine-ay" is NOT the respelling: a
