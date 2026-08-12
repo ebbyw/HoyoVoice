@@ -293,6 +293,18 @@ class Profile:
         # Group choice lines into options: lines belong to the same option if
         # their vertical gap is small (< 1.5x line height)
         state["choices"].sort(key=lambda b: -b["y"])
+
+        def option_text(row):
+            """Joined text of one option, with the bubble icon stripped.
+            Vision fuses the option marker into the first block — shot #35
+            (2026-08-12) read Genshin's chat-bubble glyph as '® Feeling
+            better now?', and the ® was spoken as 'registered sign'. Strip
+            1-2 leading SYMBOL characters; quotes, ellipses, dots, parens
+            and brackets survive because real options start with those
+            ('...Is that so?', '(Say nothing)')."""
+            text = " ".join(x["text"] for x in row)
+            return re.sub(r'^[^\w"\'“”‘’….(\[-]{1,2}\s*', "", text)
+
         options, current = [], []
         prev = None
         for b in state["choices"]:
@@ -311,12 +323,12 @@ class Profile:
                     split = (prev["y"] - b["y"]) > 1.5 * max(prev["h"],
                                                              b["h"])
                 if split:
-                    options.append(" ".join(x["text"] for x in current))
+                    options.append(option_text(current))
                     current = []
             current.append(b)
             prev = b
         if current:
-            options.append(" ".join(x["text"] for x in current))
+            options.append(option_text(current))
 
         return {"speaker": state["speaker"], "dialogue": dialogue_text,
                 "choices": options,
