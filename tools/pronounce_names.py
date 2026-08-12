@@ -301,6 +301,19 @@ TERMS = {
     # "Nah-roo-kah-mee" is nˈɑɹˈukˈɑmˈi / nˈɑːɹˈuːkˈɑːmˈiː: one r, and even
     # stress across the four syllables rather than a peak on "kah".
     "Narukami": "Nah-roo-kah-mee",
+    # snˈɛʒnAə on BOTH engines — "snezh-NAY-uh": the zh survives but "naya"
+    # collapses to /neɪə/. "Snezh-nah-yuh" is snˈɛʒnˈɑjˈʌ / snˈɛʒnˈɑːjˈʌ —
+    # every vowel lands, and the ʒ (the zh of "measure") is kept, which is
+    # what the ear-gloss "nehj" is reaching for; "Snej-nah-yuh" with a real
+    # /ʤ/ (snˈɛʤ-) was measured and is there to swap in if the ʒ doesn't
+    # convince by ear. Chunked despite the stress-per-chunk cost: the
+    # unhyphenated tails pronounce their h — "Snezh-nahyah" is snˈɛʒnˈæhiə,
+    # "snezh-NAH-hee-uh". The adjective "Snezhnayan(s)" is wrong the same
+    # way (snˈɛʒnAən(z)) and substitution is word-bounded, so both forms
+    # get entries ending "-yun(s)", jˈʌn(z), to match the nation's "yuh".
+    "Snezhnaya": "Snezh-nah-yuh",
+    "Snezhnayan": "Snezh-nah-yun",
+    "Snezhnayans": "Snezh-nah-yuns",
     # The one entry here that is only wrong on ONE platform: misaki says
     # ʃˈɑmən, espeak says ʃˈæmən ("SHAM-un", rhyming with salmon), so this
     # reads correctly on macOS and wrong on Windows. "shahmon" is ʃˈɑmən on
