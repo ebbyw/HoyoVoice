@@ -131,9 +131,17 @@ READER_CLOSE_AFTER = 2.0
 # between makes it a fresh line: characters really do say the same words
 # again a moment later, and a 3-deep window swallowed those — the second
 # "Let's go!" of a scene never got read. What the window is actually for is
-# the line still on screen re-stabilizing after we spoke it, and the entry
-# right behind us covers that completely.
-DEDUP_WINDOW = 1
+# the line still on screen re-stabilizing after we spoke it, and one
+# dialogue entry covers that completely — so a DIALOGUE line still clears
+# the window before entering it (the maxlen-1 eviction it used to get for
+# free). The extra room exists for choice reads, which append WITHOUT
+# clearing: after one, the window must hold both the option texts (the
+# game echoes the picked one as the next line) and the dialogue line still
+# on screen. With one slot the option evicted that line, and its next OCR
+# jitter variant ("Obviousk…", a mid-render "help us, bui") sailed past
+# the exact-match fired_norm and an empty window and was spoken again —
+# twice in the 2026-08-12 Snezhnaya sessions, right after choice reads.
+DEDUP_WINDOW = 4
 # the persisted window only guards against a restart mid-scene; older than
 # this, the same text is a new encounter (a loading screen seen every
 # session was being skipped as a repeat). voiced_history is NOT aged out —
@@ -1044,6 +1052,20 @@ def same_line(a, b, cutoff=0.9):
     if not a or not b:
         return False
     return difflib.SequenceMatcher(None, a, b).ratio() >= cutoff
+
+
+def remember_line(recent_lines, speaker, norm, stack=False):
+    """Put a line into the dedupe window. A DIALOGUE line replaces the
+    window — "immediately before" is the contract (see DEDUP_WINDOW), and
+    replacing is what lets a character repeat their own line once anyone
+    else has spoken in between. A choice read stacks alongside instead
+    (stack=True): after one, the window must hold both the option texts
+    (the game echoes the picked one as the next line) and the dialogue
+    line still on screen — with a one-slot window the option evicted that
+    line, and its next OCR jitter variant was spoken a second time."""
+    if not stack:
+        recent_lines.clear()
+    recent_lines.append({"speaker": speaker, "norm": norm})
 
 
 def window_verdict(new_norm, speaker, recent_lines):
@@ -2527,11 +2549,13 @@ def main():
                 # the game say it back as a dialogue line, which would
                 # otherwise be read a second time. Each option enters
                 # SEPARATELY — the echo is whichever one the player picked,
-                # and a joined two-option norm matches neither.
+                # and a joined two-option norm matches neither. Stacked,
+                # not replacing: the dialogue line still on screen keeps
+                # its slot (see remember_line).
                 for opt in pending_choice["opts"]:
-                    recent_lines.append(
-                        {"speaker": spk,
-                         "norm": normalize_text(fix_ocr_text(opt))})
+                    remember_line(recent_lines, spk,
+                                  normalize_text(fix_ocr_text(opt)),
+                                  stack=True)
                 pending_choice = None
                 yield_event_id = add_event(
                     "choice (read)", "spoken", spk, text, voice, speed,
@@ -2801,8 +2825,7 @@ def main():
                         e["norm"] = new_norm
                         break
             else:
-                recent_lines.append(
-                    {"speaker": state["speaker"], "norm": new_norm})
+                remember_line(recent_lines, state["speaker"], new_norm)
             SPOKEN_CACHE.write_text(json.dumps(
                 {"window": [[e["speaker"], e["norm"]] for e in recent_lines],
                  "saved_at": time.time(),

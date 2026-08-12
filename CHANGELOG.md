@@ -186,6 +186,23 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   late — and only runs once the option leaves the screen, which is the
   scene-moved-on case the 8s bound was written for.
 
+- **A choice read no longer evicts the on-screen line from the dedupe
+  window — which was re-speaking that line.** The window was one slot
+  deep, deliberately ("immediately before" is the contract; deeper
+  windows swallowed a character's legitimate second "Let's go!"), and
+  the choice read appends the option texts so the game's echo of the
+  picked one dedupes. But in one slot, the option evicted the dialogue
+  line still on screen — and that line's next OCR jitter variant
+  ("Obviousk…" for "Obviously…" at 12:02:00, a mid-render "help us,
+  bui" at 13:0x, both 2026-08-12, both right after choice reads) beat
+  the exact-match `fired_norm` re-fire guard, found an empty window,
+  and was spoken again, minutes after its voiceover. The window is now
+  4 deep with the eviction moved into `remember_line()`: a dialogue
+  line still REPLACES the window (the old one-slot semantics exactly,
+  so the second-"Let's go!" behavior is unchanged — pinned in
+  test_window_verdict.py), while choice reads stack alongside, so the
+  window holds both option texts and the line still on screen.
+
 - **An option can no longer die unarmed while its prompt is still on
   screen.** The first session after the fix above hit the OTHER expiry
   path (12:02:49): arming compares the fired line against a norm of the

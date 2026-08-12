@@ -113,15 +113,41 @@ def main():
         if got != want:
             print(f"FAIL {label}: want {want!r}, got {got!r}")
             bad += 1
-    # The window is ONE line deep, and that is load-bearing rather than a
-    # tuning knob: it is what lets a character repeat their own line once
-    # anyone else has spoken in between. Deeper, and the second "Let's go!"
-    # of a scene is swallowed; the only job the window has is catching the
-    # line still on screen re-stabilizing after we spoke it.
-    if live.DEDUP_WINDOW != 1:
-        print(f"FAIL window depth: want 1, got {live.DEDUP_WINDOW}")
+    # The load-bearing property is no longer the deque's depth but
+    # remember_line's semantics: a DIALOGUE line replaces the window —
+    # that is what lets a character repeat their own line once anyone
+    # else has spoken in between (the second "Let's go!" of a scene was
+    # swallowed by a 3-deep stacking window) — while a CHOICE read stacks
+    # alongside, because after one the window must hold both the option
+    # texts and the dialogue line still on screen (a one-slot window let
+    # the option evict that line, and its next OCR jitter variant was
+    # re-spoken: "Obviousk…", 2026-08-12).
+    from collections import deque
+    win = deque(maxlen=live.DEDUP_WINDOW)
+    live.remember_line(win, "Paimon", n("Let's go!"))
+    live.remember_line(win, "Nahida", n("After you."))
+    dup, _ = live.window_verdict(n("Let's go!"), "Paimon", win)
+    if dup:
+        print("FAIL replace: second 'Let's go!' swallowed after another "
+              "speaker — dialogue must REPLACE the window")
         bad += 1
-    print(f"{len(CASES) + 1 - bad}/{len(CASES) + 1} ok")
+    live.remember_line(win, "Paimon", n("Obviously, the question is: what "
+                                        "is the Tsaritsa planning?"))
+    for opt in ("Feeling better now?", "They're all Fatui."):
+        live.remember_line(win, "Traveler", n(opt), stack=True)
+    dup, _ = live.window_verdict(
+        n("Obviousk the question is: what is the Tsaritsa planning?"),
+        "Paimon", win)
+    if not dup:
+        print("FAIL stack: choice read evicted the on-screen line — its "
+              "jitter variant would be re-spoken")
+        bad += 1
+    dup, _ = live.window_verdict(n("They're all Fatui."), "Traveler", win)
+    if not dup:
+        print("FAIL stack: the picked option's echo was not deduped")
+        bad += 1
+    total = len(CASES) + 3
+    print(f"{total - bad}/{total} ok")
     return 1 if bad else 0
 
 
