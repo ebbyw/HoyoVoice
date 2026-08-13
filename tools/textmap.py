@@ -49,6 +49,8 @@ and a wrong sentence spoken confidently is worse than a garbled one.
 import difflib
 import json
 import re
+import zlib
+from array import array
 from collections import Counter
 from pathlib import Path
 
@@ -75,6 +77,17 @@ MAX_CHARS = 320
 BUCKET = 16
 # Query trigrams actually walked, rarest first (see candidates()).
 RARE_GRAMS = 24
+# Only every Nth trigram is indexed, chosen by a stable hash of the trigram
+# itself so an entry and a query pick the SAME subset. A full index of the
+# 397,952-line Genshin dump is 27M postings and ~870MB resident, which is
+# not a reasonable price for a lookup; at 1-in-3 it is 9M and ~490MB, and
+# repair quality measured identical on the 151 real misreads on file. A
+# line of dialogue has ~100 trigrams, so a third of them is still 30-odd
+# ways to find it.
+SAMPLE = 3
+# A posting list longer than this is a trigram that names nothing — every
+# entry in the bucket has it — and walking it is the whole cost of a query.
+MAX_POSTINGS = 3000
 
 _WORD = re.compile(r"[^a-z0-9 ]+")
 
@@ -132,7 +145,13 @@ def key(s):
 
 
 def trigrams(s):
-    return {s[i:i + 3] for i in range(len(s) - 2)}
+    """The indexed trigrams of a string — a stable 1-in-SAMPLE subset.
+
+    crc32 rather than hash(): Python randomizes string hashing per process,
+    which would index one subset and look up another after a restart.
+    """
+    return {t for t in (s[i:i + 3] for i in range(len(s) - 2))
+            if zlib.crc32(t.encode()) % SAMPLE == 0}
 
 
 class TextMap:
@@ -165,7 +184,11 @@ class TextMap:
             self.entries.append((k, line, group))
             idx = self.buckets.setdefault(len(k) // BUCKET, {})
             for t in trigrams(k):
-                idx.setdefault(t, []).append(pos)
+                # machine ints, appended straight in: a Python list of the
+                # 10M positions a real dump produces is ~80MB of pointers
+                # on top of the numbers, and this index is the whole memory
+                # cost of loading one.
+                idx.setdefault(t, array("i")).append(pos)
 
     def __len__(self):
         return len(self.entries)
@@ -213,6 +236,8 @@ class TextMap:
             # worth scoring.
             posts = sorted((idx[t] for t in grams if t in idx), key=len)
             for postings in posts[:RARE_GRAMS]:
+                if len(postings) > MAX_POSTINGS:
+                    break                      # sorted: the rest are worse
                 for pos in postings:
                     hits[pos] += 1
         return [pos for pos, _ in hits.most_common(SHORTLIST * 3)
