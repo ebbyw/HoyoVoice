@@ -2025,12 +2025,29 @@ def main():
     # The game's own dialogue strings, if the player extracted them. Off
     # unless settings.textmap names a readable file — nothing here ships
     # HoYoverse's text. See tools/textmap.py for what a match has to clear.
-    textmap = None
-    tm_path = VOICES.get("settings", {}).get("textmap")
-    if tm_path:
-        textmap = TextMap.load(tm_path)
-        print(f"textmap: {len(textmap)} lines from {tm_path}" if textmap
-              else f"textmap: {tm_path} unreadable — snapping off", flush=True)
+    #
+    # Per game, and loaded on FIRST USE of that game rather than at startup:
+    # a real dump is ~200k entries, which is ~4s to index and ~390MB
+    # resident, and the auto-detect profile means the other game's map would
+    # otherwise be built for a session that never reads a line of it.
+    textmaps = {}
+    tm_setting = VOICES.get("settings", {}).get("textmap") or {}
+    if isinstance(tm_setting, str):
+        # one path, no game named: it belongs to whichever game is read
+        tm_setting = {game.profile.name: tm_setting}
+    nickname = VOICES.get("settings", {}).get("player_name", "")
+
+    def textmap_for(name):
+        """The map for this game, built once, or None."""
+        if name not in textmaps:
+            path = tm_setting.get(name)
+            tm = TextMap.load(path, nickname=nickname) if path else None
+            if path:
+                print(f"textmap[{name}]: {len(tm)} lines from {path}" if tm
+                      else f"textmap[{name}]: {path} unreadable — snapping "
+                           f"off for {name}", flush=True)
+            textmaps[name] = tm
+        return textmaps[name]
 
     candidate, candidate_count = None, 0
     candidate_growing = False
@@ -2920,6 +2937,7 @@ def main():
             # line is not just pronounced right, it MATCHES the next read
             # of itself, so the jitter that makes a line read twice stops
             # at the source.
+            textmap = textmap_for(screens.name)
             if textmap is not None:
                 snapped = textmap.snap(state["dialogue"])
                 if snapped:

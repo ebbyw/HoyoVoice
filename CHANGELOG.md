@@ -11,13 +11,12 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 - **Snapping a read line to the game's own text (`settings.textmap`).**
   The recognizer's everyday errors are small and local — `Ves.` for `Yes.`,
   `Choosel"mission budget"` for `Choose "mission budget"`, a full stop that
-  never arrived — and each one costs twice: the synthesizer says the wrong
+  never arrived — and each costs twice: the synthesizer says the wrong
   thing, and dedupe sees a line it has never seen and reads it again. Point
-  `settings.textmap` at a file of the game's dialogue strings and a settled
-  line is matched back to the one it came from before the log, dedupe,
-  casting or synthesis sees it, which fixes both at once: a repaired line
-  MATCHES the next read of itself, so the jitter dies at the source rather
-  than being absorbed downstream.
+  the setting at a file of the game's dialogue strings and a settled line is
+  matched back to the one it came from before the log, dedupe, casting or
+  synthesis sees it, so a repaired line MATCHES the next read of itself and
+  the jitter dies at the source rather than being absorbed downstream.
 
   A match must score 0.82 and beat the runner-up by 0.05, or the read is
   kept exactly as it is. Measured on the recorded sessions — 377 distinct
@@ -29,12 +28,38 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   magnitude larger, and a confident wrong sentence is a worse failure than
   an obviously garbled one.
 
-  Lookup is a length-bucketed trigram index over the rarest two dozen
-  trigrams of the query, then a real comparison of the top 40 — 11 ms
-  against a 100k-line map (66 ms for the naive version), paid once per
-  spoken line rather than once per frame. Plain text, a JSON array, or a
-  JSON object of id → line. **No such file ships here**: the games' text is
-  HoYoverse's. Unset, or unreadable, and nothing changes.
+  **A dump is not the text on screen, and the first run against a real one
+  repaired nothing at all.** An entry is the line *before* the runtime
+  substitutes the player's name, picks a gender and renders the rich text:
+  of the 237,812 Genshin entries, 5,719 open with a `#` sentinel, 4,644
+  carry `{NICKNAME}`, 1,629 an `{F#…}{M#…}` pair, 1,210 a `<color>` span,
+  560 an escaped newline, 221 a `{RUBY#…}` gloss; Star Rail's 228,068 are
+  the same with more markup (34,613 newlines, 14,498 `<unbreak>`). The line
+  that was needed read `#My name's Paimon, and this is {NICKNAME}.` against
+  a screen saying `My name's Paimon, and this is Ebby.` Entries are now
+  unwrapped as the game draws them, `settings.player_name` fills in
+  `{NICKNAME}`, both halves of a gender pair are indexed (and no longer
+  veto each other as each other's runner-up — they are one entry to the
+  margin gate), a ruby gloss is dropped rather than spliced into the middle
+  of the word it annotates (`Kuu{RUBY#[S]Moon Maiden}tar` is drawn
+  `Kuutar`, not `KuuMoon Maidentar`), and an entry still holding a runtime
+  placeholder is dropped rather than indexed subtly wrong.
+
+  Maps are per game and load on first use of that game — ~4 s and ~390 MB
+  resident for a full dump, which is not worth paying at startup for a game
+  the session may never read. Lookup is a length-bucketed trigram index
+  over the rarest two dozen trigrams of the query, then a real comparison
+  of the top 40: 11 ms against a 100k-line map (66 ms for the naive
+  version), paid once per spoken line rather than once per frame.
+
+  **`python tools/textmap.py <map.json> --nickname <name>` scores a dump
+  against the lines this install has actually read**, which is the only way
+  to tell a current dump from a stale one before trusting it. On the dumps
+  to hand: of 120 lines recorded from live sessions, 3 scored 0.95+, 4
+  between 0.82 and 0.95, and 79 under 0.60 — the quest being played is
+  simply not in that dump, and snapping would have done nothing. **No text
+  ships here**: the games' strings are HoYoverse's. Unset, or unreadable,
+  and nothing changes.
 
 - **`tools/ocr_bench.py` — the OCR is measurable now.** Every reader fix so
   far has been signature-by-signature (fused rows, a bullet glyph welded to
