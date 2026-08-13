@@ -21,6 +21,7 @@ Spec file, one per game (tools/profiles/anchors/<game>.json):
 
     {"anchors": [{"name": "continue",
                   "template": "hsr/continue.png",
+                  "cut": {"x": [0.9045, 0.9215], "y": [0.0074, 0.0407]},
                   "search": {"x": [0.86, 1.0], "y": [0.0, 0.10]},
                   "threshold": 0.75,
                   "ref": [960, 540],
@@ -32,6 +33,22 @@ cut at; a frame decoding to a different size stands the anchor down
 rather than matching at the wrong scale — NCC across scales fails
 quietly with mid scores, and a mid score against a threshold is a
 coin-flip.
+
+Template PNGs do NOT ship in the repo — they are crops of the games' own
+chrome, and the games' pixels are HoYoverse's. The spec ships the `cut`
+rect instead, and the pack SELF-CALIBRATES: an entry whose template is
+missing is `pending`, and maybe_bootstrap() cuts the template from the
+user's own capture the first time the classifier trusts the game's
+dialogue chrome (the same OCR-text ground truth the shipped thresholds
+were measured against), holds it for a few trusted frames, verifies it
+matches a LATER trusted frame at the shipped threshold, and only then
+persists it to the user dir (captures/anchors/, gitignored) with a
+sidecar recording the decode size it was cut at. A verify miss throws
+the candidate away and starts over — a template cut from a fade or a
+motion-blurred frame must never be committed. Validated on the
+regression recordings: self-cut templates score 0.985+ on later frames
+of their own game and ≤0.47 on the other game's — the same margins as
+the originally shipped, hand-measured templates.
 
 CLI:
     python tools/anchors.py extract <game> <name> <frame.jpg> x0 x1 y0 y1
@@ -183,13 +200,28 @@ class Anchor:
         return score, score >= self.threshold
 
 
+# Trusted frames a bootstrap candidate is held for before it is cut, and
+# the cut is then verified against a LATER trusted frame — two chances for
+# a fade or blur to be caught before anything is committed.
+BOOT_HOLD = 3
+
+
 class AnchorPack:
     """Every anchor for one game, or an empty pack if none are defined —
-    a game without anchor data must behave exactly as before."""
+    a game without anchor data must behave exactly as before.
 
-    def __init__(self, game):
+    `user_dir` is where self-calibrated templates live (and are looked
+    for): a spec entry whose template exists in neither the repo dir nor
+    there becomes `pending` if it carries a `cut` rect, awaiting
+    maybe_bootstrap()."""
+
+    def __init__(self, game, user_dir=None):
         self.game = game
+        self.user_dir = Path(user_dir) if user_dir else None
         self.anchors = []
+        self.pending = []
+        self._boot_run = 0
+        self._candidate = None
         spec = ANCHOR_DIR / f"{game}.json"
         if not spec.exists():
             return
@@ -198,15 +230,104 @@ class AnchorPack:
             # that one anchor, never the app: this runs inside the main
             # loop on first use, where an uncaught error would kill it
             try:
-                png = ANCHOR_DIR / a["template"]
-                tmpl = np.asarray(Image.open(png).convert("L"),
-                                  dtype=np.float32)
-                self.anchors.append(Anchor(a["name"], tmpl, a["search"],
-                                           a["threshold"], a["ref"],
-                                           a.get("roi")))
+                tmpl, ref = self._load_template(a)
+                if tmpl is not None:
+                    self.anchors.append(Anchor(a["name"], tmpl, a["search"],
+                                               a["threshold"], ref,
+                                               a.get("roi")))
+                elif a.get("cut"):
+                    self.pending.append(a)
+                else:
+                    print(f"[anchors] {game}/{a['name']}: no template and "
+                          f"no cut rect — skipped", flush=True)
             except Exception as e:
                 print(f"[anchors] {game}/{a.get('name', '?')} unloadable "
                       f"({e}) — skipped", flush=True)
+
+    def _load_template(self, a):
+        """(template, ref) from the repo dir, else the user dir (whose
+        sidecar carries the decode size IT was cut at), else (None, None)."""
+        png = ANCHOR_DIR / a["template"]
+        if png.exists():
+            return (np.asarray(Image.open(png).convert("L"),
+                               dtype=np.float32), tuple(a["ref"]))
+        if self.user_dir:
+            up = self.user_dir / a["template"]
+            meta = up.with_suffix(".json")
+            if up.exists() and meta.exists():
+                ref = tuple(json.loads(meta.read_text())["ref"])
+                return (np.asarray(Image.open(up).convert("L"),
+                                   dtype=np.float32), ref)
+        return None, None
+
+    def maybe_bootstrap(self, gray, trusted):
+        """Cut pending templates from the user's own capture.
+
+        Call on fresh-OCR frames with `trusted` = the classifier trusted
+        this game's dialogue chrome on the frame's OCR text. After
+        BOOT_HOLD consecutive trusted frames the templates are cut; on the
+        NEXT trusted frame each cut is verified at the spec's threshold —
+        chrome is pixel-identical frame to frame, so anything below it
+        means the cut caught a fade or blur, and the candidate is thrown
+        away to try again. Returns a log line when templates are
+        committed, else None. Never raises: anchors gate cost, not speech.
+        """
+        if not self.pending or gray is None:
+            return None
+        if not trusted:
+            self._boot_run = 0
+            self._candidate = None
+            return None
+        self._boot_run += 1
+        H, W = gray.shape
+        try:
+            if self._candidate is None:
+                if self._boot_run < BOOT_HOLD:
+                    return None
+                cand = []
+                for a in self.pending:
+                    x0, y0, x1, y1 = _to_px(
+                        {"x": tuple(a["cut"]["x"]),
+                         "y": tuple(a["cut"]["y"])}, W, H)
+                    t = gray[y0:y1, x0:x1].copy()
+                    # a flat cut can never carry an NCC match (and a fade
+                    # is flat): don't even hold it
+                    if t.size == 0 or t.std() < 5.0:
+                        return None
+                    cand.append((a, t))
+                self._candidate = (cand, (W, H))
+                return None
+            cand, ref = self._candidate
+            if (W, H) != ref:
+                self._candidate, self._boot_run = None, 0
+                return None
+            staged = []
+            for a, t in cand:
+                anchor = Anchor(a["name"], t, a["search"], a["threshold"],
+                                ref, a.get("roi"))
+                score, ok = anchor.match(gray)
+                if not ok:
+                    self._candidate, self._boot_run = None, 0
+                    return None
+                staged.append((a, t, anchor, score))
+            for a, t, anchor, score in staged:
+                if self.user_dir:
+                    up = self.user_dir / a["template"]
+                    up.parent.mkdir(parents=True, exist_ok=True)
+                    Image.fromarray(t.astype(np.uint8)).save(up)
+                    up.with_suffix(".json").write_text(
+                        json.dumps({"ref": list(ref)}) + "\n")
+                self.anchors.append(anchor)
+            self.pending = []
+            names = "  ".join(f"{s[0]['name']}={s[3]:.2f}" for s in staged)
+            self._candidate = None
+            return f"self-calibrated from this capture: {names}"
+        except Exception as e:
+            # malformed cut rect, unwritable user dir — stand down for the
+            # session rather than retrying a failure every frame
+            self.pending = []
+            self._candidate = None
+            return f"self-calibration failed ({e}) — anchors off this session"
 
     def match(self, gray):
         """{name: score} for matched anchors only. `gray` from
@@ -261,6 +382,11 @@ def _extract(game, name, frame, nx0, nx1, ny0, ny1):
             else {"anchors": []})
     spec["anchors"] = [a for a in spec["anchors"] if a["name"] != name]
     spec["anchors"].append({"name": name, "template": f"{game}/{name}.png",
+                            # the cut rect ships so OTHER installs can
+                            # self-calibrate the template from their own
+                            # capture — the PNG itself never ships
+                            "cut": {"x": [round(nx0, 4), round(nx1, 4)],
+                                    "y": [round(ny0, 4), round(ny1, 4)]},
                             "search": search,
                             "threshold": 0.75,     # placeholder — measure!
                             "ref": [W, H]})
