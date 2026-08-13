@@ -95,6 +95,12 @@ FIXES = {
     # ends on a schwa, and "Stoo-zhuh" (stˈuʒˈʌ) buys the same stress for
     # the right vowel.
     "Stuzha": "Stoozha",
+    # An Easybreeze Holiday Resort NPC — 28 lines in the 6.x TextMap, and on
+    # neither playable roster. Both engines read the ai as /eɪ/: tˈumAni,
+    # "too-MAY-nee". The user's own spelling is exactly right and is kept as
+    # written: "Too-mai-knee" is tˈumˈInˈi on both, and the silent k costs
+    # nothing ("Too-mai-nee" and "Too-mye-nee" are the same phones).
+    "Tumaini": "Too-mai-knee",
     # Windows only, like "shaman": misaki already says ɡˈɪlɡəmˌɛʃ, espeak
     # says ɡˈɪlɡAməʃ — "GIL-gay-mush", an /eɪ/ in the middle and the last
     # syllable swallowed. "Gil-gah-mesh" is ɡˈɪlɡˈɑmˈɛʃ / ɡˈɪlɡˈɑːmˈɛʃ:
@@ -291,6 +297,19 @@ TERMS = {
     # not because the synthesizer winks. Word-bounded, so "Serenitea Pot"
     # comes out "Serenity Pot".
     "Serenitea": "Serenity",
+    # Wrong on both engines and worst on Windows: misaki ˌOniɡˈɪɹi has the
+    # hard g but clips the third vowel ("oh-nee-GIH-ree"), espeak reads the
+    # gi as /ʤ/ AND breaks the vowel — ˌɑnɪʤˈiəɹi, "ah-nih-JEE-uh-ree".
+    # "ghee" is what keeps the g hard: "oh-nee-gee-ree" is ˈOnˈiʤˈiɹˈi on
+    # both, a j where the word has a g, and so is the ear-gloss spelling
+    # "oh-knee-gee-ree" (the silent k changes nothing either way).
+    # "oh-nee-ghee-ree" is ˈOnˈiɡˈiɹˈi on both engines, identically.
+    # Chunked despite the stress-per-chunk cost: unhyphenated "ohneegheeree"
+    # pronounces the h (ˌOniɡhˈɪɹi). Capitalised because the games write it
+    # as an item name and --custom-words pins those in the OCR vocabulary —
+    # matching is case-insensitive, so the lowercase prose form is covered
+    # too, and the spoken form stays lowercase either way.
+    "Onigiri": "oh-nee-ghee-ree",
     # --- places. Wrong the same way names are: English spelling rules over
     # pinyin and romaji. They are proper nouns, so --custom-words pins them
     # in the OCR vocabulary too.
