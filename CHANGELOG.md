@@ -306,6 +306,26 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   flattening does its arithmetic in-place (bit-identical, ~32 MB of
   float32 intermediates per 1080p frame no longer allocated).
 
+  Round two, after ROI cropping became the default path: the crop is
+  written GRAYSCALE (both recognizers read from luminance and discarded
+  the color on arrival — the RGB PNG paid encode here and decode+convert
+  in the daemon for nothing, ~20ms per cropped frame across the two
+  processes; both regression replays read identically off the gray
+  crops), and it is cut from the change gate's own bytes rather than a
+  re-read, so the crop, the gate and the anchors provably judge the SAME
+  frame even when ffmpeg rewrites the file between them. The dashboard
+  screenshot decodes at 1/2 draft scale with an aspect-correct target
+  (21 → 9 ms; the square target was silently a no-op) and its 300-file
+  prune keeps an in-process id deque instead of re-statting the whole
+  directory per logged event. Textmap snapping halves again
+  (`Counter.update` counts postings in C; a documented-upper-bound
+  quick_ratio floor at `min_score − min_margin` prunes the shortlist
+  with the verdict provably unchanged — measured ~10 → ~4 ms per spoken
+  line on a 100k-line map). Anchor self-calibration no longer decodes
+  the frame on untrusted frames (most of a session, until it fires),
+  and the dashboard's 1 Hz recordings list re-walks the directory only
+  when the directory's own mtime says something changed.
+
   The Windows daemon also stops stacking the gray frame into RGB — once
   it has proven that safe on YOUR machine. Whether RapidOCR reads a 2-D
   gray array identically to the 3-channel stack varies by version, so
