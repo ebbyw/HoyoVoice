@@ -391,6 +391,34 @@ tick();
 </script></body></html>""".replace("__STYLE__", STYLE)
 
 
+# /api/state polls at 1 Hz per open tab, and the recordings list only
+# changes when a file lands in or leaves the directory — keyed on the
+# dir's own mtime (adding/removing a file bumps it; a finished file's
+# size never changes) so the glob + per-file stat() walk runs on change,
+# not on every poll.
+_REC_CACHE = {"key": None, "list": []}
+
+
+def _recordings(shared):
+    rd = shared["rec_dir"]["path"]
+    raw = (Path(shared["recording"]["raw"]).name
+           if shared["recording"]["on"] and shared["recording"].get("raw")
+           else None)
+    try:
+        rkey = (str(rd), rd.stat().st_mtime, raw)
+    except OSError:
+        rkey = (str(rd), None, raw)
+    if _REC_CACHE["key"] != rkey:
+        _REC_CACHE["list"] = sorted(
+            ({"name": p.name, "mb": round(p.stat().st_size / 1e6, 1)}
+             for ext in ("*.mp4", "*.mkv") for p in rd.glob(ext)
+             # hide the raw file only while it's still being written
+             if p.name != raw),
+            key=lambda r: r["name"], reverse=True)
+        _REC_CACHE["key"] = rkey
+    return _REC_CACHE["list"]
+
+
 def start_webui(shared, port=DASHBOARD_PORT):
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     app = Flask("hoyovoice")
@@ -528,15 +556,7 @@ def start_webui(shared, port=DASHBOARD_PORT):
                 "choices": profile_choices(),
             },
             "rec_dir": str(shared["rec_dir"]["path"]),
-            "recordings": sorted(
-                ({"name": p.name, "mb": round(p.stat().st_size / 1e6, 1)}
-                 for ext in ("*.mp4", "*.mkv")
-                 for p in shared["rec_dir"]["path"].glob(ext)
-                 # hide the raw file only while it's still being written
-                 if not (shared["recording"]["on"]
-                         and shared["recording"].get("raw")
-                         and p.name == Path(shared["recording"]["raw"]).name)),
-                key=lambda r: r["name"], reverse=True),
+            "recordings": _recordings(shared),
         })
 
     @app.post("/api/game")
