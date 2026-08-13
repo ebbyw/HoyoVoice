@@ -106,6 +106,15 @@ class Profile:
     DIALOGUE_MIN_Y = 0.0
     DIALOGUE_FALLBACK_Y = (0.08, 0.21)
     DIALOGUE_WIDE_X = (0.08, 0.92)  # row-mate fragments can sit this far out
+    # Height at which a centered dialogue box is TWO drawn rows grouped into
+    # one observation rather than one row — see fused_rows(). Absolute, not a
+    # multiple of LINE_H: LINE_H is a bucketing quantum and the two are only
+    # incidentally related. None = no check (the game's row height has not
+    # been measured against real fusions).
+    FUSED_ROW_H = None
+    # A fusion is a whole line's worth of text. Short centered boxes at this
+    # height are menu chrome ("2", "Sign: Text") and must not drop a frame.
+    FUSED_MIN_CHARS = 20
 
     # --- choice list ---
     CHOICES = {"x": (0.66, 1.00), "y": (0.22, 0.62)}
@@ -156,6 +165,46 @@ class Profile:
                 and self.CHOICE_LEFT_EDGE[0] <= b["x"] <= self.CHOICE_LEFT_EDGE[1]
                 and b["h"] >= self.CHOICE_MIN_HEIGHT
                 and any(c.isalpha() for c in b["text"])]
+
+    def fused_rows(self, blocks):
+        """True if a dialogue row came back as two drawn rows fused into one.
+
+        Vision occasionally groups two adjacent rows of the dialogue box into
+        a single observation and reads them INTERLEAVED — the words of both
+        rows woven together into text the game never wrote. It is not a
+        confidence dip (the fused box comes back at 1.00) and not something
+        the change gate can see: the screen is motionless while it happens,
+        and clean two-box reads of the same frame alternate with fused ones
+        every second or two.
+
+        Measured on the 2026-08-12 17:39-17:41 Snezhnaya session, shots
+        409-581: "A lot of them will probably stockpile it and slowly work
+        their way through — probably a good idea, since energy prices are
+        only gonna keep rising." over two rows at h=0.034 each came back 48
+        times as ONE box at h=0.067 reading "A lot ofa, sill pery by stake
+        tely god a kly rising, Bit there always be people who urgently need
+        Mora." Alternating with the clean read, the two defeated the dedupe
+        window — each looked new against the other — and the line was spoken
+        about forty times in two minutes.
+
+        The height is the whole tell, and it separates cleanly: across 6673
+        recorded blocks the tallest centered dialogue row that was really
+        one row measured 0.051, every fusion 0.055 or more.
+
+        Bounded to the dialogue band as well as the centered x, because a
+        game HUD draws big centered text elsewhere and it is not a fusion:
+        a world hint ("There is Prime Ice nearby", h=0.079) sits at cy=0.283,
+        well above the rows, and dropping frames for it would blind the
+        reader to the screen it is drawn on.
+        """
+        if not self.FUSED_ROW_H:
+            return False
+        lo, hi = self.DIALOGUE_FALLBACK_Y
+        return any(b["h"] >= self.FUSED_ROW_H
+                   and len(b["text"]) >= self.FUSED_MIN_CHARS
+                   and self.is_dialogue_seed(b)
+                   and lo <= b["y"] + b["h"] / 2 <= hi
+                   for b in self.speakable(blocks))
 
     def is_plate_subtitle(self, block, plate):
         """True if this block is part of the NAMEPLATE rather than speech —

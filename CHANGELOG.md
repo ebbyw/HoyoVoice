@@ -189,6 +189,38 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **A frame where Vision fused two dialogue rows into one box is dropped
+  instead of spoken.** On a motionless Genshin screen the OCR alternated
+  between a clean two-box read of the line and a single box spanning both
+  rows, whose text is the two rows *woven together*: "A lot of them will
+  probably stockpile it and slowly work their way through — probably a good
+  idea, since energy prices are only gonna keep rising." came back as "A lot
+  ofa, sill pery by stake tely god a kly rising, Bit there always be people
+  who urgently need Mora." The fused box reports full confidence, so
+  nothing downstream doubted it, and because the two reads alternated every
+  second or two each looked new against the other in the one-entry dedupe
+  window — the line was spoken about forty times in two minutes
+  (2026-08-12 17:39–17:41 session, shots 409–581, 48 fused reads of that one
+  line). Not the change gate's doing: the screen never changed, and the gate
+  correctly re-OCRs because the controller hints beside the box flicker.
+  Not reproducible from the recording either — `rec_20260812_174047.mp4`
+  replays the line once, cleanly — so it is Vision grouping observations on
+  the live frame, not the frame's content.
+  The height is the tell and it separates cleanly: across 6673 recorded
+  blocks the tallest centered dialogue row that really was one row measured
+  0.051, every fusion 0.055 or more, and these measured 0.067 against 0.034
+  per real row. `profiles.base.fused_rows()` drops a frame carrying a
+  centered dialogue-band box at least `FUSED_ROW_H` tall (Genshin: 0.054)
+  with at least 20 characters in it, and the loop treats that frame the way
+  it treats a lost one — the clean read comes back within a second or so,
+  and a dropped frame costs only that wait. Deliberately no partial rescue:
+  there is no honest way to unweave the box. The threshold is per-profile
+  and unset for Star Rail, whose row heights have not been measured against
+  a real fusion, so nothing changes there. Fused reads are counted on the
+  dashboard and in the log's analytics line, and the drop logs an event
+  (rate-limited to one in twelve) with the offending text, because a silent
+  drop is what makes this class of bug undiagnosable.
+
 - **A choice option whose first word OCR keeps mangling is read once, not
   once per mangling.** Vision fuses Genshin's choice bullet into the
   option's first word, and the prompt stays on screen for as long as the
