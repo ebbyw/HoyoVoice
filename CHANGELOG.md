@@ -9,6 +9,20 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **`Onigiri` → "oh-nee-GHEE-ree", `Tumaini` → "too-MY-nee".** The rice
+  ball is wrong on both engines and worst on Windows: misaki keeps the hard
+  g but clips the third vowel (`ˌOniɡˈɪɹi`, "oh-nee-GIH-ree") while espeak
+  reads the gi as /ʤ/ and breaks the vowel too (`ˌɑnɪʤˈiəɹi`,
+  "ah-nih-JEE-uh-ree"). The `gh` is what holds the g hard — the ear-gloss
+  spelling "oh-knee-gee-ree" is `ˈOnˈiʤˈiɹˈi` on both, a j where the word
+  has a g — and `oh-nee-ghee-ree` is `ˈOnˈiɡˈiɹˈi` identically on both.
+  Chunked despite the stress cost, because unhyphenated "ohneegheeree"
+  pronounces its h. Capitalised so `--custom-words` pins it in the OCR
+  vocabulary; matching is case-insensitive, so the prose spelling is
+  covered too. Tumaini is an Easybreeze Holiday Resort NPC (28 lines in the
+  6.x TextMap, on neither playable roster): both engines read the ai as
+  /eɪ/, `tˈumAni`, "too-MAY-nee", where `Too-mai-knee` is `tˈumˈInˈi`.
+
 - **Shot block-dumps are pruned with their frames.** Every logged event
   with a screenshot also writes the raw OCR blocks to `shots/<id>.json`,
   but the 300-file cap only ever deleted the `.jpg` — the JSONs
