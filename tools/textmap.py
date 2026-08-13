@@ -63,6 +63,12 @@ MIN_MARGIN = 0.05
 # Below this a line is too short to identify: "Yes.", "Mm-hmm.", "Oh?" are
 # each a dozen other lines' equal.
 MIN_CHARS = 12
+# And above this it is not a dialogue line either: a real map is mostly
+# item descriptions, skill tooltips and patch notes, and indexing them
+# costs memory for entries no dialogue read can ever be confused with.
+# The longest line either game has drawn in a recorded session is 199
+# characters.
+MAX_CHARS = 320
 # Length bucket for the index, in characters. Small enough that a bucket is
 # a thin slice of the map, wide enough that the length bound spans only a
 # handful of them.
@@ -71,6 +77,50 @@ BUCKET = 16
 RARE_GRAMS = 24
 
 _WORD = re.compile(r"[^a-z0-9 ]+")
+
+# --- what a real TextMap dump contains that the screen never shows -------
+# A map entry is not the line the game draws: it is the line before the
+# runtime substitutes the player's name, picks a gender, and renders the
+# rich text. Measured against the shipped Genshin dump (237,812 entries):
+# 5,719 entries open with a '#' sentinel, 4,644 carry {NICKNAME}, 1,629 a
+# {F#…}{M#…} pair, 1,210 a <color> span, 560 an escaped newline, 221 a
+# {RUBY#…} annotation. Star Rail's (228,068) is the same story with more
+# markup: 34,613 newlines, 14,498 <unbreak> spans, 13,467 <color>, 5,098
+# <i>. Left alone, every one of those entries is unmatchable — the first
+# run against the real map repaired NOTHING, because the lines it needed
+# read "#My name's Paimon, and this is {NICKNAME}." against a screen that
+# says "My name's Paimon, and this is Ebby."
+_TAG = re.compile(r"</?[a-z][^>]*>")            # <color=…>, <i>, <unbreak>
+# A ruby annotation is a GLOSS drawn above the word, not part of the line:
+# "Kuu{RUBY#[S]Moon Maiden}tar" is drawn as "Kuutar". Keeping the gloss
+# spliced it into the middle of the word ("KuuMoon Maidentar").
+_RUBY = re.compile(r"\{RUBY[_A-Z]*#\[?[SE]?\]?[^}]*\}")
+_GENDER = re.compile(r"\{([FM])#([^}]*)\}")
+_LEFTOVER = re.compile(r"\{[^}]*\}")
+
+
+def variants(text, nickname):
+    """The forms of one map entry that could actually appear on screen.
+
+    Usually one. A {F#…}{M#…} entry yields TWO — the game picks by the
+    player's gender, and guessing wrong would leave that line unmatchable,
+    where carrying both costs one more index entry. An entry still holding
+    a placeholder after all this can never match anything drawn, so it is
+    dropped rather than indexed as noise.
+    """
+    s = text.strip()
+    if s.startswith("#"):
+        s = s[1:]
+    s = s.replace("\\n", " ").replace("\n", " ")
+    s = _TAG.sub("", s)
+    s = _RUBY.sub("", s)
+    if nickname:
+        s = s.replace("{NICKNAME}", nickname)
+    out = [s]
+    if _GENDER.search(s):
+        out = [_GENDER.sub(lambda m: m.group(2) if m.group(1) == g else "", s)
+               for g in "FM"]
+    return [" ".join(v.split()) for v in out if not _LEFTOVER.search(v)]
 
 
 def key(s):
@@ -88,10 +138,15 @@ def trigrams(s):
 class TextMap:
     """Loaded game lines, indexed for fuzzy lookup."""
 
-    def __init__(self, lines, min_score=MIN_SCORE, min_margin=MIN_MARGIN):
+    def __init__(self, lines, min_score=MIN_SCORE, min_margin=MIN_MARGIN,
+                 nickname=None):
         self.min_score = min_score
         self.min_margin = min_margin
-        self.entries = []          # (key, original)
+        # (text, group): the two halves of a {F#…}{M#…} entry are the SAME
+        # line as far as the margin gate is concerned — see snap().
+        lines = [(v, g) for g, line in enumerate(lines)
+                 for v in variants(line, nickname)]
+        self.entries = []          # (key, original, group)
         # trigram → positions, kept PER LENGTH BUCKET. One flat index makes
         # a common trigram ("the") a posting list the size of the map, and
         # walking those cost 47ms a query on a 100k-line map — a third of
@@ -100,14 +155,14 @@ class TextMap:
         # applied anyway) and cuts it to a few ms.
         self.buckets = {}          # bucket → {trigram: [positions]}
         seen = set()
-        for line in lines:
+        for line, group in lines:
             line = (line or "").strip()
             k = key(line)
-            if len(k) < MIN_CHARS or k in seen:
+            if not MIN_CHARS <= len(k) <= MAX_CHARS or k in seen:
                 continue
             seen.add(k)
             pos = len(self.entries)
-            self.entries.append((k, line))
+            self.entries.append((k, line, group))
             idx = self.buckets.setdefault(len(k) // BUCKET, {})
             for t in trigrams(k):
                 idx.setdefault(t, []).append(pos)
@@ -179,7 +234,13 @@ class TextMap:
         if not scored:
             return None
         best, pos = scored[0]
-        runner = scored[1][0] if len(scored) > 1 else 0.0
+        # The runner-up has to be a DIFFERENT line. A {F#…}{M#…} entry is
+        # indexed twice, and its two halves differ by a pronoun — they were
+        # each other's runner-up at 0.98 and the margin gate refused every
+        # gendered line in the map.
+        group = self.entries[pos][2]
+        runner = next((s for s, p in scored[1:]
+                       if self.entries[p][2] != group), 0.0)
         if best < self.min_score or best - runner < self.min_margin:
             return None
         line = self.entries[pos][1]
@@ -190,3 +251,86 @@ class TextMap:
         # the end of a row). The caller decides what is worth LOGGING —
         # a punctuation repair is not news, a word repair is.
         return None if line == text else line
+
+
+def best_score(tm, text):
+    """Top score for a read, whether or not it clears the gates — the
+    number `--check` reports, and the only way to tell "the map does not
+    have this line" from "the match was refused"."""
+    k = key(text)
+    scored = [difflib.SequenceMatcher(None, k, tm.entries[pos][0]).ratio()
+              for pos in tm.candidates(k)]
+    return max(scored) if scored else 0.0
+
+
+def _seen_lines(shots, game):
+    """Every dialogue line recorded in captures/shots, most-seen first.
+
+    These are what the app really read, on the content this player is
+    really playing — the only honest yardstick for whether a dump is
+    current enough to be worth loading.
+    """
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from profiles import get_profile
+    profile = get_profile(game)
+    seen = {}
+    for f in sorted(Path(shots).glob("*.json")):
+        try:
+            blocks = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(blocks, list):
+            continue
+        line = (profile.classify(blocks).get("dialogue") or "").strip()
+        if len(line) >= MIN_CHARS:
+            seen[line] = seen.get(line, 0) + 1
+    return sorted(seen, key=lambda t: -seen[t])
+
+
+def _check(args):
+    """Score a dump against the lines this install has actually read."""
+    tm = TextMap.load(args.map, nickname=args.nickname)
+    if tm is None:
+        raise SystemExit(f"{args.map}: unreadable or empty")
+    print(f"{len(tm)} usable lines "
+          f"(entries outside {MIN_CHARS}-{MAX_CHARS} characters, and any "
+          f"still holding a placeholder, are not indexed)")
+    lines = _seen_lines(args.shots, args.game)[:args.limit]
+    if not lines:
+        raise SystemExit(f"no recorded lines in {args.shots} — play a little "
+                         f"with the app running first")
+    bands = {"0.95+": 0, "0.82-0.95": 0, "0.60-0.82": 0, "under 0.60": 0}
+    misses = []
+    for line in lines:
+        s = best_score(tm, line)
+        bands["0.95+" if s >= 0.95 else "0.82-0.95" if s >= MIN_SCORE
+              else "0.60-0.82" if s >= 0.60 else "under 0.60"] += 1
+        if s < 0.60:
+            misses.append((s, line))
+    print(f"\n{len(lines)} lines this install has read, best match in the map:")
+    for band, n in bands.items():
+        print(f"   {band:12} {n:4}  ({100 * n / len(lines):.0f}%)")
+    hit = bands["0.95+"] + bands["0.82-0.95"]
+    print(f"\n{hit} of {len(lines)} would be snapped. A dump for the patch "
+          f"you are playing scores most lines 0.95+; a stale one leaves them "
+          f"under 0.60 — those lines are simply not in it.")
+    for s, line in misses[:args.show]:
+        print(f"   {s:.2f}  {line[:88]}")
+
+
+if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(
+        description="Check a TextMap dump against the lines this install "
+                    "has actually read.")
+    ap.add_argument("map")
+    ap.add_argument("--game", default="genshin")
+    ap.add_argument("--nickname", default="",
+                    help="the player character's in-game name, for "
+                         "{NICKNAME} entries")
+    ap.add_argument("--shots", default=str(
+        Path(__file__).resolve().parent.parent / "captures" / "shots"))
+    ap.add_argument("--limit", type=int, default=200)
+    ap.add_argument("--show", type=int, default=5)
+    _check(ap.parse_args())
