@@ -2026,10 +2026,14 @@ def main():
     # unless settings.textmap names a readable file — nothing here ships
     # HoYoverse's text. See tools/textmap.py for what a match has to clear.
     #
-    # Per game, and loaded on FIRST USE of that game rather than at startup:
-    # a real dump is ~200k entries, which is ~4s to index and ~390MB
-    # resident, and the auto-detect profile means the other game's map would
-    # otherwise be built for a session that never reads a line of it.
+    # Per game, and built on a BACKGROUND thread on first use of that game.
+    # Not at startup, because the auto-detect profile means the other game's
+    # map would be built for a session that never reads a line of it — and
+    # not inline, because indexing a current dump takes ~9s (398k lines,
+    # Genshin) and the capture loop would stop dead in the middle of the
+    # first line of the session, which is the one moment the loop cannot
+    # afford to be away. Until a map is ready, snapping is simply off; the
+    # lines read in those first seconds are read exactly as they are today.
     textmaps = {}
     tm_setting = VOICES.get("settings", {}).get("textmap") or {}
     if isinstance(tm_setting, str):
@@ -2037,16 +2041,22 @@ def main():
         tm_setting = {game.profile.name: tm_setting}
     nickname = VOICES.get("settings", {}).get("player_name", "")
 
+    def load_textmap(name, path):
+        tm = TextMap.load(path, nickname=nickname)
+        print(f"textmap[{name}]: {len(tm)} lines from {path}" if tm
+              else f"textmap[{name}]: {path} unreadable — snapping off "
+                   f"for {name}", flush=True)
+        textmaps[name] = tm
+
     def textmap_for(name):
-        """The map for this game, built once, or None."""
+        """The map for this game once it is built, or None until then."""
         if name not in textmaps:
             path = tm_setting.get(name)
-            tm = TextMap.load(path, nickname=nickname) if path else None
+            textmaps[name] = None          # claims the slot: one thread only
             if path:
-                print(f"textmap[{name}]: {len(tm)} lines from {path}" if tm
-                      else f"textmap[{name}]: {path} unreadable — snapping "
-                           f"off for {name}", flush=True)
-            textmaps[name] = tm
+                print(f"textmap[{name}]: indexing {path}…", flush=True)
+                threading.Thread(target=load_textmap, args=(name, path),
+                                 daemon=True).start()
         return textmaps[name]
 
     candidate, candidate_count = None, 0
