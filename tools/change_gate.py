@@ -96,6 +96,14 @@ class ChangeGate:
         self.key = None           # their rectangles — a move re-baselines
         self.skips = 0            # verdicts that saved an OCR call
         self.run = 0              # consecutive skips, bounded by MAX_SKIP_RUN
+        # The half-scale gray this gate decoded for its LAST unchanged()
+        # call, or None when that call never decoded (disabled, no blocks,
+        # skip-run break, torn frame). The anchor matcher needs the exact
+        # same decode (same draft scale, same convert) on the same frame,
+        # and was paying a second file read + decode for it every fresh-OCR
+        # frame — reuse this instead. Valid only until the next
+        # unchanged() call, like any per-frame state.
+        self.last_gray = None
 
     def reset(self):
         self.prev = self.key = None
@@ -145,6 +153,7 @@ class ChangeGate:
         bottom-left origin, the daemon convention). Always feeds its own
         baseline forward, so the comparison is strictly frame-to-frame.
         """
+        self.last_gray = None
         if not (self.enabled and blocks):
             return False
         if self.run >= MAX_SKIP_RUN:
@@ -162,6 +171,7 @@ class ChangeGate:
         if g is None:
             self.reset()          # can't trust a baseline we couldn't decode
             return False
+        self.last_gray = g
         H, W = g.shape
         # sorted + deduplicated so the box set is a stable identity across
         # frames: the daemon does not promise a stable block order
