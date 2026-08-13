@@ -82,7 +82,9 @@ def test_gray_exception_locks_the_stack_in():
 
 
 def test_empty_frames_spend_no_trial():
-    e = engine(lambda img: (None, None))
+    # **kw matters: without it the stub raises TypeError on use_cls and
+    # accidentally drives the engine-too-old degradation path instead
+    e = engine(lambda img, **kw: (None, None))
     e._detect(FLAT)
     assert e.gray_ok is None and e.gray_trials == 0
 

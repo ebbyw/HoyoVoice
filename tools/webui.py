@@ -225,6 +225,7 @@ async function tick(){
        'synth avg '+m.synth_avg_ms+'ms','ocr avg '+m.ocr_avg_ms+'ms',
        'ocr saved '+m.ocr_skipped,'lost frames '+m.lost_frames,
        'fused reads '+m.fused_reads,'snapped '+m.snapped,
+       'anchor avg '+m.anchor_avg_ms+'ms','roi crops '+m.roi_crops,
        'lines/min '+m.lines_per_min].map(x=>'<span class="pill">'+x+'</span>').join('');
     const vname=x=>{const i=x.indexOf('_');
       return x.charAt(i+1).toUpperCase()+x.slice(i+2)+' ('+x.slice(0,i).toUpperCase()+')';};

@@ -191,9 +191,16 @@ class Anchor:
     def match(self, gray):
         """(score, matched) against a half-scale gray frame. A frame at a
         different decode size than the template's reference stands down
-        (score -1) instead of matching at the wrong scale."""
+        (score -1) instead of matching at the wrong scale — logged once,
+        because the symptom is otherwise 'no anchors, forever' with no
+        diagnostic (plans/ANCHORS.md's resolution rule)."""
         H, W = gray.shape
         if (W, H) != self.ref:
+            if not self.scale_warned:
+                self.scale_warned = True
+                print(f"[anchors] {self.name}: frame decodes at {W}x{H}, "
+                      f"template cut at {self.ref[0]}x{self.ref[1]} — "
+                      f"standing down at this resolution", flush=True)
             return -1.0, False
         x0, y0, x1, y1 = _to_px(self.search, W, H)
         score, _ = _ncc(gray[y0:y1, x0:x1], self.template)
@@ -380,20 +387,32 @@ def _extract(game, name, frame, nx0, nx1, ny0, ny1):
     spec_path = ANCHOR_DIR / f"{game}.json"
     spec = (json.loads(spec_path.read_text()) if spec_path.exists()
             else {"anchors": []})
+    # re-extracting an existing anchor must not silently strip what the
+    # rebuilt entry doesn't know about — losing a `roi` quietly disables
+    # the crop win for the whole game (and the crop is default-on)
+    old = next((a for a in spec["anchors"] if a["name"] == name), {})
     spec["anchors"] = [a for a in spec["anchors"] if a["name"] != name]
-    spec["anchors"].append({"name": name, "template": f"{game}/{name}.png",
-                            # the cut rect ships so OTHER installs can
-                            # self-calibrate the template from their own
-                            # capture — the PNG itself never ships
-                            "cut": {"x": [round(nx0, 4), round(nx1, 4)],
-                                    "y": [round(ny0, 4), round(ny1, 4)]},
-                            "search": search,
-                            "threshold": 0.75,     # placeholder — measure!
-                            "ref": [W, H]})
+    entry = {"name": name, "template": f"{game}/{name}.png",
+             # the cut rect ships so OTHER installs can self-calibrate the
+             # template from their own capture — the PNG itself never ships
+             "cut": {"x": [round(nx0, 4), round(nx1, 4)],
+                     "y": [round(ny0, 4), round(ny1, 4)]},
+             "search": search,
+             "threshold": 0.75,
+             # provenance: the placeholder equals the shipped anchors'
+             # MEASURED value, so the number alone can't tell "measured"
+             # from "never measured" — this flag can. Flip it by hand
+             # after running the score distributions.
+             "measured": False,
+             "ref": [W, H]}
+    if "roi" in old:
+        entry["roi"] = old["roi"]
+    spec["anchors"].append(entry)
     spec_path.write_text(json.dumps(spec, indent=2) + "\n")
-    print(f"{png} {tmpl.shape[1]}x{tmpl.shape[0]}px search={search}"
-          f" — threshold is a PLACEHOLDER; measure score distributions"
-          f" (tools/anchors.py match) before trusting it")
+    kept = " (roi carried over)" if "roi" in old else ""
+    print(f"{png} {tmpl.shape[1]}x{tmpl.shape[0]}px search={search}{kept}"
+          f" — threshold is a PLACEHOLDER (measured: false); measure score"
+          f" distributions (tools/anchors.py match) before trusting it")
 
 
 def _match_cli(game, frames):
