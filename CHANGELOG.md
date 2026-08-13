@@ -7,6 +7,8 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-13
+
 ### Added
 
 - **Snapping a read line to the game's own text (`settings.textmap`).**
