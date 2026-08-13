@@ -2134,13 +2134,17 @@ def main():
     gate.frac = float(VOICES.get("settings", {}).get("change_gate_frac",
                                                      gate.frac))
     # settings.anchors: false silences anchor matching entirely;
-    # settings.anchor_roi: true additionally lets a matched anchor CROP
-    # the frame to its screen kind's ROI before OCR (phase 4b, off by
-    # default until the Windows ocr_ms win is measured)
+    # settings.anchor_roi: false stops a matched anchor from CROPPING the
+    # frame to its screen kind's ROI before OCR. On by default since the
+    # phase 4b trust gate passed on both halves: replay decisions within
+    # the harness's own noise floor on/off (plans/ANCHORS.md), and the
+    # Windows box measured ocr_avg_ms 321 with crops against its ~554
+    # dialogue baseline — a ~42% cut, from the 2026-08-13 09:56 session
+    # (530 crops, 0 lost frames, anchors self-calibrated at auto=1.00).
     anchor_state["enabled"] = bool(VOICES.get("settings", {})
                                    .get("anchors", True))
     anchor_state["roi"] = bool(VOICES.get("settings", {})
-                               .get("anchor_roi", False))
+                               .get("anchor_roi", True))
     global LATE_YIELD
     LATE_YIELD = bool(VOICES.get("settings", {}).get("late_yield", True))
 
