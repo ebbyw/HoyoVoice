@@ -69,11 +69,20 @@ def main():
     bad = 0
     for name, blocks, want in CASES:
         got = GEN.fused_rows(blocks)
-        if got != want:
+        if bool(got) != want:
             print(f"FAIL  {name}: fused_rows = {got}, want {want}")
             bad += 1
         else:
             print(f"ok    {name} → {'dropped' if want else 'kept'}")
+
+    # the frame is dropped for the fused box and says so with THAT text —
+    # the event is the only evidence a dropped frame leaves
+    named = [b["text"] for b in GEN.fused_rows(FUSED)]
+    if named != [FUSED[2]["text"]]:
+        print(f"FAIL  fused_rows named {named}, want just the fused box")
+        bad += 1
+    else:
+        print("ok    the fused box is the one reported")
 
     # the clean read must still classify as the line the game wrote
     line = GEN.classify(CLEAN)["dialogue"]

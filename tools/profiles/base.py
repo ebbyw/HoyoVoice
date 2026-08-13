@@ -167,7 +167,11 @@ class Profile:
                 and any(c.isalpha() for c in b["text"])]
 
     def fused_rows(self, blocks):
-        """True if a dialogue row came back as two drawn rows fused into one.
+        """The blocks that are two drawn rows fused into one — [] if none.
+
+        A list rather than a flag because the caller drops the frame and has
+        to be able to say WHICH text made it do that; an empty list is the
+        ordinary case and is falsy.
 
         Vision occasionally groups two adjacent rows of the dialogue box into
         a single observation and reads them INTERLEAVED — the words of both
@@ -198,13 +202,13 @@ class Profile:
         reader to the screen it is drawn on.
         """
         if not self.FUSED_ROW_H:
-            return False
+            return []
         lo, hi = self.DIALOGUE_FALLBACK_Y
-        return any(b["h"] >= self.FUSED_ROW_H
-                   and len(b["text"]) >= self.FUSED_MIN_CHARS
-                   and self.is_dialogue_seed(b)
-                   and lo <= b["y"] + b["h"] / 2 <= hi
-                   for b in self.speakable(blocks))
+        return [b for b in self.speakable(blocks)
+                if b["h"] >= self.FUSED_ROW_H
+                and len(b["text"]) >= self.FUSED_MIN_CHARS
+                and self.is_dialogue_seed(b)
+                and lo <= b["y"] + b["h"] / 2 <= hi]
 
     def is_plate_subtitle(self, block, plate):
         """True if this block is part of the NAMEPLATE rather than speech —
