@@ -403,18 +403,24 @@ def anchor_pack(profile_name):
     return pack
 
 
-def match_anchors(profile_name):
+def match_anchors(profile_name, gray=None):
     """Match the current frame against the active game's anchor pack, log
     when the SET of matched anchors changes, and return the ROI the
     matched set implies (Vision-normalized union, or None). Called only on
     frames about to pay for a fresh OCR — a gate-unchanged frame provably
-    didn't change where text was, and chrome moves even less than text."""
+    didn't change where text was, and chrome moves even less than text.
+
+    `gray` is the change gate's half-scale decode of THIS frame
+    (gate.last_gray) — the identical draft decode this matcher needs, so
+    passing it saves a second file read + decode per fresh-OCR frame.
+    None (gate disabled, torn frame, skip-run break) falls back to
+    decoding here."""
     pack = anchor_pack(profile_name)
     if not pack.anchors:
         return None
     t0 = time.perf_counter()
     try:
-        hits = pack.match(decode_half(FRAME))
+        hits = pack.match(decode_half(FRAME) if gray is None else gray)
     except Exception:
         return None                 # a torn frame is OCR's problem, not ours
     stats["anchor_ms"].append(int((time.perf_counter() - t0) * 1000))
@@ -431,7 +437,13 @@ def frame_is_dark():
     Continue text — accept them by checking the frame is nearly all black."""
     try:
         from PIL import Image
-        img = Image.open(FRAME).convert("L")
+        img = Image.open(FRAME)
+        # JPEG draft decode: the mean of a 1/8-scale DCT decode is the
+        # mean of the full decode to within a count or two, and this runs
+        # repeatedly on exactly the black narration screens it exists for
+        # — no reason to decode 1920x1080 to average 48x48
+        img.draft("L", (max(1, img.width // 8), max(1, img.height // 8)))
+        img = img.convert("L")
         img.thumbnail((48, 48))
         # getdata() is deprecated and goes away in Pillow 14; its replacement
         # only exists from Pillow 11.3, so keep the old call as the fallback
@@ -922,18 +934,40 @@ def spoken_form(text):
     log, dedupe and casting all keep "Shh" and "W-what" as written. The
     "synth heard:" line in the log is where the respelling shows up.
     """
-    settings = VOICES.get("settings", {})
-    exact = set(settings.get("pronunciations_exact", []))
-    for word, spoken in settings.get("pronunciations", {}).items():
-        # a key ending in "." ("Ms.") can't take a trailing \b: between the
-        # period and the following space there is no word boundary, so the
-        # entry would never fire. The period is its own right edge.
-        tail = r"\b" if word[-1:].isalnum() else ""
-        text = re.sub(rf"\b{re.escape(word)}{tail}", spoken, text,
-                      flags=0 if word in exact else re.IGNORECASE)
+    for pat, spoken in _pron_patterns():
+        text = pat.sub(spoken, text)
     for pat, rep in _INTERJECTIONS:
         text = pat.sub(_keep_case(rep), text)
     return _STUTTER.sub(_unstutter, text)
+
+
+# Compiled per settings-content, not per call: spoken_form runs at least
+# twice per spoken line over ~85+ entries, and the f-string + re.escape +
+# regex-cache lookup per entry per call was most of its cost. The key is
+# the settings CONTENT (the dashboard edits pronunciations live), and
+# building it is one dict iteration — far cheaper than what it replaces.
+_PRON_CACHE = {"key": None, "pats": []}
+
+
+def _pron_patterns():
+    settings = VOICES.get("settings", {})
+    pron = settings.get("pronunciations", {})
+    exact = settings.get("pronunciations_exact", [])
+    key = (tuple(pron.items()), tuple(exact))
+    if _PRON_CACHE["key"] != key:
+        ex = set(exact)
+        pats = []
+        for word, spoken in pron.items():
+            # a key ending in "." ("Ms.") can't take a trailing \b: between
+            # the period and the following space there is no word boundary,
+            # so the entry would never fire. The period is its own right
+            # edge.
+            tail = r"\b" if word[-1:].isalnum() else ""
+            pats.append((re.compile(rf"\b{re.escape(word)}{tail}",
+                                    0 if word in ex else re.IGNORECASE),
+                         spoken))
+        _PRON_CACHE["key"], _PRON_CACHE["pats"] = key, pats
+    return _PRON_CACHE["pats"]
 
 
 # what mark_stage_directions() leaves behind, and the extensions that make a
@@ -2167,7 +2201,13 @@ def main():
     unstable_count = 0
     miss_streak = 0             # consecutive frames the detector lost the line
     last_raw_norm = None        # previous frame's UNCLIPPED read (growth check)
-    candidate_variants = []     # every raw read of the current line
+    # raw reads of the current line, for the best-variant vote at fire
+    # time. Bounded: a line left ON SCREEN keeps appending long after it
+    # fired (fired_norm blocks the re-fire, not the append), and a
+    # two-minute dialogue pause accumulated ~700 entries the vote then
+    # normalized in full. The last ~10s of reads is what the vote wants
+    # anyway — it votes on the line as currently drawn.
+    candidate_variants = deque(maxlen=60)
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
@@ -2416,7 +2456,7 @@ def main():
                 # classify — which is right: during a game switch the old
                 # game's chrome stops matching, so the frames the switch
                 # decision needs are read whole.
-                roi = (match_anchors(game.profile.name)
+                roi = (match_anchors(game.profile.name, gate.last_gray)
                        if anchor_state["enabled"] else None)
                 crop = None
                 # the timer starts BEFORE the crop: crop_frame is a full
@@ -2479,10 +2519,12 @@ def main():
             if fresh_read and anchor_state["enabled"]:
                 _bp = anchor_pack(screens.name)
                 if _bp.pending:
-                    try:
-                        _gray = decode_half(FRAME)
-                    except Exception:
-                        _gray = None
+                    _gray = gate.last_gray
+                    if _gray is None:
+                        try:
+                            _gray = decode_half(FRAME)
+                        except Exception:
+                            _gray = None
                     msg = _bp.maybe_bootstrap(
                         _gray, screens.trusts_dialogue(blocks))
                     if msg:
@@ -3016,7 +3058,8 @@ def main():
                 candidate_count += 1
                 candidate_variants.append((state["dialogue"], conf))
             else:
-                candidate_variants = [(state["dialogue"], conf)]
+                candidate_variants = deque([(state["dialogue"], conf)],
+                                           maxlen=60)
                 # if the text GREW from the previous candidate, the typewriter
                 # is mid-render (it pauses at sentence ends!) — stay patient
                 candidate_growing = (candidate is not None

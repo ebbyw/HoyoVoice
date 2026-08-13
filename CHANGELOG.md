@@ -53,6 +53,21 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   passes per frame (~10–45 ms of a 166 ms budget) doing nothing.
   `wordfreq` lookups in the run-on splitter are now cached the same way:
   the same line was re-scored on every frame it sat on screen.
+
+  And the loop stops decoding the same JPEG twice: the change gate now
+  exposes the half-scale gray it just decoded and the anchor matcher
+  reuses it (same draft decode, byte for byte) instead of paying a
+  second file read + decode on every fresh-OCR frame — `anchor_ms` was
+  mostly measuring that decode, not the correlation. The dark-frame
+  check decodes at 1/8 draft scale instead of full 1080p to average a
+  48×48 thumbnail (mean shift measured ≤0.16 against a threshold of
+  28); the best-variant vote's raw-read list is bounded at 60 (a line
+  left on screen kept appending long after it fired — a two-minute
+  pause accumulated ~700 entries); the pronunciation respellings are
+  compiled once per settings change instead of ~85 regex builds per
+  pass, twice per line; and the Windows OCR daemon's background
+  flattening does its arithmetic in-place (bit-identical, ~32 MB of
+  float32 intermediates per 1080p frame no longer allocated).
 - **`ocr_ms` includes the ROI crop's cost.** The Windows on-vs-off
   measurement that gates `anchor_roi` defaulting on compares `ocr_ms` —
   which excluded the crop's own decode + PNG encode, i.e. the cost side
