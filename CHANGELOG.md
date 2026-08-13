@@ -8,6 +8,39 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **`tools/ocr_bench.py` — the OCR is measurable now.** Every reader fix so
+  far has been signature-by-signature (fused rows, a bullet glyph welded to
+  a word, garbled re-reads) because there was no way to ask whether the
+  reader is better than it was yesterday. Three commands, and the first
+  needs no human at all:
+
+  - `stability` groups consecutive frames of a held line and scores the
+    share that disagree with their run's majority read. That disagreement
+    IS the bug — a line that reads two ways alternately defeats the dedupe
+    window and gets spoken twice — so it can be scored over hundreds of
+    frames the moment a corpus exists.
+  - `policy` replays a run through competing stabilization rules and counts
+    how many times each would hand the line downstream. One is right.
+  - `accuracy` scores exact-match and character error rate against a typed
+    `truth.json`. The only metric that catches an error every frame agrees
+    on, and the only one that costs a human anything.
+
+  Corpora come from `extract` (frames out of a session recording) or
+  `capture` (frames out of the LIVE capture file). The distinction turned
+  out to matter more than expected — see below. Corpora are gitignored:
+  they are game screenshots, and large.
+
+  What it says so far, on 147 live frames of a held Genshin line: **49.7%
+  of frames disagree with their run's majority read**. That is the number
+  to beat.
+
+- **`crop_frame()` takes a `scale`.** Enlarging the image handed to the
+  recognizer is the cheapest accuracy lever available in principle — no new
+  engine, no new dependency, one Lanczos resize, and no remapping cost
+  because the daemon normalizes to whatever image it was handed. It is
+  wired for use but NOT used by the app, because measurement says it does
+  not help (below).
+
 - **Anchor ROI cropping (OCR plan phase 4b), off by default behind
   `settings.anchor_roi`.** When the matched anchor chrome implies a screen
   kind, OCR now reads only that kind's ROI — detector cost scales with
@@ -153,6 +186,26 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   `voices.json` is gitignored, and a pull never updates pronunciations.
 
 ### Changed
+
+- **Two OCR ideas measured and NOT shipped.** Both were on the list of
+  things that would obviously help. Neither does, and the benchmark is
+  what says so rather than an opinion:
+
+  - **Upscaling before OCR.** On 147 live frames, disagreement within a run
+    went 49.7% at native scale → 45.6% at ×2 → 57.9% at ×3, and cropping to
+    the dialogue band first made it *worse* at ×2 (52.4%). All of that is
+    inside the sampling error of a 147-frame corpus. The instability is not
+    a resolution problem: a Genshin dialogue row is already ~33px tall, and
+    what moves between frames is JPEG noise and Vision's own grouping, not
+    detail the recognizer lacks. The `scale` argument stays, unused, for
+    whoever measures it against a different capture.
+  - **Multi-frame consensus** (accept the text two of the last three reads
+    agree on, instead of two consecutive). On the same corpus both policies
+    emit exactly once per run — there is nothing to fix there — and against
+    the alternating fused/clean reads that caused the forty-times bug it is
+    provably no help either: a 50/50 alternation has no minority to
+    outvote, at any window size. What worked there was the structural test
+    (a box two rows tall cannot be one row), and it is already in.
 
 - **Two-option prompts are now read aloud, not just lone ones.** A pair
   of options still reads as the player weighing their answer rather than
