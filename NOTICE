@@ -1,0 +1,20 @@
+HoyoVoice — third-party rights notice
+
+Genshin Impact, Honkai: Star Rail, HoYoverse and miHoYo, together with the
+games' text, art, characters, logos and other content, are trademarks and
+copyrighted works of COGNOSPHERE PTE. LTD. / miHoYo Co., Ltd. They are NOT
+covered by this repository's MIT license, and nothing in this repository
+grants any right to them. Their names are used here nominatively, only to
+describe what this software interoperates with.
+
+HoyoVoice is a fan-made accessibility tool. It is not affiliated with,
+endorsed by, or sponsored by HoYoverse or miHoYo. It ships no game assets,
+game text, or datamined data, and does not modify the games, inject input,
+or read game files or memory — it observes an HDMI capture feed and plays
+locally synthesized audio.
+
+Character-name rosters used for pronunciation auditing are fetched at
+runtime from community projects (gi.yatta.moe; Mar-7th/StarRailRes,
+AGPL-3.0) and are not vendored here. Synthetic voices are produced by
+Kokoro-82M (hexgrad/Kokoro-82M) and are not intended to imitate the games'
+official voice actors.

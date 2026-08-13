@@ -33,7 +33,7 @@ def block(text, cx, cy, w=0.12, h=0.026, conf=1.0):
 # in the hint strip.
 CHROME = [block("Auto", 0.844, 0.067, w=0.03, h=0.018),
           block("Confirm", 0.910, 0.067, w=0.05, h=0.018),
-          block("UID: 603275577", 0.900, 0.040, w=0.09, h=0.016)]
+          block("UID: 100000000", 0.900, 0.040, w=0.09, h=0.016)]
 PLATE = block("Blanche", 0.500, 0.229, w=0.055, h=0.027)
 LINE = block("Please have a look around.", 0.500, 0.167, w=0.20, h=0.031)
 
@@ -74,7 +74,7 @@ FRAMES = [
             "will they?", 0.5008, 0.1718, w=0.4505, h=0.0306),
       block("Lv.90", 0.4198, 0.0819, w=0.025, h=0.0194),
       block("Chat", 0.0807, 0.0597, w=0.024, h=0.0231),
-      block("UID: 603275577", 0.9221, 0.0153, w=0.0974, h=0.0269)],
+      block("UID: 100000000", 0.9221, 0.0153, w=0.0974, h=0.0269)],
      "Paimon", "These floaty lil' guys... They won't jump us out of "
      "nowhere, will they?"),
     # The line sits 0.0370 below the plate's baseline against a
@@ -87,7 +87,7 @@ FRAMES = [
     ("a world-dialogue line is not a role subtitle",
      [block("Paimon", 0.5003, 0.2097, w=0.0557, h=0.0324),
       block("Where are we now..?", 0.5003, 0.1718, w=0.14, h=0.0300),
-      block("UID: 603275577", 0.9221, 0.0153, w=0.0974, h=0.0269)],
+      block("UID: 100000000", 0.9221, 0.0153, w=0.0974, h=0.0269)],
      "Paimon", "Where are we now..?"),
     # The Convert screen: a banner in the plate band, an item grid under it,
     # and menu verbs where the story chrome would be.
@@ -101,7 +101,7 @@ FRAMES = [
       block("Item Details", 0.752, 0.079, w=0.065, h=0.018),
       block("Convert", 0.855, 0.079, w=0.045, h=0.018),
       block("Leave", 0.928, 0.079, w=0.035, h=0.018),
-      block("UID: 603275577", 0.900, 0.040, w=0.09, h=0.016)],
+      block("UID: 100000000", 0.900, 0.040, w=0.09, h=0.016)],
      None, ""),
 ]
 

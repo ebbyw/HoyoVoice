@@ -28,7 +28,8 @@ VAD tail-reader, and recording mux all depend on them):
                    (192,000 bytes/sec). (Re)starting capture truncates it.
     OCR blocks   : list of {"text", "confidence", "x", "y", "w", "h"} with
                    coordinates NORMALIZED 0-1, origin BOTTOM-LEFT (Apple
-                   Vision convention — classify.py assumes it).
+                   Vision convention — tools/profiles/ and tools/anchors.py
+                   assume it).
     TTS audio    : float32 numpy array, 24 kHz mono, roughly [-1, 1].
 
 Behavioral contracts:
@@ -51,7 +52,6 @@ Behavioral contracts:
         already begun respawning itself. .kill() for shutdown.
 
     Tts.synth(text, voice, speed) -> np.float32 array | None
-    Tts.warm_up()   # optional pre-load; called once at startup
     Tts.register_voice(voice_id, path)   # installed voice pack (a
         # (510, 1, 256) float32 .safetensors written by tools/voicepack.py);
         # after this, synth() must accept voice_id like any built-in voice
