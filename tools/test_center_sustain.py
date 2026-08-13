@@ -6,9 +6,13 @@ dialogue-advance click against quiet music measured mid+13.0 side+1.8 with
 VAD peak 0.00 — decisive on the numbers — and silenced a streamed first
 sentence from a speaker the game had never voiced. The click is over in a
 few 32ms blocks; even a one-word VO line holds its rise for half a second.
-sustain_s is the discriminator, and this pins both sides of the 0.35s
-threshold with the smoothing overlap included. Run directly or under
-pytest:
+Since 2026-08-13 no production decision consults the 0.35s threshold —
+center energy needs corroboration (peak or a voiced record) instead, and
+sustain is printed as a diagnostic — so what this pins is the MEASUREMENT
+(center_burst's sustain seconds, smoothing overlap included) on both
+sides of the documented transient/lasting boundary, in case a
+corroborated variant ever wants the threshold back. Run directly or
+under pytest:
 
     python tools/test_center_sustain.py
 """
@@ -41,7 +45,8 @@ def fill(profile):
     return t
 
 
-# (name, profile after line start, want_voiced_at_gate)
+# (name, profile after line start, want_lasting — does the burst outlast
+# the transient boundary?)
 # ENERGY_MID_BURST is 7dB: a +13 segment is elevated, quiet is not.
 CASES = [
     # the failing frame: 0.26s click, then silence while the gate waits
@@ -67,7 +72,7 @@ def main():
             continue
         got = sustain >= live.ENERGY_SUSTAIN_S
         if got != want:
-            print(f"FAIL {name}: sustain={sustain:.2f}s → voiced={got}, "
+            print(f"FAIL {name}: sustain={sustain:.2f}s → lasting={got}, "
                   f"want {want}")
             bad += 1
     live.energy_history.clear()

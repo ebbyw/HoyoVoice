@@ -4,7 +4,7 @@ Companion to `plans/OCR-VISION-RESEARCH.md` (2026-08-04). Grounded in the curren
 
 Ground rules: every phase lands as its own branch → main, validated through `tools/replay.py` on the regression recordings (and the sandbox frame-corpus diff for OCR-level changes) BEFORE hardware testing. Fix in the repo, push, pull on the Windows box — never hand-edit there. Version bump in `tools/webui.py` + CHANGELOG per release.
 
-## Status (2026-08-12)
+## Status (2026-08-13)
 
 **Phases 0–3 shipped in 0.7.3.** The English recognition model, the pixel change
 gate (`tools/change_gate.py`, pinned by `tools/test_change_gate.py`) and
@@ -13,14 +13,14 @@ carries the measured results and the two mistakes the gate design had to survive
 (watching every block on the frame instead of the line's own, and averaging the
 diff instead of counting moved bright pixels). Baseline numbers are below.
 
-**Phase 4a shipped in 0.10.4; 4b is implemented** (2026-08-12) behind
-`settings.anchor_roi`, off by default until the Windows `ocr_ms` measurement is
-taken — that measurement is the one open gate. See
-[plans/ANCHORS.md](ANCHORS.md) for the design, the measured trust gates, and
-why "byte-identical replay" turned out to be the wrong bar (wall-clock replay
-is not deterministic; the honest gate — every on-vs-off difference site also
-differs off-vs-off — passed). **4c needs a new candidate or a rewrite**: its
-target screen, the book/reading UI, shipped as hand-written profile code
+**Phase 4a shipped in 0.10.4; 4b is DEFAULT-ON** (2026-08-13): both trust-gate
+halves passed — the Mac replay half inside the harness's own off-vs-off noise
+floor ("byte-identical" was the wrong bar; wall-clock replay is not
+deterministic), and the Windows half measured `ocr_avg_ms` 321 against the
+box's ~554 dialogue baseline (~42% off, 530 crops, zero lost frames).
+`anchor_roi: false` restores full frames. See [plans/ANCHORS.md](ANCHORS.md)
+for the design and measurements. **4c needs a new candidate or a rewrite**:
+its target screen, the book/reading UI, shipped as hand-written profile code
 (`READABLE_*` in `tools/profiles/genshin.py`) before anchors could deliver it
 as data — exactly the outcome 4c existed to avoid, twice now.
 
@@ -119,9 +119,10 @@ voices.json, nothing ships in the repo, and the offline prototype
 wrong-match rate) needs no live-path work at all. Also weighed in the same
 review and **rejected: licensing** — using the games' font to help OCR (the
 recognizers here aren't trainable anyway, and rec fine-tuning is days of
-pipeline work). The open Windows book-page bug (`hum`/`Ium` rows) smells
-like detector/frame, not glyph shape — tracked in
-plans/WINDOWS-TESTING.md's known open items.
+pipeline work). The open Windows book-page bug (`hum`/`Ium` rows) has its
+strongest lead in RapidOCR's per-row angle classifier, caught flipping a
+row 180° on DirectML and disabled 2026-08-13 — confirmation it stays gone
+is tracked in plans/WINDOWS-TESTING.md's known open items.
 
 ## Phase 6 (backlog) — Florence-2 as offline arbiter
 
@@ -139,8 +140,8 @@ Replay-harness-only: batch low-confidence lines from the regression corpus throu
 | 5 TextMap | experiment | everything OCR, latency ceiling | match rate ≥90%, wrong-match ~0 on replay corpus | **shipped** (Unreleased) — 113/164 repaired, 0 wrong; user-seeded local file, nothing in the repo |
 | 6 arbiter | backlog | corpus labeling | labeled corpus | not needed yet |
 
-1→2→3 were independent of 4 and released together in 0.7.3. Phase 4 is now
-optional rather than load-bearing: Genshin shipped as profile code in 0.7.0
-without it, so what remains for 4 to justify itself is OCR cost (the Windows
-measurement) and whether any future screen ships as data. 5 shipped before 4c,
-as user-seeded runtime data (`settings.textmap` paths), not as profile files.
+1→2→3 were independent of 4 and released together in 0.7.3. Phase 4 earned
+its keep on OCR cost: the Windows measurement passed and ROI cropping is
+default-on. What remains of 4 is only 4c — whether a future screen ships as
+data. 5 shipped before 4c, as user-seeded runtime data (`settings.textmap`
+paths), not as profile files.

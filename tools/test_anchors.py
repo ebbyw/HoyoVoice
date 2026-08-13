@@ -148,6 +148,8 @@ def test_bootstrap_cut_verify_persist():
     for _i in range(BOOT_HOLD + 3):
         assert pack3.maybe_bootstrap(black, True) is None
     assert pack3.pending and pack3._candidate is None
+    import shutil
+    shutil.rmtree(user, ignore_errors=True)   # written PNGs + sidecars
 
 
 def test_roi_for_union_and_absence():
@@ -168,7 +170,7 @@ def test_roi_for_union_and_absence():
     assert pack.roi_for(()) is None
 
 
-def test_crop_frame_rect_matches_remap(tmp_path=None):
+def test_crop_frame_rect_matches_remap():
     """The rect crop_frame returns must be the exact inverse of the
     daemon's crop-normalization: a feature at a known full-frame position,
     OCR'd inside the crop, must remap to that same position."""
@@ -194,6 +196,8 @@ def test_crop_frame_rect_matches_remap(tmp_path=None):
                    "x": 0.0, "y": 0.5, "w": 0.5, "h": 0.5}, crop)
     assert b["x"] == cx0 and abs(b["y"] - (cy0 + 0.5 * ch)) < 1e-9
     assert abs(b["w"] - 0.5 * cw) < 1e-9 and abs(b["h"] - 0.5 * ch) < 1e-9
+    import shutil
+    shutil.rmtree(d, ignore_errors=True)
 
 
 def test_crop_frame_refuses_torn_and_degenerate():
@@ -211,6 +215,8 @@ def test_crop_frame_refuses_torn_and_degenerate():
     assert crop_frame(d / "gone.jpg", roi, out) is None
     tiny = {"x": (0.5, 0.5005), "y": (0.0, 0.62)}   # degenerate width
     assert crop_frame(src, tiny, out) is None
+    import shutil
+    shutil.rmtree(d, ignore_errors=True)
 
 
 if __name__ == "__main__":

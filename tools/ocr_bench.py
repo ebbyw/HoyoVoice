@@ -132,11 +132,16 @@ def read_frames(frames, game, scale, ocr, roi=None):
             path, crop = f, None
             if scale != 1 or roi:
                 path = tmp / "scaled.png"
-                crop = crop_frame(f, roi or (0.0, 0.0, 1.0, 1.0), path, scale)
+                # crop_frame takes a REGION DICT, not a rect tuple — the
+                # tuple form silently returned None (swallowed by its own
+                # except) and this tool never exercised crop_frame at all
+                rd = ({"x": (roi[0], roi[2]), "y": (roi[1], roi[3])}
+                      if roi else {"x": (0.0, 1.0), "y": (0.0, 1.0)})
+                crop = crop_frame(f, rd, path, scale)
                 if crop is None:
-                    # crop_frame verifies a whole JPEG — that check is for
-                    # the live capture, and a PNG corpus fails it. Same
-                    # crop, done plainly.
+                    # crop_frame verifies a whole JPEG (the live-capture
+                    # torn-frame check) — a PNG corpus fails it, so do the
+                    # same crop plainly for those.
                     from PIL import Image
                     img = Image.open(f)
                     W, H = img.size

@@ -337,10 +337,12 @@ ENERGY_DECISIVE_OVER_SIDE = 8.0
 # already spent. NO LONGER A BELIEVE-GATE: a sustained burst once stood in
 # for corroboration, and a loud scene sustains forever — the Snezhnaya
 # train's engine rumble silenced four unvoiced NPC lines at peak 0.00
-# (2026-08-13). The measurement (center_burst) and this line between
-# transient and lasting are still pinned by test_center_sustain.py and
-# printed in the log, because "did it even last?" is the first question
-# when reading a center-energy decision after the fact.
+# (2026-08-13). No production decision consults this threshold anymore —
+# the MEASUREMENT (sustain seconds) is what the center-energy log lines
+# print, because "did it even last?" is the first question when reading a
+# decision after the fact — but the line between transient and lasting
+# stays pinned by test_center_sustain.py as the documented boundary the
+# old arm used, in case a corroborated variant ever wants it back.
 ENERGY_SUSTAIN_S = 0.35
 
 # --- shared state for the dashboard ---
@@ -376,7 +378,8 @@ stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
 
 # UI anchors — pixel evidence of game chrome, matched before/without OCR.
 # Phase (a) of plans/ANCHORS.md made matches log-only; phase (b) — behind
-# settings.anchor_roi, off by default — lets a matched anchor's ROI crop
+# settings.anchor_roi, ON by default since the 4b gate passed both halves
+# (2026-08-13) — lets a matched anchor's ROI crop
 # the frame before OCR, because detector cost scales with area. The rules
 # that must hold (paid for once already, by the change gate): absence of
 # an anchor is weak evidence, so no match → full frame, today's behavior;
@@ -391,6 +394,10 @@ anchor_state = {"enabled": True, "roi": False, "matched": (),
 # (~2s at 6fps) — the same medicine, and the same number, as the change
 # gate's MAX_SKIP_RUN, and for the same reason.
 ANCHOR_MAX_CROP_RUN = 12
+# Raw reads kept for the best-variant vote (~10s at 6fps): a line left on
+# screen keeps appending after it fires, and the vote only wants the line
+# as currently drawn. One constant, two construction sites.
+CANDIDATE_VARIANTS_MAX = 60
 CROP = FRAME.parent / "live_crop.png"
 
 
@@ -2213,7 +2220,7 @@ def main():
     # two-minute dialogue pause accumulated ~700 entries the vote then
     # normalized in full. The last ~10s of reads is what the vote wants
     # anyway — it votes on the line as currently drawn.
-    candidate_variants = deque(maxlen=60)
+    candidate_variants = deque(maxlen=CANDIDATE_VARIANTS_MAX)
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
@@ -3065,7 +3072,7 @@ def main():
                 candidate_variants.append((state["dialogue"], conf))
             else:
                 candidate_variants = deque([(state["dialogue"], conf)],
-                                           maxlen=60)
+                                           maxlen=CANDIDATE_VARIANTS_MAX)
                 # if the text GREW from the previous candidate, the typewriter
                 # is mid-render (it pauses at sentence ends!) — stay patient
                 candidate_growing = (candidate is not None
