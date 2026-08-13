@@ -41,3 +41,6 @@ archive/
 # agent-facing notes (local, not part of the published project)
 CLAUDE.md
 AGENTS.md
+
+# OCR benchmark corpora: frames are game screenshots, and large
+bench/
