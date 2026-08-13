@@ -189,6 +189,36 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **One log row per line, instead of three.** A line is handled twice by
+  design — the first finished sentence, then the typewriter's remainder as
+  an extension — and for a line the VAD gate SKIPS, those two passes are
+  the same fact written twice: "we saw this and stayed quiet." A third row
+  usually followed, because `last_spoken_norm` (which suppresses the
+  repeat-log for the line still on screen) was only ever set when a line
+  was *spoken*, so every voiced skip was chased by a "repeat (deduped)" row
+  for its own line. Over the 2026-08-12 18:10–18:21 session that was 44 of
+  77 events. A skipped line now grows the row it grew from rather than
+  adding one (same action, same speaker, old text a prefix of the new — a
+  jitter variant that is not a prefix still gets its own row, and a spoken
+  line still logs both passes, because two pieces of audio were played),
+  and the variable is now `last_handled_norm`, set for a deliberate silence
+  as well as for speech. The repeat-log guard also accepts a prefix: the
+  line handled a moment ago is still being typed, and past ~25 extra
+  characters the similarity ratio falls under the cutoff (0.89 for one
+  105-character line that grew by 26). Replayed over that session's own
+  events: 77 rows become 44, one per line, with the two genuinely
+  interesting repeats kept.
+
+- **A choice prompt dropped for want of a nameplate now says so.** Genshin
+  refuses a prompt with no speaker beside it — the teleport map lists its
+  waypoints in the same column at the same left edge, with no nameplate,
+  and would otherwise be read aloud as a three-option prompt. A real prompt
+  over an empty dialogue box is refused by the same rule, and left no trace
+  at all: nothing in the log to notice, which is the hardest kind of bug to
+  report. It is now logged once per distinct prompt (`choice prompt
+  (ignored — no speaker)`) with the option text and a shot. This is
+  diagnosis, not a fix — the rule still drops the prompt.
+
 - **Restarting with the dashboard open no longer refuses to start.** The
   port check binds a probe socket and exits loudly if the port is taken,
   which is right — a dead serving thread would otherwise leave the app
