@@ -3,6 +3,16 @@
     {
       "name": "auto",
       "template": "genshin/auto.png",
+      "cut": {
+        "x": [
+          0.8105,
+          0.8231
+        ],
+        "y": [
+          0.0568,
+          0.079
+        ]
+      },
       "search": {
         "x": [
           0.7979,

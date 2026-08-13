@@ -43,15 +43,29 @@ Anchor data lives under `tools/profiles/anchors/`:
 
 ```
 anchors/
-  hsr.json          one spec per game: anchors, search regions, thresholds
-  hsr/continue.png  template crops, grayscale, half-scale reference pixels
-  genshin.json
-  genshin/auto.png
+  hsr.json          one spec per game: anchors, cut rects, search regions,
+  genshin.json      thresholds, ROIs — pure numbers, facts about layout
 ```
 
+**Template PNGs do not ship** (2026-08-13): they are crops of the games' own
+chrome — the one game-derived binary the repo ever carried — so the spec now
+ships the `cut` rect instead and the pack **self-calibrates**: live.py cuts
+the template from the user's own capture on the first BOOT_HOLD consecutive
+frames where the classifier trusts the game's dialogue chrome (the same
+OCR-text ground truth the thresholds here were measured against), verifies
+the cut against a later trusted frame at the spec threshold — a fade or
+motion-blurred cut fails the verify and is thrown away — and persists it to
+`captures/anchors/<game>/<name>.png` with a ref sidecar. Validated on the
+regression recordings: self-cut templates score 0.985+ on their own game's
+later frames and ≤0.47 cross-game, the same margins as the hand-measured
+originals; both replays self-calibrate at 1.00 and read identically.
+Replay runs bootstrap into their throwaway state dir, so they exercise the
+path every run without touching the user's templates.
+
 A template records the *reference geometry* it was cut at (frame width/height
-at half scale) so a capture at a different resolution is detected rather than
-silently mis-matched — see the gotcha table.
+at half scale, in the user-dir sidecar) so a capture at a different
+resolution is detected rather than silently mis-matched — see the gotcha
+table.
 
 ## Coordinate spaces — the gotcha table
 
