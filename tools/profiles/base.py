@@ -301,7 +301,17 @@ class Profile:
                 state["dialogue"].append(b)
             elif (in_region(b, self.CHOICES)
                   and self.CHOICE_LEFT_EDGE[0] <= b["x"] <= self.CHOICE_LEFT_EDGE[1]
-                  and b["h"] >= self.CHOICE_MIN_HEIGHT):
+                  and b["h"] >= self.CHOICE_MIN_HEIGHT
+                  # letters, for the reason choice_blocks() gives: a block
+                  # with none is the option's bubble ICON. option_text()
+                  # strips a LEADING glyph, which covers the icon when
+                  # Vision fuses it into the first block — but a wrapped
+                  # option is drawn with the icon beside its middle, so the
+                  # glyph comes back as its own box whose row sorts BETWEEN
+                  # the two, and "I don't know. This seems like it'd be ®
+                  # quite the pickle…" was read out with a registered sign
+                  # in it (shot #211, 2026-08-12)
+                  and any(c.isalpha() for c in b["text"])):
                 state["choices"].append(b)
 
         # Drop ghost duplicates: the text fade-in makes Vision sometimes
@@ -349,14 +359,22 @@ class Profile:
 
         def option_text(row):
             """Joined text of one option, with the bubble icon stripped.
-            Vision fuses the option marker into the first block — shot #35
+            Vision fuses the option marker into a block — shot #35
             (2026-08-12) read Genshin's chat-bubble glyph as '® Feeling
             better now?', and the ® was spoken as 'registered sign'. Strip
             1-2 leading SYMBOL characters; quotes, ellipses, dots, parens
             and brackets survive because real options start with those
-            ('...Is that so?', '(Say nothing)')."""
-            text = " ".join(x["text"] for x in row)
-            return re.sub(r'^[^\w"\'“”‘’….(\[-]{1,2}\s*', "", text)
+            ('...Is that so?', '(Say nothing)').
+
+            Stripped per BLOCK rather than from the joined option, because
+            the icon is drawn beside the middle of a two-row option and
+            fuses into whichever row it lands on — usually the second:
+            "So they'll sell it to the highest" + "® bidder…" joined to a
+            sentence with a registered sign inside it, in 108 shots of the
+            2026-08-12 sessions. A leading-only strip cannot reach that."""
+            return " ".join(
+                s for s in (re.sub(r'^[^\w"\'“”‘’….(\[-]{1,2}\s*', "",
+                                   x["text"]) for x in row) if s)
 
         options, current = [], []
         prev = None
