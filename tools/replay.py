@@ -31,6 +31,9 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# keep in sync with SAMPLE_FPS in live.py — importing live here would run
+# its module-level setup, so the literal is duplicated on purpose; a bump
+# there without one here silently desyncs replay timing
 SAMPLE_FPS = 6
 
 

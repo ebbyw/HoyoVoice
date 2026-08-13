@@ -161,9 +161,11 @@ A third anchor was tried and rejected: Genshin's per-option choice glyph
 (the chat-bubble pill). A 15px bubble template matched round bright scenery
 (negatives to 0.886); widening it to bubble-plus-pill-cap separated the
 negatives (max 0.616) but the *positives* fell to min 0.387 — the pill's
-rendering varies with hover state and option wrap. Revisit when the
-choice-stack calibration capture (a 3+ option list) exists; until then the
-choice-prompt case stays covered by OCR text, as today.
+rendering varies with hover state and option wrap. The revisit precondition
+is now met: the choice-stack capture exists (rec_20260809_143259, the
+7-option Katheryne prompt, already used to calibrate the profile's CHOICES
+ceiling) — re-cut the template against it when anchor work next opens.
+Until then the choice-prompt case stays covered by OCR text, as today.
 
 ### (b) ROI cropping behind a setting — off by default
 
@@ -232,11 +234,16 @@ drop on the Windows box.
 
 ### (c) A screen ships as data
 
-Rebuild one Genshin screen — the book/inventory reading UI is the candidate,
-it's the last unsupported screen — as an anchor pack + ROI + bands in the
-spec file, from captures, with no new detector code in the profile. That's
-the success criterion for the whole phase: the *next* screen after that is a
-capture session and a JSON edit, not a release.
+The original candidate is gone: the book/inventory reading UI shipped as
+hand-written profile code (`READABLE_*` in `tools/profiles/genshin.py`,
+pinned by `tools/test_genshin_readable.py`) before this stage got to it —
+the second time a screen has outrun the anchors path. 4c now waits for the
+next screen either game adds: when one appears, build it as an anchor pack
++ ROI + bands in the spec file, from captures, with no new detector code in
+the profile. That remains the success criterion for the phase — a new
+screen becomes a capture session and a JSON edit, not a release. If the
+games stop adding screens first, 4c retires with nothing lost: (a) and (b)
+carry the ROI cost win on their own.
 
 ## Rejected along the way
 

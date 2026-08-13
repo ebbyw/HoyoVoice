@@ -85,6 +85,7 @@ Recorded so they aren't mistaken for oversights.
 - **Word-level OCR fusions survive on Windows, at a much lower rate.** The
   English recognition model (0.7.3) took fusion-class defects from 333 to 144
   over an 81-shot corpus. Run-on repair only splits into two known words, so
-  three-way fusions still get through. The remaining lever is canonical-text
-  snapping — phase 5 of [OCR-INTEGRATION-PLAN.md](OCR-INTEGRATION-PLAN.md), and
-  blocked on data that can't ship publicly.
+  three-way fusions still get through. The shipped mitigation is canonical-text
+  snapping (`settings.textmap`, phase 5 of
+  [OCR-INTEGRATION-PLAN.md](OCR-INTEGRATION-PLAN.md)) — user-seeded, local-only,
+  so a box without a map still sees the raw fusions.

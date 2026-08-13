@@ -3,11 +3,22 @@
 All notable changes to HoyoVoice are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [SemVer](https://semver.org/).
 Add entries under **Unreleased** as you work; move them into a dated version section when you tag a release.
+Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matching `vX.Y.Z` git tag.
 
 ## [Unreleased]
 
 ### Fixed
 
+- **Shot block-dumps are pruned with their frames.** Every logged event
+  with a screenshot also writes the raw OCR blocks to `shots/<id>.json`,
+  but the 300-file cap only ever deleted the `.jpg` — the JSONs
+  accumulated across every session ever run (and slowed the textmap
+  seeding scan, which parses all of them). The dump now dies with its
+  frame.
+- **`./hoyovoice.sh start` writes the pidfile.** The two launchers are
+  documented as interchangeable, but a `.sh`-started instance was
+  invisible to `python hoyovoice.py status/stop` (pidfile vs pgrep).
+  Both now maintain `hoyovoice.pid`; `stop`/`restart` clear it.
 - **The world-object newspaper reads.** The Snezhnaya Vestnik article
   overlay draws the same column, title slot and scroll rules as the
   inventory readable, but its exit hint says **Leave** where every other
@@ -19,6 +30,30 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Changed
 
+- **The frame loop stops paying quadratic fuzzy-match costs on open
+  panels.** `same_line` now short-circuits on exact equality and runs
+  difflib's `quick_ratio` bounds before the full `ratio()` — documented
+  upper bounds, so no verdict can change — and the chat-panel dedupe
+  tests set membership before its containment and fuzzy scans. On a
+  motionless 10–30-row panel this was 100–900 full SequenceMatcher
+  passes per frame (~10–45 ms of a 166 ms budget) doing nothing.
+  `wordfreq` lookups in the run-on splitter are now cached the same way:
+  the same line was re-scored on every frame it sat on screen.
+- **`ocr_ms` includes the ROI crop's cost.** The Windows on-vs-off
+  measurement that gates `anchor_roi` defaulting on compares `ocr_ms` —
+  which excluded the crop's own decode + PNG encode, i.e. the cost side
+  of the very trade being measured. The timer now starts before the crop.
+- **No game text in the repo.** Test fixtures that carried verbatim
+  passages (the reader-chunks page, the readable-article bodies, the
+  textmap cases, the boot notice) now use invented prose with the same
+  geometry, corruption shapes and matcher markers — the tests pin
+  behavior, not wording, and all pass unchanged. A `NOTICE` file states
+  that the games and their content are HoYoverse's and outside the MIT
+  grant, the README leads with the non-affiliation disclaimer, and
+  `voices.example.json` is regenerated from the shipped pronunciation
+  tables (dropping a retired `Yae Miko` key and a stale `Sigewinne`
+  respelling) and now seeds `textmap`, `player_name`, `change_gate` and
+  `late_yield` so a fresh install matches the documented settings shape.
 - **A readable page starts speaking after one sentence's synthesis, not a
   whole page's.** A full inventory page (~340 words) was synthesized as
   one utterance before any sound — seconds of dead air that read as "it
@@ -33,7 +68,7 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 - **Snapping a read line to the game's own text (`settings.textmap`).**
   The recognizer's everyday errors are small and local — `Ves.` for `Yes.`,
-  `Choosel"mission budget"` for `Choose "mission budget"`, a full stop that
+  `Choosel"harbor repairs"` for `Choose "harbor repairs"`, a full stop that
   never arrived — and each costs twice: the synthesizer says the wrong
   thing, and dedupe sees a line it has never seen and reads it again. Point
   the setting at a file of the game's dialogue strings and a settled line is
@@ -49,7 +84,8 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   its own line): the top match is right there and is still refused, because
   nothing about accepting 0.57 generalizes to a map three orders of
   magnitude larger, and a confident wrong sentence is a worse failure than
-  an obviously garbled one.
+  an obviously garbled one. `snapped` on the dashboard metrics counts the
+  lines repaired.
 
   **A dump is not the text on screen, and the first run against a real one
   repaired nothing at all.** An entry is the line *before* the runtime

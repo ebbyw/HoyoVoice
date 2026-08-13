@@ -5,6 +5,7 @@ Run: .venv/bin/python live.py     (or ./hoyovoice.sh start)
 Dashboard: http://127.0.0.1:8470
 """
 import difflib
+import functools
 import json
 import os
 import re
@@ -459,6 +460,9 @@ def save_shot(eid):
         for p in sorted(SHOTS.glob("*.jpg"),
                         key=lambda p: p.stat().st_mtime)[:-SHOTS_KEEP]:
             p.unlink()
+            # the block dump rides with its frame — pruning only the JPEG
+            # left the JSONs accumulating across every session ever run
+            p.with_suffix(".json").unlink(missing_ok=True)
         return True
     except Exception:
         return False
@@ -793,7 +797,11 @@ _COMMA_MISREAD = re.compile(r"(?<=[a-z])\.(?=\s+[a-z])")
 # optional import so the macOS/Vision path (which spaces correctly) and
 # installs without it simply skip this.
 try:
-    from wordfreq import zipf_frequency as _zipf
+    from wordfreq import zipf_frequency
+    # cached: the same line is re-processed on every frame it sits on
+    # screen, and zipf lookups dominate that pass; the vocabulary of a
+    # session is small, so the cache converges fast
+    _zipf = functools.lru_cache(maxsize=16384)(zipf_frequency)
 except ImportError:                                   # pragma: no cover
     _zipf = None
 _RUNON_MIN_PART = 3.2     # both halves must be this common (zipf)
@@ -1137,7 +1145,17 @@ def same_line(a, b, cutoff=0.9):
     differently on each pass."""
     if not a or not b:
         return False
-    return difflib.SequenceMatcher(None, a, b).ratio() >= cutoff
+    if a == b:
+        return True
+    # quick_ratio()/real_quick_ratio() are documented upper bounds on
+    # ratio(), so a below-cutoff answer here cannot flip any verdict — it
+    # only skips the quadratic pass for pairs that could never match. This
+    # runs per row per frame while a chat or readable panel is open, and
+    # most pairs are nothing alike.
+    sm = difflib.SequenceMatcher(None, a, b)
+    if sm.real_quick_ratio() < cutoff or sm.quick_ratio() < cutoff:
+        return False
+    return sm.ratio() >= cutoff
 
 
 # An option's tail has to be this many characters before it may stand in for
@@ -2392,6 +2410,12 @@ def main():
                 roi = (match_anchors(game.profile.name)
                        if anchor_state["enabled"] else None)
                 crop = None
+                # the timer starts BEFORE the crop: crop_frame is a full
+                # decode + PNG encode paid to make the OCR call cheaper, and
+                # the Windows on-vs-off ocr_ms comparison that gates
+                # anchor_roi defaulting on is meaningless if the cost side
+                # of the trade is invisible to the stat
+                t0 = time.time()
                 if roi is not None and anchor_state["roi"]:
                     if anchor_state["crop_run"] >= ANCHOR_MAX_CROP_RUN:
                         # deferred long enough — read the whole frame so
@@ -2400,7 +2424,6 @@ def main():
                         anchor_state["crop_run"] = 0
                     else:
                         crop = crop_frame(FRAME, roi, CROP)
-                t0 = time.time()
                 blocks = ocr.recognize(CROP if crop else FRAME)
                 if blocks is None:      # daemon died; it respawned itself
                     continue
@@ -2500,8 +2523,11 @@ def main():
                 # A half-drawn row reads differently every frame while it
                 # moves, so it can't settle until it is whole.
                 cur = {normalize_text(t) for _, t in items}
+                # exact membership first: on a motionless panel every row is
+                # byte-identical to last frame, and the fuzzy scan is O(rows²)
                 settled = {c for c in cur
-                           if any(same_line(c, p, 0.92) for p in reader_prev)}
+                           if c in reader_prev
+                           or any(same_line(c, p, 0.92) for p in reader_prev)}
                 reader_prev = cur
                 items = [(s, t) for s, t in items
                          if normalize_text(t) in settled]
@@ -2526,12 +2552,17 @@ def main():
                     # ratio can't see that — a short fragment scores low
                     # against the long original — so test containment. The
                     # length floor keeps genuine short replies ("Okay").
-                    fragment = len(n) >= 8 and any(n in o for o in qr_seen)
-                    if (len(n) > 2 and n not in qr_seen and not fragment
-                            and not any(difflib.SequenceMatcher(
-                                None, n, o).ratio() >= 0.9 for o in qr_seen)):
-                        qr_seen.add(n)
-                        new.append((spk, t))
+                    # the cheap set test guards the containment and fuzzy
+                    # scans: rows already seen — the common case, every frame
+                    # a panel sits open — skip both entirely
+                    if len(n) > 2 and n not in qr_seen:
+                        fragment = (len(n) >= 8
+                                    and any(n in o for o in qr_seen))
+                        if (not fragment
+                                and not any(same_line(n, o, 0.9)
+                                            for o in qr_seen)):
+                            qr_seen.add(n)
+                            new.append((spk, t))
                 if qr is not None:
                     if new:
                         read_queue.append(

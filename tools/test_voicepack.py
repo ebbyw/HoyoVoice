@@ -9,7 +9,6 @@ rather than downloaded so the suite needs no network and no torch.
 
     python tools/test_voicepack.py
 """
-import io
 import json
 import os
 import pickle

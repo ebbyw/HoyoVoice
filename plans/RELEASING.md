@@ -26,8 +26,8 @@ messages, which is why releases merge rather than squash.)
 ## 2. Version
 
 `VERSION` in `tools/webui.py` — the single source of truth; the dashboard
-header, the downloaded log and `hoyovoice.py` all read it. Patch for
-fixes, minor for features.
+header and the downloaded log both read it. Patch for fixes, minor for
+features.
 
 ## 3. Verify before tagging
 
@@ -42,7 +42,7 @@ curl -s http://127.0.0.1:8470/log.txt | head -1        # downloaded log
 
 Both must show the new number, or the bump didn't land everywhere.
 
-If the release touches `NAMES`/`TERMS` in `tools/pronounce_names.py`, say so in
+If the release touches `FIXES`/`TERMS` in `tools/pronounce_names.py`, say so in
 the changelog entry with the `--write` line: `voices.json` is gitignored and
 per-machine, so a pull does not update anyone's pronunciations, and the second
 machine is always the one that reports the fix "not working".
@@ -57,6 +57,11 @@ git tag -a v0.7.0 -m "HoyoVoice 0.7.0
 git push origin main
 git push origin v0.7.0
 ```
+
+Always `-a` (annotated): v0.3.0–v0.5.1 are lightweight and carry no tagger
+date, which the changelog audit had to work around; every tag since 0.6.0 is
+annotated and must stay that way. The `<short summary>` line is optional in
+practice — the GitHub release body (step 5) carries the prose.
 
 ## 5. Publish the GitHub release — don't skip
 
