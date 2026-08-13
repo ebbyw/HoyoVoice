@@ -2,6 +2,14 @@
 
 Researched 2026-08-04. Each item is mapped to a known HoyoVoice pain point. Ordered by expected payoff ÷ effort.
 
+> **Status: historical snapshot, superseded by
+> [OCR-INTEGRATION-PLAN.md](OCR-INTEGRATION-PLAN.md).** Items 1–3 shipped
+> (0.7.3), item 4/5-adjacent work shipped as phases 4–5 (0.10.4/0.11.0),
+> and the "pending Genshin profile" mentioned below shipped as profile
+> code in 0.7.0. Decisions since — including NOT pursuing heavier rec
+> models despite residual fusions — live in the integration plan; read
+> this doc as the 2026-08-04 survey it was, not as open work.
+
 ## 1. English PP-OCRv5 rec model for RapidOCR (word fusions — "fora")
 
 Already flagged in PRE-MERGE.md; now confirmed viable. PaddleOCR ships `en_PP-OCRv5_mobile_rec`, an English-tuned recognition model, on Hugging Face, and ONNX conversions exist (see monkt/paddleocr-onnx). PP-OCRv5 claims 30%+ recognition accuracy gain over v3-generation models, and the English fine-tune specifically improves word-boundary behavior — the exact class of error behind our fusions. Drop-in via RapidOCR's `rec_model_path`; the detector stays unchanged so `_flatten_background` and classify.py normalization are untouched. Low effort, measurable with the replay harness + frame-corpus diff we already use.

@@ -24,6 +24,7 @@
         ]
       },
       "threshold": 0.75,
+      "measured": true,
       "ref": [
         960,
         540
