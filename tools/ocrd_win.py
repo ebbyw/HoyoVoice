@@ -162,15 +162,24 @@ class RapidEngine:
         # remove a copy, never change what the caller sees.
         self.gray_ok = None
         self.gray_trials = 0
+        self._cls_kw = None       # decided on the first engine call
         kw = _rec_override()
         if kw:
             print(f"[ocrd_win] rec model: "
                   f"{os.path.basename(kw['rec_model_path'])}",
                   file=sys.stderr, flush=True)
+        # cls (the per-row angle classifier) is disabled at every call
+        # below: game UI text is always drawn upright, so the classifier
+        # can only ever hurt — and on DirectML it does, intermittently
+        # flipping a row and reading it rotated 180°. Session shots from
+        # 2026-08-13 caught 'golden glow of "friendship."' coming back as
+        # 'ajuspuerd. do Mons uapios' at conf 0.6 on a frame whose
+        # neighbors read it upright at 0.96 — the same class of one-row
+        # garbage ("Culld.", "hum") the book reader has been speaking.
+        # No cls_use_dml either: the session would be built and never run.
         if directml_available():
             try:
-                self.ocr = RapidOCR(det_use_dml=True, cls_use_dml=True,
-                                    rec_use_dml=True, **kw)
+                self.ocr = RapidOCR(det_use_dml=True, rec_use_dml=True, **kw)
                 self.mode = "directml"
                 return
             except Exception as e:
@@ -184,6 +193,21 @@ class RapidEngine:
     # easy text".
     GRAY_TRIALS = 3
 
+    def _call(self, img):
+        """One engine call with cls off (see __init__). An engine too old
+        to take use_cls keeps cls instead of killing the daemon: the
+        first TypeError locks the plain call in for the session."""
+        if self._cls_kw is None:
+            self._cls_kw = {"use_cls": False}
+            try:
+                return self.ocr(img, **self._cls_kw)
+            except TypeError:
+                self._cls_kw = {}
+                print("[ocrd_win] engine too old for use_cls=False — "
+                      "angle classifier stays on", file=sys.stderr,
+                      flush=True)
+        return self.ocr(img, **self._cls_kw)
+
     def _detect(self, flat):
         """One detector pass over the flattened frame — through the 2-D
         gray array once this machine's engine has proven it reads that
@@ -191,16 +215,20 @@ class RapidEngine:
         on the first disagreement)."""
         np = self.np
         if self.gray_ok is True:
-            result, _ = self.ocr(flat)
+            result, _ = self._call(flat)
             return result
-        result, _ = self.ocr(np.stack([flat] * 3, axis=-1))
+        result, _ = self._call(np.stack([flat] * 3, axis=-1))
         if self.gray_ok is None and result:
             try:
-                gray, _ = self.ocr(flat)
+                gray, _ = self._call(flat)
             except Exception:
                 gray = None
+            # float(): some engine versions report the score as a string,
+            # and this comparison sits outside the try above — a bare
+            # subtraction was an uncaught TypeError that killed the daemon
             same = (gray is not None and len(gray) == len(result)
-                    and all(t1 == t2 and abs(s1 - s2) < 1e-6
+                    and all(t1 == t2
+                            and abs(float(s1) - float(s2)) < 1e-6
                             and np.array_equal(np.asarray(b1),
                                                np.asarray(b2))
                             for (b1, t1, s1), (b2, t2, s2)
@@ -238,7 +266,7 @@ class RapidEngine:
             # can never latch the net shut — same medicine as the change
             # gate's MAX_SKIP_RUN.
             if self.empty_run % 4 == 0:
-                result, _ = self.ocr(data)
+                result, _ = self._call(data)
             self.empty_run = 0 if result else self.empty_run + 1
         else:
             self.empty_run = 0
