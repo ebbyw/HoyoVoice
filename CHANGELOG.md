@@ -7,6 +7,18 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ## [Unreleased]
 
+### Added
+
+- **The dashboard and the downloaded log name the exact commit.** The
+  header and the log's first line now read `0.11.0 (6cbf22b)` — sha via
+  `git rev-parse` at startup, `-dirty` appended when tracked files
+  differ from it. `VERSION` only changes at release time, so a
+  mid-cycle session used to report the previous release's number: the
+  2026-08-13 Windows log said 0.10.4 while running ~40 commits past it,
+  and the log couldn't say which fixes were in play. Git is how both
+  machines deploy, so the sha is always there; if git is missing or
+  errors, the bare version appears exactly as before.
+
 ## [0.11.0] - 2026-08-13
 
 ### Added
