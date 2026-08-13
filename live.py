@@ -38,6 +38,7 @@ from anchors import (AnchorPack, crop_frame, decode_half,  # noqa: E402
                      remap_box)
 from casting_filter import canonical_quotes, junk_speaker  # noqa: E402
 from pronounce_names import NPC_GENDERS  # noqa: E402
+from textmap import TextMap  # noqa: E402
 from vad import CHUNK, SileroVAD  # noqa: E402
 import voicepack  # noqa: E402
 from webui import VOICE_CATALOG, start_webui  # noqa: E402
@@ -336,7 +337,7 @@ voice_import = {"state": "", "voice": None, "msg": ""}
 # start paused — resume from the dashboard (replays auto-resume)
 observing = {"on": os.environ.get("HOYOVOICE_AUTORESUME") == "1"}
 stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
-         "fused_reads": 0,
+         "fused_reads": 0, "snapped": 0,
          "synth_ms": deque(maxlen=100), "ocr_ms": deque(maxlen=200),
          "anchor_ms": deque(maxlen=200), "started": time.time()}
 
@@ -501,6 +502,7 @@ def metrics():
         "roi_crops": anchor_state["crops"],
         "lost_frames": lost_frames["n"],
         "fused_reads": stats["fused_reads"],
+        "snapped": stats["snapped"],
         "lines_per_min": round(stats["spoken"] / mins, 1),
     }
 
@@ -2020,6 +2022,16 @@ def main():
     global LATE_YIELD
     LATE_YIELD = bool(VOICES.get("settings", {}).get("late_yield", True))
 
+    # The game's own dialogue strings, if the player extracted them. Off
+    # unless settings.textmap names a readable file — nothing here ships
+    # HoYoverse's text. See tools/textmap.py for what a match has to clear.
+    textmap = None
+    tm_path = VOICES.get("settings", {}).get("textmap")
+    if tm_path:
+        textmap = TextMap.load(tm_path)
+        print(f"textmap: {len(textmap)} lines from {tm_path}" if textmap
+              else f"textmap: {tm_path} unreadable — snapping off", flush=True)
+
     candidate, candidate_count = None, 0
     candidate_growing = False
     candidate_t0 = 0.0          # when the current line was FIRST seen on screen
@@ -2899,7 +2911,28 @@ def main():
                 if best != state["dialogue"]:
                     state["dialogue"] = best
 
-            new_norm = key[1]
+            # Snap to the game's own line. Done HERE, once per stabilized
+            # line rather than per frame: the lookup costs ~11ms against a
+            # 100k-line map, which is worth paying for a line about to be
+            # spoken and not worth paying six times a second. Everything
+            # downstream — the log, dedupe, casting, synthesis — then works
+            # from the text the game wrote, which is the point: a repaired
+            # line is not just pronounced right, it MATCHES the next read
+            # of itself, so the jitter that makes a line read twice stops
+            # at the source.
+            if textmap is not None:
+                snapped = textmap.snap(state["dialogue"])
+                if snapped:
+                    # logged only when WORDS changed: a restored full stop
+                    # matters to sentence streaming but is not news, and a
+                    # line of log per line of dialogue is what this session
+                    # spent the afternoon removing
+                    if normalize_text(snapped) != key[1]:
+                        print(f"[snap] {state['dialogue'][:60]}\n"
+                              f"    -> {snapped[:60]}", flush=True)
+                        stats["snapped"] += 1
+                    state["dialogue"] = snapped
+            new_norm = normalize_text(state["dialogue"])
 
             # Compare against the recent window. Three outcomes:
             #   dup       — jitter variant / repeat → skip
