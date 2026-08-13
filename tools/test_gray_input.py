@@ -28,13 +28,14 @@ FLAT = np.zeros((540, 960), dtype=np.uint8)
 def engine(ocr):
     e = RapidEngine.__new__(RapidEngine)
     e.np, e.ocr, e.gray_ok, e.gray_trials = np, ocr, None, 0
+    e._cls_kw = None
     return e
 
 
 def test_identical_results_drop_the_stack():
     calls = {"gray": 0, "rgb": 0}
 
-    def ocr(img):
+    def ocr(img, **kw):
         calls["gray" if img.ndim == 2 else "rgb"] += 1
         return [(BOX, "hello", 0.9)], None
 
@@ -49,7 +50,7 @@ def test_identical_results_drop_the_stack():
 
 
 def test_mismatch_locks_the_stack_in():
-    def ocr(img):
+    def ocr(img, **kw):
         text = "hello" if img.ndim == 3 else "hallo"
         return [(BOX, text, 0.9)], None
 
@@ -59,7 +60,7 @@ def test_mismatch_locks_the_stack_in():
     assert e.gray_ok is False
     calls = {"gray": 0}
 
-    def counting(img):
+    def counting(img, **kw):
         if img.ndim == 2:
             calls["gray"] += 1
         return [(BOX, "hello", 0.9)], None
@@ -70,7 +71,7 @@ def test_mismatch_locks_the_stack_in():
 
 
 def test_gray_exception_locks_the_stack_in():
-    def ocr(img):
+    def ocr(img, **kw):
         if img.ndim == 2:
             raise ValueError("no 2-D support")
         return [(BOX, "hello", 0.9)], None
