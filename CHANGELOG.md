@@ -189,6 +189,24 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **A wrapped choice option no longer has a registered sign read out in the
+  middle of it.** Genshin draws the chat-bubble glyph beside each option,
+  vertically centered — so on an option that wraps to two rows it sits
+  beside the MIDDLE, and lands in the text two different ways. As its own
+  box it sorts between the two rows ("I don't know. This seems like it'd be
+  ® quite the pickle…", shot #211); fused into the row it touches it rides
+  in with that row's words ("So they'll sell it to the highest ® bidder…",
+  108 shots across the 2026-08-12 sessions). The existing strip only
+  removed a LEADING glyph from the joined option, which reaches neither.
+  Two fixes, both where the reason already lived: the choice branch of
+  `classify()` now requires letters in a block, the rule `choice_blocks()`
+  documents for exactly this ("a block with no letters is an option's
+  icon"), and the strip runs per BLOCK instead of on the joined option.
+  Options that legitimately open with punctuation ("…Is that so?", "(Say
+  nothing)") are unaffected — the pattern never ate those. Across the 307
+  recorded frames carrying options, none now reaches the synthesizer with a
+  glyph in it.
+
 - **One log row per line, instead of three.** A line is handled twice by
   design — the first finished sentence, then the typewriter's remainder as
   an extension — and for a line the VAD gate SKIPS, those two passes are
