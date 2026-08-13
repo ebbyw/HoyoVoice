@@ -41,8 +41,9 @@ HOLDS = [
 # spliced — a single-sentence line must come back as one piece, or every
 # ordinary line pays for an extra synth call it doesn't need.
 SPLITS = [
-    ("Huh!? You… You're Paimon, travel companion of the great hero Ebby!",
-     ["Huh!?", "You… You're Paimon, travel companion of the great hero Ebby!"]),
+    ("Huh!? You… You're Pell, sailing companion of the great captain Ebby!",
+     ["Huh!?",
+      "You… You're Pell, sailing companion of the great captain Ebby!"]),
     ("Hello, you two. Is something the matter?",
      ["Hello, you two.", "Is something the matter?"]),
     # one sentence: one piece, no splice

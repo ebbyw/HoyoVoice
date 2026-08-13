@@ -19,9 +19,11 @@ from profiles import get_profile                # noqa: E402
 
 GENSHIN = get_profile("genshin")
 
-# Shot #127 verbatim (Vision coordinates, origin bottom-left): the comms
-# plate and line, plus the open-world HUD that surrounds a comms message —
-# quest tracker, world nameplate, party list, HP readout, chat tab.
+# Shot #127's geometry, verbatim (Vision coordinates, origin bottom-left):
+# the comms plate and line, plus the open-world HUD that surrounds a comms
+# message — quest tracker, world nameplate, party list, HP readout, chat
+# tab. HUD strings here are functional UI text; the system-notice line is
+# the game's stock template shape, not story prose.
 COMMS_FRAME = [
     {"text": "Go to the elevator", "confidence": 1,
      "x": 0.0669, "y": 0.7545, "w": 0.1003, "h": 0.0207},

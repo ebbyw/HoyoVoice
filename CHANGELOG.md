@@ -395,6 +395,14 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **The last verbatim game lines leave the test suite.** The 2026-08-13
+  fixture sweep covered seven test files; a second review found the same
+  passage it removed from one file still shipping in two neighbours, plus
+  ~30 short lines across twelve files it never opened. All fixtures now
+  carry invented prose on the original measured geometry and corruption
+  shapes — the tests pin behavior, not wording, and the whole suite
+  passes unchanged. With that, NOTICE's "ships no game text" claim holds
+  without qualification.
 - **A loud scene can no longer read as voiceover.** The center-energy
   layer's sustained-burst arm believed a decisive centre burst with ZERO
   speechiness as VO if it merely lasted 0.35s — and on the Snezhnaya
@@ -544,13 +552,12 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 - **A frame where Vision fused two dialogue rows into one box is dropped
   instead of spoken.** On a motionless Genshin screen the OCR alternated
   between a clean two-box read of the line and a single box spanning both
-  rows, whose text is the two rows *woven together*: "A lot of them will
-  probably stockpile it and slowly work their way through — probably a good
-  idea, since energy prices are only gonna keep rising." came back as "A lot
-  ofa, sill pery by stake tely god a kly rising, Bit there always be people
-  who urgently need Mora." The fused box reports full confidence, so
-  nothing downstream doubted it, and because the two reads alternated every
-  second or two each looked new against the other in the one-entry dedupe
+  rows, whose text is the two rows *woven together* — a 26-word line came
+  back as an interleave of its own two rows, alternating word fragments
+  from each, ending on the second row's intact tail. The fused box reports
+  full confidence, so nothing downstream doubted it, and because the two
+  reads alternated every second or two each looked new against the other
+  in the one-entry dedupe
   window — the line was spoken about forty times in two minutes
   (2026-08-12 17:39–17:41 session, shots 409–581, 48 fused reads of that one
   line). Not the change gate's doing: the screen never changed, and the gate

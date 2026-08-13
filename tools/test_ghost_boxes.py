@@ -6,9 +6,10 @@ the old row-bucket filter caught it — but the ghost from
 rec_20260812_083939 (shot #289) was a double-height re-read of row one
 sitting BETWEEN the two real rows, so LINE_H quantization filed it in the
 second row's bucket, where it overlapped nothing horizontally and sailed
-into the middle of the assembled line: "…leave Paimon Wow, its so majestic
-Just Flyin out of breath". The filter has to judge overlap where the boxes
-actually are, not which bucket they round to. Run directly or under pytest:
+into the middle of the assembled line. The GEOMETRY below is that shot's,
+verbatim; the prose riding on it is invented — no game text ships in this
+repo. The filter has to judge overlap where the boxes actually are, not
+which bucket they round to. Run directly or under pytest:
 
     python tools/test_ghost_boxes.py
 """
@@ -21,16 +22,16 @@ from profiles import get_profile                # noqa: E402
 
 GENSHIN = get_profile("genshin")
 
-# Shot #289 verbatim (Vision coordinates, origin bottom-left): the plate,
-# row one split in two, the straddling ghost, row two, and the chrome.
+# Shot #289's geometry, verbatim (Vision coordinates, origin bottom-left):
+# the plate, row one split in two, the straddling ghost, row two, chrome.
 GHOST_FRAME = [
     {"text": "Paimon", "confidence": 1,
      "x": 0.4709, "y": 0.2119, "w": 0.0567, "h": 0.0284},
     {"text": "Wow, it", "confidence": 1,
      "x": 0.1860, "y": 0.1676, "w": 0.0596, "h": 0.0288},
-    {"text": "Wow, its so majestic Just Flyin", "confidence": 1,
+    {"text": "Wow, its so breezy Just Rowin", "confidence": 1,
      "x": 0.1833, "y": 0.1556, "w": 0.2292, "h": 0.0370},
-    {"text": "s so majestic! Just flying from one side to the other would"
+    {"text": "s so breezy! Just rowing from one side to the other would"
      " probably leave Paimon", "confidence": 1,
      "x": 0.2398, "y": 0.1654, "w": 0.5741, "h": 0.0310},
     {"text": "out of breath...", "confidence": 1,
@@ -43,13 +44,13 @@ GHOST_FRAME = [
      "x": 0.9026, "y": 0.0022, "w": 0.0684, "h": 0.0240},
 ]
 
-WANT = ("Wow, it s so majestic! Just flying from one side to the other"
+WANT = ("Wow, it s so breezy! Just rowing from one side to the other"
         " would probably leave Paimon out of breath...")
 
 # The same frame without the ghost — the fix must not disturb a clean read,
 # and in particular must keep row fragments that tile side by side.
 CLEAN_FRAME = [b for b in GHOST_FRAME
-               if not b["text"].startswith("Wow, its so majestic")]
+               if not b["text"].startswith("Wow, its so breezy")]
 
 
 def main():
