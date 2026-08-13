@@ -2977,13 +2977,21 @@ def main():
             if textmap is not None:
                 snapped = textmap.snap(state["dialogue"])
                 if snapped:
-                    # logged only when WORDS changed: a restored full stop
-                    # matters to sentence streaming but is not news, and a
-                    # line of log per line of dialogue is what this session
-                    # spent the afternoon removing
-                    if normalize_text(snapped) != key[1]:
-                        print(f"[snap] {state['dialogue'][:60]}\n"
-                              f"    -> {snapped[:60]}", flush=True)
+                    # Logged when WORDS changed — a restored full stop
+                    # matters to sentence streaming but is not news — and
+                    # once per LINE, not once per stabilized read of it.
+                    # The line on screen stabilizes over and over as OCR
+                    # jitters, and each variant snaps to the same place: on
+                    # the very first session with a real map, one line
+                    # printed eight identical repairs while being spoken
+                    # once. Compared against the line last dealt with,
+                    # which is what the repeat-log guard below uses, and
+                    # for the same reason.
+                    fixed = normalize_text(snapped)
+                    if fixed != key[1] and not same_line(fixed,
+                                                         last_handled_norm):
+                        print(f"[snap] {state['dialogue'][:80]}\n"
+                              f"    -> {snapped[:80]}", flush=True)
                         stats["snapped"] += 1
                     state["dialogue"] = snapped
             new_norm = normalize_text(state["dialogue"])
