@@ -305,6 +305,20 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **A setting added to `voices.json` by hand mid-session is no longer
+  wiped.** The file is rewritten whenever casting changes — an auto-cast, a
+  dashboard reassignment, an installed pack — from the copy the app read at
+  STARTUP, so an edit made while the app was running lasted until the next
+  auto-cast and then vanished with nothing said. Found the hard way:
+  `settings.textmap` and `settings.player_name` were added at 20:03 on
+  2026-08-12, wiped by the session that had been running since 19:50, and
+  the restart meant to pick them up read a file that no longer had them —
+  the map silently never loaded. Every write now goes through
+  `save_voices()`, which re-reads the file first and keeps any `settings`
+  key it doesn't have. Additions only, and only under `settings`: a key the
+  app knows is the app's to write (the dashboard's own toggles live there),
+  and casting is rewritten wholesale by design.
+
 - **A wrapped choice option no longer has a registered sign read out in the
   middle of it.** Genshin draws the chat-bubble glyph beside each option,
   vertically centered — so on an option that wraps to two rows it sits
