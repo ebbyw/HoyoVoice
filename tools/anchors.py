@@ -168,8 +168,13 @@ def crop_frame(path, roi, out_path, scale=1, data=None):
         # discard color on arrival: the RGB PNG paid encode here AND
         # decode+convert in the daemon for channels nobody used —
         # measured ~20ms per cropped frame across the two processes,
-        # and the crop path is the default path now
-        crop.convert("L").save(out_path, format="PNG", compress_level=1)
+        # and the crop path is the default path now.
+        # compress_level=0 (zlib store): PNG is lossless at EVERY level,
+        # so the pixels are byte-identical — level 1 spent 12.7ms
+        # encoding and made the daemon spend 12.8ms inflating, against
+        # 5.8/8.4 stored; ~11ms per cropped frame for deflate work on a
+        # file that lives milliseconds
+        crop.convert("L").save(out_path, format="PNG", compress_level=0)
     except Exception:
         return None
     return (x0 / W, (H - y1) / H, (x1 - x0) / W, (y1 - y0) / H)
@@ -249,19 +254,21 @@ class AnchorPack:
             # that one anchor, never the app: this runs inside the main
             # loop on first use, where an uncaught error would kill it
             try:
+                if not a.get("measured"):
+                    # the extract CLI's placeholder threshold equals the
+                    # shipped anchors' measured value, so only this flag
+                    # can tell them apart — say so once rather than
+                    # matching on an untrusted number silently
+                    # (ANCHORS.md: measured, not chosen). BEFORE the
+                    # template branch: a pending entry self-calibrates
+                    # and matches in its very first session, so the
+                    # warning must not wait for session two.
+                    print(f"[anchors] {game}/{a['name']}: threshold "
+                          f"{a['threshold']} is UNMEASURED — run the "
+                          f"score distributions (tools/anchors.py match) "
+                          f"and set measured: true", flush=True)
                 tmpl, ref = self._load_template(a)
                 if tmpl is not None:
-                    if not a.get("measured"):
-                        # the extract CLI's placeholder threshold equals
-                        # the shipped anchors' measured value, so only
-                        # this flag can tell them apart — say so once
-                        # rather than matching on an untrusted number
-                        # silently (ANCHORS.md: measured, not chosen)
-                        print(f"[anchors] {game}/{a['name']}: threshold "
-                              f"{a['threshold']} is UNMEASURED — run the "
-                              f"score distributions (tools/anchors.py "
-                              f"match) and set measured: true",
-                              flush=True)
                     self.anchors.append(Anchor(a["name"], tmpl, a["search"],
                                                a["threshold"], ref,
                                                a.get("roi")))

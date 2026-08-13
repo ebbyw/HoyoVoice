@@ -44,8 +44,8 @@ PARTS = [
 # duplicate of every line
 FLATTENED = [
     ("*cough* Anyway.", "[sounds/cough.wav] Anyway."),
-    ("Hello, you two. Is something the matter?",
-     "Hello, you two. Is something the matter?"),
+    ("Hello, you two. Is the ferry running late?",
+     "Hello, you two. Is the ferry running late?"),
     ("", ""),
 ]
 

@@ -252,6 +252,8 @@ def main():
     if bmeta.get("__metadata__", {}).get("source") != recipe:
         bad += _fail("install source override", "lost the blend recipe")
 
+    import shutil
+    shutil.rmtree(tmp, ignore_errors=True)
     print("voicepack: " + ("all checks passed" if not bad else f"{bad} FAILED"))
     return bad
 

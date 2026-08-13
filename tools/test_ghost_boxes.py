@@ -27,14 +27,14 @@ GENSHIN = get_profile("genshin")
 GHOST_FRAME = [
     {"text": "Paimon", "confidence": 1,
      "x": 0.4709, "y": 0.2119, "w": 0.0567, "h": 0.0284},
-    {"text": "Wow, it", "confidence": 1,
+    {"text": "Ha, wha", "confidence": 1,
      "x": 0.1860, "y": 0.1676, "w": 0.0596, "h": 0.0288},
-    {"text": "Wow, its so breezy Just Rowin", "confidence": 1,
+    {"text": "Ha, what a crossing The old fe", "confidence": 1,
      "x": 0.1833, "y": 0.1556, "w": 0.2292, "h": 0.0370},
-    {"text": "s so breezy! Just rowing from one side to the other would"
-     " probably leave Paimon", "confidence": 1,
+    {"text": "t a crossing! The old ferry pitched all night and nearly"
+     " threw our lanterns", "confidence": 1,
      "x": 0.2398, "y": 0.1654, "w": 0.5741, "h": 0.0310},
-    {"text": "out of breath...", "confidence": 1,
+    {"text": "into the harbor...", "confidence": 1,
      "x": 0.4448, "y": 0.1370, "w": 0.1090, "h": 0.0288},
     {"text": "AutO", "confidence": 1,
      "x": 0.8328, "y": 0.0594, "w": 0.0262, "h": 0.0155},
@@ -44,13 +44,13 @@ GHOST_FRAME = [
      "x": 0.9026, "y": 0.0022, "w": 0.0684, "h": 0.0240},
 ]
 
-WANT = ("Wow, it s so breezy! Just rowing from one side to the other"
-        " would probably leave Paimon out of breath...")
+WANT = ("Ha, wha t a crossing! The old ferry pitched all night and nearly"
+        " threw our lanterns into the harbor...")
 
 # The same frame without the ghost — the fix must not disturb a clean read,
 # and in particular must keep row fragments that tile side by side.
 CLEAN_FRAME = [b for b in GHOST_FRAME
-               if not b["text"].startswith("Wow, its so breezy")]
+               if not b["text"].startswith("Ha, what a crossing")]
 
 
 def main():

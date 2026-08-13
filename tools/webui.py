@@ -3,6 +3,7 @@
 Log (with voice used + screenshot hover-previews), casting with instant
 re-read and per-character mute, pause/resume, test speech, analytics.
 """
+import functools
 import logging
 import math
 import os
@@ -22,37 +23,57 @@ from profiles import PROFILES, profile_choices
 VERSION = "0.11.0"
 
 
+@functools.lru_cache(maxsize=1)
 def _build_id():
     """VERSION plus the git commit it is actually running from —
-    "0.11.0 (6cbf22b)", with "-dirty" when tracked files differ from it.
+    "0.11.0 (<sha>)", with "-dirty" when tracked files differ from it.
+
+    LAZY and memoized, never at import: hoyovoice.py imports this module
+    for two constants on every status/stop/log call, and the two git
+    subprocesses measured ~180ms per CLI invocation — only a process
+    that actually renders the dashboard or the log pays for the sha.
 
     VERSION only changes at release time, so a mid-cycle session
     otherwise reports the PREVIOUS release's number: the 2026-08-13
-    Windows log said 0.10.4 while running ~40 commits past it, and the
+    Windows log said 0.10.4 while running ~45 commits past it, and the
     log couldn't say which fixes were actually in play. Git is how both
     machines deploy (fix in repo, push, pull), so it's present; anything
     going wrong falls back to the bare version. -uno on the dirty check:
     tracked modifications only — untracked local files (voices.json is
     gitignored anyway, but notes and scratch aren't) don't mean the CODE
     differs from the sha."""
+    import shutil
     import subprocess
+    # (imports local: this runs at most once, and CLI invocations that
+    # never render skip it entirely)
+    # absolute path, not bare "git": Windows CreateProcess searches the
+    # application directory before PATH, so a git.exe dropped beside the
+    # app would otherwise win
+    git = shutil.which("git")
+    if not git:
+        return VERSION
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     kw = {"cwd": root, "capture_output": True, "text": True, "timeout": 5}
     if sys.platform == "win32":
         kw["creationflags"] = 0x08000000            # CREATE_NO_WINDOW
     try:
-        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+        # if this checkout is vendored inside some LARGER repo, rev-parse
+        # walks up and reports that repo's sha and dirt — ours or nothing
+        top = subprocess.run([git, "rev-parse", "--show-toplevel"],
+                             **kw).stdout.strip()
+        if not top or os.path.realpath(top) != os.path.realpath(root):
+            return VERSION
+        sha = subprocess.run([git, "rev-parse", "--short", "HEAD"],
                              **kw).stdout.strip()
         if not sha:
             return VERSION
-        dirty = subprocess.run(["git", "status", "--porcelain", "-uno"],
+        dirty = subprocess.run([git, "status", "--porcelain", "-uno"],
                                **kw).stdout.strip()
         return f"{VERSION} ({sha}{'-dirty' if dirty else ''})"
     except Exception:
         return VERSION
 
 
-BUILD = _build_id()
 # single source of truth (hoyovoice.py reads it); env override lets
 # tools/replay.py run beside a live instance without a port collision
 DASHBOARD_PORT = int(os.environ.get("HOYOVOICE_PORT", "8470"))
@@ -428,11 +449,14 @@ tick();
 # changes when a file lands in or leaves the directory — keyed on the
 # dir's own mtime (adding/removing a file bumps it; a finished file's
 # size never changes) so the glob + per-file stat() walk runs on change,
-# not on every poll.
-_REC_CACHE = {"key": None, "list": []}
+# not on every poll. One (key, list) tuple rebound atomically: Flask
+# serves threaded, and a two-field update could interleave as
+# old-list/new-key, latching stale until the NEXT dir change.
+_REC_CACHE = (None, [])
 
 
 def _recordings(shared):
+    global _REC_CACHE
     rd = shared["rec_dir"]["path"]
     raw = (Path(shared["recording"]["raw"]).name
            if shared["recording"]["on"] and shared["recording"].get("raw")
@@ -441,15 +465,16 @@ def _recordings(shared):
         rkey = (str(rd), rd.stat().st_mtime, raw)
     except OSError:
         rkey = (str(rd), None, raw)
-    if _REC_CACHE["key"] != rkey:
-        _REC_CACHE["list"] = sorted(
+    cached_key, cached_list = _REC_CACHE
+    if cached_key != rkey:
+        cached_list = sorted(
             ({"name": p.name, "mb": round(p.stat().st_size / 1e6, 1)}
              for ext in ("*.mp4", "*.mkv") for p in rd.glob(ext)
              # hide the raw file only while it's still being written
              if p.name != raw),
             key=lambda r: r["name"], reverse=True)
-        _REC_CACHE["key"] = rkey
-    return _REC_CACHE["list"]
+        _REC_CACHE = (rkey, cached_list)
+    return cached_list
 
 
 def start_webui(shared, port=DASHBOARD_PORT):
@@ -465,11 +490,11 @@ def start_webui(shared, port=DASHBOARD_PORT):
 
     @app.get("/")
     def index():
-        return PAGE.replace("__VERSION__", BUILD)
+        return PAGE.replace("__VERSION__", _build_id())
 
     @app.get("/voices")
     def voices_page():
-        return VOICES_PAGE.replace("__VERSION__", BUILD)
+        return VOICES_PAGE.replace("__VERSION__", _build_id())
 
     @app.get("/shots/<path:name>")
     def shot(name):
@@ -505,7 +530,7 @@ def start_webui(shared, port=DASHBOARD_PORT):
         the text is searchable and complete."""
         m = shared["metrics_fn"]()
         out = [
-            f"HoyoVoice {BUILD} session log",
+            f"HoyoVoice {_build_id()} session log",
             f"generated   {datetime.now().isoformat(timespec='seconds')}",
             f"platform    {platform.platform()}  python {platform.python_version()}",
             f"observing   {shared['observing']['on']}   recording "

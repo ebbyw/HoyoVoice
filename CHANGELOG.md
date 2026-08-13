@@ -7,14 +7,64 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ## [Unreleased]
 
+### Fixed
+
+- **A restarted session no longer deletes its own first 300
+  screenshots.** The shot-prune deque seeds from the previous session's
+  files, but event ids restart at 1 — so appending a reused id pushed
+  the deque over its cap and the prune popped that SAME id, unlinking
+  the shot just written (its log row still said 📷, and the hover
+  404'd), once per event until id 301. Reused ids are now moved to the
+  deque's tail instead of appended twice; a half-saved shot (jpg
+  written, block-dump write failed) is tracked and pruned too instead
+  of orphaned forever.
+- **The dashboard's recordings list can no longer latch stale.** The
+  1 Hz cache updated its list and its key as two separate stores under
+  Flask's threaded server, so two polls straddling a directory change
+  could leave new-key/old-list — hiding a just-finished recording until
+  the NEXT directory change. The cache is now one atomically-rebound
+  (key, list) tuple.
+- **The unmeasured-threshold warning fires when it matters.** It sat
+  behind the template-exists branch, but templates deliberately never
+  ship — a freshly extracted anchor self-calibrates and matches on its
+  placeholder threshold in its very first session. The check now runs
+  on the spec entry, before the template branch.
+
+### Changed
+
+- **The ROI crop stops paying for compression nobody keeps.** PNG is
+  lossless at every level, so the crop now writes at store level —
+  byte-identical pixels, ~11ms of deflate work per cropped frame gone
+  across the encode and the daemon's inflate. Same treatment for the
+  Windows native engine's flatten-and-re-encode buffer (PIL's default
+  level 6 spent ~46ms compressing bytes whose only consumer is the
+  decoder two lines later), and the flatten arithmetic runs in int16 —
+  every intermediate is an exact integer, verified bit-identical, at
+  half the allocation. The one-read-one-decode rule closes its last
+  hole: when the change gate didn't decode a frame, the loop now reads
+  the bytes once and shares them across the anchors, the bootstrap and
+  the crop, instead of three reads straddling ffmpeg rewrites.
+- **No game text anywhere — the released history included.** A
+  register-check found the earlier fixture sweep had substituted words
+  into the original sentence skeletons in a few places rather than
+  writing new ones, left one fixture file untouched, and left verbatim
+  lines in changelog entries and docstrings that the fixture sweep
+  never covered. The ghost-splice line is now a from-scratch sentence
+  at the same measured lengths, the comms fixture's system notice is
+  invented, and every remaining quoted game line in CHANGELOG, README
+  and code docstrings is replaced by invented prose of identical shape
+  (the published v0.11.0 release notes are updated to match). NOTICE's
+  claim now holds against a whole-repo sweep, not a per-file diff.
+
 ### Added
 
 - **The dashboard and the downloaded log name the exact commit.** The
-  header and the log's first line now read `0.11.0 (6cbf22b)` — sha via
-  `git rev-parse` at startup, `-dirty` appended when tracked files
-  differ from it. `VERSION` only changes at release time, so a
+  header and the log's first line now read `0.11.0 (<sha>)` — sha via
+  `git rev-parse` on first render (lazy and memoized, so CLI commands
+  that import the module for constants don't pay the ~180ms of git
+  subprocesses), `-dirty` appended when tracked files differ from it. `VERSION` only changes at release time, so a
   mid-cycle session used to report the previous release's number: the
-  2026-08-13 Windows log said 0.10.4 while running ~40 commits past it,
+  2026-08-13 Windows log said 0.10.4 while running ~45 commits past it,
   and the log couldn't say which fixes were in play. Git is how both
   machines deploy, so the sha is always there; if git is missing or
   errors, the bare version appears exactly as before.
@@ -51,14 +101,15 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   carry `{NICKNAME}`, 1,629 an `{F#…}{M#…}` pair, 1,210 a `<color>` span,
   560 an escaped newline, 221 a `{RUBY#…}` gloss; Star Rail's 228,068 are
   the same with more markup (34,613 newlines, 14,498 `<unbreak>`). The line
-  that was needed read `#My name's Paimon, and this is {NICKNAME}.` against
-  a screen saying `My name's Paimon, and this is Ebby.` Entries are now
+  that was needed read `#The name's Pell, and this is {NICKNAME}.` against
+  a screen saying `The name's Pell, and this is Ebby.` (entry SHAPES real,
+  prose invented — no dump text ships here). Entries are now
   unwrapped as the game draws them, `settings.player_name` fills in
   `{NICKNAME}`, both halves of a gender pair are indexed (and no longer
   veto each other as each other's runner-up — they are one entry to the
   margin gate), a ruby gloss is dropped rather than spliced into the middle
-  of the word it annotates (`Kuu{RUBY#[S]Moon Maiden}tar` is drawn
-  `Kuutar`, not `KuuMoon Maidentar`), and an entry still holding a runtime
+  of the word it annotates (`Kuu{RUBY#[S]Sea Lantern}tar` is drawn
+  `Kuutar`, not `KuuSea Lanterntar`), and an entry still holding a runtime
   placeholder is dropped rather than indexed subtly wrong.
 
   Maps are per game and load on first use of that game, on a background
@@ -937,7 +988,7 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
-- **A companion talking while you walk is read.** Genshin draws its nameplate at two heights, and they are separate clusters rather than a spread: boxed NPC dialogue at cy 0.2261-0.253, and the world dialogue special quests use — no box, no chrome, full HUD on screen — at cy 0.2093-0.2097. The plate band was sized for the first and missed the second **by 0.0003**. That is not a quiet miss: without a plate the line falls through to the plate-less band, which reaches up to 0.21 and so read the nameplate itself as words (`Paimon These floaty lil' guys… They won't jump us out of nowhere, will they?`), and the line was then dropped as an unknown speaker, because world dialogue carries no story chrome to fall back on either. Six of them went unread in one session.
+- **A companion talking while you walk is read.** Genshin draws its nameplate at two heights, and they are separate clusters rather than a spread: boxed NPC dialogue at cy 0.2261-0.253, and the world dialogue special quests use — no box, no chrome, full HUD on screen — at cy 0.2093-0.2097. The plate band was sized for the first and missed the second **by 0.0003**. That is not a quiet miss: without a plate the line falls through to the plate-less band, which reaches up to 0.21 and so read the nameplate itself as words (`Paimon These bobbing lil' buoys… They won't tip us over out of nowhere, will they?` (prose invented; the geometry and the 0.0003 miss are the measurement)), and the line was then dropped as an unknown speaker, because world dialogue carries no story chrome to fall back on either. Six of them went unread in one session.
 
   The floor is now 0.204, placed in the 0.0103 of clear air between the world plate and the highest role subtitle ever measured (0.1990 across 79 sightings) — that subtitle being what the old floor was really defending against. The role-line test is switched off below a plate cy of 0.215, between the two clusters: a job title belongs to the boxed layout, and the world line sits 0.0370 below its plate's baseline against a `SUBTITLE_MAX_DROP` of 0.0360, so a single OCR wobble would have had it eaten as a role line — and with `REPARSE_PLATELESS` off, an eaten line leaves the plate with nothing under it and vanishes without so much as a log entry.
 
@@ -1066,7 +1117,7 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
   The per-speaker prior that softens the yield for a character the game usually voices now has a mirror image: a character the game has **never once** been heard to voice, over at least three lines and across sessions, needs sustained speech (~192ms above the confident threshold) or one decisive spike before we cut our own read. A scene with the voice acting off is the case where every yield is a false one and the reading is all the player has. The log line says `firm` when this applied, next to the `soft` it already said.
 
-- **A line answering the question before it lost its opening words.** Paimon asked "And then?"; Leyla answered "And then I blossomed into a healthy vegetable with lush and verdant foliage" and was read from "I blossomed" onwards. The recent-lines window spans speakers, and the extension rule — a line that grew after we spoke a stable prefix is read from the remainder — only tested that the new text *starts with* a windowed line, so one character's short line could swallow the head of another's. A line grows by typewriter and the typewriter never changes nameplate mid-line, so an extension now needs the same speaker. An unknown speaker on either side still counts: the plate flickers out mid-line, and a real extension must not be re-read from the top. Cross-speaker echoes still dedupe as before — they go through the fuzzy checks, which is where they always belonged. The verdict moved into `window_verdict()` so it can be tested; `tools/test_window_verdict.py` pins all three outcomes.
+- **A line answering the question before it lost its opening words.** Paimon asked "And then?"; Leyla answered with a full sentence beginning "And then I…" and was read from its second word onwards (prose invented here; the shape is the measurement). The recent-lines window spans speakers, and the extension rule — a line that grew after we spoke a stable prefix is read from the remainder — only tested that the new text *starts with* a windowed line, so one character's short line could swallow the head of another's. A line grows by typewriter and the typewriter never changes nameplate mid-line, so an extension now needs the same speaker. An unknown speaker on either side still counts: the plate flickers out mid-line, and a real extension must not be re-read from the top. Cross-speaker echoes still dedupe as before — they go through the fuzzy checks, which is where they always belonged. The verdict moved into `window_verdict()` so it can be tested; `tools/test_window_verdict.py` pins all three outcomes.
 
 - **A lone choice option often went unread — over a wordless line, always.** Two faults stacked, and the recording of the session that reported it has both.
 
@@ -1074,7 +1125,7 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
   Under that: the hold waits for the line beneath it to clear the gate, matched by text — and Paimon's `...` normalizes to nothing (Vision returns no block for it at all), which `same_line()` never matches, so that wait could not end however long the hold survived. With nothing readable underneath, the option now arms itself after a two-second grace; a real line turning up inside that window is adopted and waited for as before, since the bubble renders whole while the line under it is still typing. The read is still gated on our own voice being idle and the game's having stopped, so an option can't land on top of VO.
 
-- **"Huh!? You... You're Paimon!" hissed through the interjection into the next word.** Kokoro predicts prosody for a whole utterance in one pass, so a long line degrades its own opening — `Huh!?` and the rest of that line each synthesize cleanly on their own, and only the two together fail. A settled line is now split at sentence ends, each sentence synthesized separately, and the pieces spliced with an 80 ms pause. A single-sentence line is one call and one piece exactly as before, so nothing but a genuinely multi-sentence line pays anything; the extra invocation measured at ~50 ms, because it is call overhead rather than synthesis.
+- **A long "Huh!? You... !"-shaped line hissed through its interjection into the next word.** Kokoro predicts prosody for a whole utterance in one pass, so a long line degrades its own opening — `Huh!?` and the rest of that line each synthesize cleanly on their own, and only the two together fail. A settled line is now split at sentence ends, each sentence synthesized separately, and the pieces spliced with an 80 ms pause. A single-sentence line is one call and one piece exactly as before, so nothing but a genuinely multi-sentence line pays anything; the extra invocation measured at ~50 ms, because it is call overhead rather than synthesis.
 
   Three earlier theories died against A/B tests on the real line in the voice it's cast to, and are recorded here so nobody re-derives them: the `!?` token pair (collapsed and uncollapsed are indistinguishable — shipped, then reverted), the `…` at the `You… You're` junction (every replacement punctuation sounded identical), and the name's respelling (`Pie-mahn` phonemizes with two primary stresses, `pˈImˈɑn`, but the unrespelled `Paimon` fails the same way). Bisecting growing prefixes of the line is what actually located it. Beware synthesizing fragments while bisecting: Kokoro trails off into noise on text with no terminal punctuation, which reads exactly like the bug being chased.
 

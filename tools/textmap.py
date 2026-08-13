@@ -101,12 +101,12 @@ _WORD = re.compile(r"[^a-z0-9 ]+")
 # markup: 34,613 newlines, 14,498 <unbreak> spans, 13,467 <color>, 5,098
 # <i>. Left alone, every one of those entries is unmatchable — the first
 # run against the real map repaired NOTHING, because the lines it needed
-# read "#My name's Paimon, and this is {NICKNAME}." against a screen that
-# says "My name's Paimon, and this is Ebby."
+# read "#The name's Pell, and this is {NICKNAME}." against a screen that
+# says "The name's Pell, and this is Ebby." (shape real, prose invented)
 _TAG = re.compile(r"</?[a-z][^>]*>")            # <color=…>, <i>, <unbreak>
 # A ruby annotation is a GLOSS drawn above the word, not part of the line:
-# "Kuu{RUBY#[S]Moon Maiden}tar" is drawn as "Kuutar". Keeping the gloss
-# spliced it into the middle of the word ("KuuMoon Maidentar").
+# "Kuu{RUBY#[S]Sea Lantern}tar" is drawn as "Kuutar". Keeping the gloss
+# spliced it into the middle of the word ("KuuSea Lanterntar").
 _RUBY = re.compile(r"\{RUBY[_A-Z]*#\[?[SE]?\]?[^}]*\}")
 _GENDER = re.compile(r"\{([FM])#([^}]*)\}")
 _LEFTOVER = re.compile(r"\{[^}]*\}")
