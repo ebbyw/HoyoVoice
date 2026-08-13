@@ -119,6 +119,7 @@
     "video_device": "ShadowCast 3",
     "audio_device": "ShadowCast 3",
     "output_device": "",
+    "ocr_engine": "auto",
     "sound_effects": {},
     "custom_words": [
       "Acheron",
@@ -362,6 +363,9 @@
     },
     "player_name": "",
     "change_gate": true,
+    "change_gate_frac": 0.01,
+    "anchors": true,
+    "anchor_roi": true,
     "late_yield": true
   },
   "defaults": {

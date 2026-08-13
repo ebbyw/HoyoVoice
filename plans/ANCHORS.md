@@ -60,7 +60,13 @@ regression recordings: self-cut templates score 0.985+ on their own game's
 later frames and ≤0.47 cross-game, the same margins as the hand-measured
 originals; both replays self-calibrate at 1.00 and read identically.
 Replay runs bootstrap into their throwaway state dir, so they exercise the
-path every run without touching the user's templates.
+path every run without touching the user's templates. One loose coupling
+to know about: the cut's pixels come from the change gate's decode of the
+frame file, while the trust verdict comes from the OCR daemon's read of
+it — under capture load ffmpeg can rewrite the file between the two, so
+cut and verdict can be one frame apart. The verify-against-a-later-frame
+step is what makes that safe rather than wrong: a cut from a frame the
+verdict didn't describe fails the verify and is retried.
 
 A template records the *reference geometry* it was cut at (frame width/height
 at half scale, in the user-dir sidecar) so a capture at a different
@@ -175,31 +181,34 @@ A third anchor was tried and rejected: Genshin's per-option choice glyph
 (the chat-bubble pill). A 15px bubble template matched round bright scenery
 (negatives to 0.886); widening it to bubble-plus-pill-cap separated the
 negatives (max 0.616) but the *positives* fell to min 0.387 — the pill's
-rendering varies with hover state and option wrap. The revisit precondition
-is now met: the choice-stack capture exists (rec_20260809_143259, the
-7-option Katheryne prompt, already used to calibrate the profile's CHOICES
-ceiling) — re-cut the template against it when anchor work next opens.
-Until then the choice-prompt case stays covered by OCR text, as today.
+rendering varies with hover state and option wrap. A 7-option choice-stack
+prompt WAS captured and measured (rec_20260809_143259; its row geometry
+lives in genshin.py's CHOICES comment), but the recording is no longer in
+the configured recordings_dir — so a re-cut needs either that file
+restored or a fresh 3+ option capture. Two rounds of anchor work
+(2026-08-12, 2026-08-13) have since passed without taking this up; treat
+it as parked until a choice-anchor win is actually wanted, not as
+pending. The choice-prompt case stays covered by OCR text, as today.
 
-### (b) ROI cropping behind a setting — off by default
+### (b) ROI cropping — on by default since 2026-08-13
 
-`settings.anchor_roi: true` enables: when the matched anchor set implies a
-screen kind, crop the frame to that kind's ROI (from the spec file), hand the
-crop path to the daemon, remap boxes back to full-frame normalized space.
-Full-frame fallback when no anchor matches, plus the bounded crop-run above.
+`settings.anchor_roi` (default true; `false` restores full-frame OCR): when
+the matched anchor set implies a screen kind, crop the frame to that kind's
+ROI (from the spec file), hand the crop path to the daemon, remap boxes back
+to full-frame normalized space. Full-frame fallback when no anchor matches,
+plus the bounded crop-run above.
 
 The ROI is the union of every band the profile needs for that screen kind —
 plate, dialogue, choices, hint strip, UID corner — not just the dialogue
 band. For Genshin dialogue that union is roughly the bottom 62% of the frame:
-the honest expectation is a ~35–40% detector-cost cut, not the "well under
-100ms" the original plan sketch hoped. The Windows box is where the win
-matters and where it gets measured (RapidOCR detector time in the log's
-`ocr_ms`), by replaying a scroll-heavy recording there — fix in repo, push,
-pull, per the standing rule.
+the honest expectation was a ~35–40% detector-cost cut, not the "well under
+100ms" the original plan sketch hoped — and the Windows measurement landed
+at ~42% (done 2026-08-13; numbers in the Implemented block below).
 
-Trust gate to pass before (c): replayed decisions byte-identical with the
-setting on vs off across the regression recordings, and a measured `ocr_ms`
-drop on the Windows box.
+Trust gate before defaulting on — BOTH HALVES PASSED, retired 2026-08-13:
+the Mac replay half passed as the honest gate (see below on why
+byte-identity was the wrong bar), the Windows `ocr_ms` half passed in the
+09:56 session.
 
 #### Implemented — 2026-08-12
 
