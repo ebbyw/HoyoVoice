@@ -2005,6 +2005,7 @@ def main():
     last_dup_logged = None
     last_unknown_logged = None
     last_notice_logged = None
+    last_fused_logged = None    # last two-rows-in-one-box read written down
     choice_prev = ""            # last frame's options (settle check)
     choice_logged = None        # last prompt handled — RAW words, not a norm
     pending_choice = None       # lone option waiting for the line below it
@@ -2316,17 +2317,31 @@ def main():
             # text it produced was spoken forty times as if it were the
             # game's own. Never on a REPLAY: those blocks came from a read
             # already judged here.
-            if fresh_read and screens.fused_rows(blocks):
+            fused = screens.fused_rows(blocks) if fresh_read else []
+            if fused:
                 lost_frames["n"] += 1
                 stats["fused_reads"] += 1
-                latest_ocr["blocks"] = []       # never replay a fused read
-                if stats["fused_reads"] % 12 == 1:
-                    # visible in the log, and rate-limited: the alternation
-                    # runs for as long as the player leaves the line up
+                # One event per fused LINE, not per fused frame. The
+                # alternation runs at the sampling rate for as long as the
+                # player leaves the line up — a count-based limit still put
+                # an event in the log every few seconds, which is the noise
+                # this drop exists to remove. Keyed on the text, like the
+                # unknown-speaker skip: the weave differs slightly on every
+                # read ("god a" / "godma"), so same_line collapses them and
+                # a genuinely different line still logs once.
+                ftext = " · ".join(b["text"] for b in fused)
+                fnorm = normalize_text(ftext)
+                if not same_line(fnorm, last_fused_logged):
                     add_event("OCR fused two rows — frame dropped", "yield",
-                              None, " · ".join(b["text"] for b in blocks
-                                               if screens.is_dialogue_seed(b)),
-                              shot=True)
+                              None, ftext, shot=True)
+                    # anchored on what the LOG already says, not on the last
+                    # frame: the weave drifts, and comparing to the previous
+                    # frame lets it drift past the cutoff a step at a time.
+                    # Over the 106 fused frames recorded so far (four
+                    # distinct lines) this writes 7 events; the old
+                    # one-in-twelve rule wrote 380 in two minutes.
+                    last_fused_logged = fnorm
+                latest_ocr["blocks"] = []       # never replay a fused read
                 continue
 
             # --- Reading-mode screens (Quick Read books, info/profile
