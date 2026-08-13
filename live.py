@@ -331,14 +331,16 @@ ENERGY_SIDE_FLAT = 2.5        # AND side must stay flat — music swells raise
 # this cut 18 of 1107 spoken lines (1.6%) become voiced, and 27 of the 46
 # known-voiced ones are reachable without the VAD agreeing at all.
 ENERGY_DECISIVE_OVER_SIDE = 8.0
-# A decisive burst with NO speechiness at all must also hold its rise this
-# long. The dialogue-advance click is mid-panned against quiet music and
-# scored mid+13.0 side+1.8 — decisive on the numbers — but was over in
-# ~0.2s of elevated windows; a one-word VO line holds ~0.5s. 0.35 sits
-# between them with the overlap-inflation (~0.13s) already spent. Only
-# applied when the VAD saw nothing (peak < 0.15) and the speaker has no
-# usually-voiced record: with either corroboration the burst is believed
-# as before, so the measured vocoder-VO cases keep their skips.
+# What "lasts like speech" means for a centre burst: the dialogue-advance
+# click is over in ~0.2s of elevated windows, a one-word VO line holds
+# ~0.5s, and 0.35 sits between them with the overlap-inflation (~0.13s)
+# already spent. NO LONGER A BELIEVE-GATE: a sustained burst once stood in
+# for corroboration, and a loud scene sustains forever — the Snezhnaya
+# train's engine rumble silenced four unvoiced NPC lines at peak 0.00
+# (2026-08-13). The measurement (center_burst) and this line between
+# transient and lasting are still pinned by test_center_sustain.py and
+# printed in the log, because "did it even last?" is the first question
+# when reading a center-energy decision after the fact.
 ENERGY_SUSTAIN_S = 0.35
 
 # --- shared state for the dashboard ---
@@ -3302,25 +3304,37 @@ def main():
             # which is the exact case this layer exists for.
             decisive = mid_up - side_up >= ENERGY_DECISIVE_OVER_SIDE
             if not voiced and center_energy_voiced(mid_up, side_up, vad_peak):
-                # believed outright with any corroboration — faint
-                # speechiness or a usually-voiced record. With neither, the
-                # burst must also LAST like speech: a dialogue-advance
-                # click is decisive on the numbers (mid+13.0 side+1.8
-                # against quiet music) but over in ~0.2s, and it silenced
-                # a streamed first sentence ("I was a disappointment.")
-                # whose speaker the game had never voiced.
-                if (vad_peak >= 0.15 or usually_voiced(state["speaker"])
-                        or sustain >= ENERGY_SUSTAIN_S):
+                # Believed only WITH corroboration: faint speechiness
+                # (the model heard something) or a usually-voiced record
+                # (this character's VO is known to be model-deaf — the
+                # Paimon case this layer exists for). Energy alone is not
+                # enough no matter how long it lasts: a sustained-burst arm
+                # used to stand in for corroboration, and on a loud scene
+                # it read the SCENE as voiceover — the Snezhnaya train
+                # (61dB ambience, 2026-08-13 09:56 log) silenced four
+                # unvoiced NPC lines at peak 0.00, mid+13.7 to +27.3, every
+                # burst 'decisive' and sustained, because engine rumble
+                # sustains forever. Each false skip also RECORDED a voiced
+                # observation for a just-met speaker, feeding the prior
+                # that makes the next skip easier — a spiral for exactly
+                # the characters the game never voices. Without
+                # corroboration the line is spoken: a rare talk-over beats
+                # a skipped line, and the exception stays reserved for
+                # characters actually OBSERVED voiced. (The brief
+                # dialogue-advance click that once silenced "I was a
+                # disappointment." is also covered: no corroboration →
+                # spoken, sustain no longer consulted.)
+                if vad_peak >= 0.15 or usually_voiced(state["speaker"]):
                     voiced = True
                     print(f"[voiced — center energy] mid+{mid_up:.1f}dB "
                           f"side+{side_up:.1f}dB peak={vad_peak:.2f} "
                           f"sustain={sustain:.2f}s"
                           f"{' decisive' if decisive else ''}", flush=True)
                 else:
-                    print(f"[center burst too brief for VO — speaking] "
-                          f"mid+{mid_up:.1f}dB side+{side_up:.1f}dB "
-                          f"sustain={sustain:.2f}s < {ENERGY_SUSTAIN_S}s",
-                          flush=True)
+                    print(f"[center burst without speech or voiced record "
+                          f"— speaking] mid+{mid_up:.1f}dB "
+                          f"side+{side_up:.1f}dB peak={vad_peak:.2f} "
+                          f"sustain={sustain:.2f}s", flush=True)
             synth_thread.join()
             if ext_base and not voiced:
                 # the remainder continues a line we're still speaking —
