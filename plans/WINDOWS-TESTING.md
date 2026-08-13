@@ -136,22 +136,26 @@ python hoyovoice.py log
 - Auto-pick GPU (DirectML) for TTS — deliberately out of scope; synthesis on
   CPU is inside the latency budget.
 - Same-PC window capture (no capture card) — future idea, separate backend.
-- Windows OCR remains noisier than Apple Vision even with the English model.
-  Canonical-text snapping (`settings.textmap`, phase 5 of
-  [OCR-INTEGRATION-PLAN.md](OCR-INTEGRATION-PLAN.md)) shipped as the lever —
-  user-seeded and local-only, so it only helps a box whose user points it at
-  a map.
+- Windows OCR remains noisier than Apple Vision even with the English
+  model — accepted, with the textmap mitigation; the authoritative
+  write-up is [PRE-MERGE.md](PRE-MERGE.md) §6 ("Known, and deliberately
+  not fixed").
 - **Open bug: book-page rows misread as `hum`/`Ium` on Windows.** Best
   lead (2026-08-13): RapidOCR's per-row angle classifier on DirectML was
   caught reading a static row upside-down (`golden glow of "friendship."`
   → `ajuspuerd. do Mons uapios`, conf 0.6) — the same one-row-garbage
-  class. cls is now disabled on every engine call; confirm the bug stays
-  gone across the next few book sessions before closing this item.
+  class. cls is now disabled on every engine call the installed rapidocr
+  supports (an engine too old for the `use_cls` keyword keeps it, and
+  the daemon logs so — `rapidocr-onnxruntime` is unpinned, so a stale
+  venv can be that engine); confirm the bug stays gone across the next
+  few book sessions before closing this item.
 - `Player.playing` still reads sounddevice's module-level stream
   (`sd.get_stream().active`), and `play()` still goes through `sd.play` — now
-  with an explicit `device=` for the output picker. If playback ever overlaps
-  or stutters, this is still the first suspect; the fix is an explicit
-  `OutputStream` the player owns.
+  with an explicit `device=` for the output picker, and with a
+  sample-count deadline that only consults the module-level stream past
+  the clip's expected end, which is why this has stayed a suspect rather
+  than a bug. If playback ever overlaps or stutters, this is still the
+  first suspect; the fix is an explicit `OutputStream` the player owns.
 
 ## Resolved on this box — kept for the numbers
 

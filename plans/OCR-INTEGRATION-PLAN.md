@@ -24,7 +24,7 @@ its target screen, the book/reading UI, shipped as hand-written profile code
 (`READABLE_*` in `tools/profiles/genshin.py`) before anchors could deliver it
 as data — exactly the outcome 4c existed to avoid, twice now.
 
-**Phase 5 shipped** (Unreleased, post-0.10.4): `tools/textmap.py` +
+**Phase 5 shipped in 0.11.0**: `tools/textmap.py` +
 `settings.textmap`/`settings.player_name`. The "blocked on data" framing
 resolved as designed — nothing ships in the repo; the user seeds a local file,
 like voices.json. Measured on 164 real misreads: 113 repaired, 51 refused,
@@ -97,7 +97,7 @@ Validate on replay over recordings that previously produced the phantom-nameplat
 
 ## Phase 4 — UI anchors + ROI profiles (the Genshin enabler — biggest lift)
 
-Goal: screen-mode detection and text ROIs become per-game *data*, not classify.py geometry code, so the pending Genshin profile is "capture some crops" instead of re-deriving layout heuristics.
+Goal (as planned — the Genshin profile has since shipped as hand-written code, see the Status block): screen-mode detection and text ROIs become per-game *data*, not classify.py geometry code, so a new profile is "capture some crops" instead of re-deriving layout heuristics.
 
 Design sketch: `tools/anchors.py` with normalized cross-correlation (numpy; no OpenCV dep needed for 3–5 small anchors on a downscaled gray frame) matching per-game anchor crops — autoplay icon, dialogue-advance arrow, chat-panel chrome — stored under `profiles/<game>/` with a JSON mapping: anchor → search region → ROIs relative to the match. Which anchors matched tells us the screen kind (a cheap, OCR-free replacement for some chrome heuristics); the ROI then optionally *crops* the frame before OCR (write crop to the state dir, hand that path to the daemon, remap returned boxes into full-frame normalized coordinates so classify.py is unchanged). Cropping is also the real speed play: detector cost scales with area, so a dialogue-band crop should cut the 154ms DirectML time well under 100ms even before the change gate.
 
@@ -137,7 +137,7 @@ Replay-harness-only: batch low-confidence lines from the regression corpus throu
 | 2 change gate | medium | 154ms/frame burn, recording-load tearing | ≥60% OCR calls skipped on static dialogue | **shipped 0.7.3** — 23%, and the target was wrong (see Baseline) |
 | 3 confidence | small | stabilization latency/stalls | time-to-spoken ↓, no new false fires | **shipped 0.7.3** — ~0.12s, no lines lost |
 | 4 anchors/ROI | large | OCR speed, remaining Genshin screens, chrome heuristics | screens ship as data, detector cost ↓ | **4a shipped 0.10.4** (log-only, measured); **4b DEFAULT-ON 2026-08-13** — both gate halves passed: the honest replay gate on the Mac (see ANCHORS.md; byte-identity was the wrong bar) and the Windows measurement (ocr_avg_ms 321 vs ~554 baseline, ~42% off, 530 crops, anchors self-calibrated at auto=1.00). `anchor_roi: false` restores full frames. 4c needs a new candidate screen |
-| 5 TextMap | experiment | everything OCR, latency ceiling | match rate ≥90%, wrong-match ~0 on replay corpus | **shipped** (Unreleased) — 113/164 repaired, 0 wrong; user-seeded local file, nothing in the repo |
+| 5 TextMap | experiment | everything OCR, latency ceiling | match rate ≥90%, wrong-match ~0 on replay corpus | **shipped 0.11.0** — 113/164 repaired, 0 wrong; user-seeded local file, nothing in the repo |
 | 6 arbiter | backlog | corpus labeling | labeled corpus | not needed yet |
 
 1→2→3 were independent of 4 and released together in 0.7.3. Phase 4 earned
