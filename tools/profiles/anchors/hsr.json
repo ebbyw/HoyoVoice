@@ -3,6 +3,16 @@
     {
       "name": "continue",
       "template": "hsr/continue.png",
+      "cut": {
+        "x": [
+          0.9045,
+          0.9215
+        ],
+        "y": [
+          0.0074,
+          0.0407
+        ]
+      },
       "search": {
         "x": [
           0.8875,

@@ -392,15 +392,24 @@ ANCHOR_MAX_CROP_RUN = 12
 CROP = FRAME.parent / "live_crop.png"
 
 
+def anchor_pack(profile_name):
+    """The (cached) anchor pack for a game. Self-calibrated templates live
+    under captures/anchors/ — the repo ships only cut rects, never the
+    games' pixels."""
+    pack = anchor_packs.get(profile_name)
+    if pack is None:
+        pack = anchor_packs[profile_name] = AnchorPack(
+            profile_name, user_dir=STATE / "captures" / "anchors")
+    return pack
+
+
 def match_anchors(profile_name):
     """Match the current frame against the active game's anchor pack, log
     when the SET of matched anchors changes, and return the ROI the
     matched set implies (Vision-normalized union, or None). Called only on
     frames about to pay for a fresh OCR — a gate-unchanged frame provably
     didn't change where text was, and chrome moves even less than text."""
-    pack = anchor_packs.get(profile_name)
-    if pack is None:
-        pack = anchor_packs[profile_name] = AnchorPack(profile_name)
+    pack = anchor_pack(profile_name)
     if not pack.anchors:
         return None
     t0 = time.perf_counter()
@@ -2458,6 +2467,26 @@ def main():
             # which game's layout to read this frame with (sticky; only
             # switches on sustained chrome from another game)
             screens = game.observe(blocks)
+
+            # Anchor self-calibration: template PNGs don't ship (the
+            # games' pixels are HoYoverse's), so a pack with pending
+            # entries cuts them from THIS capture once the classifier
+            # trusts the game's dialogue chrome — the same OCR-text
+            # ground truth the shipped thresholds were measured against.
+            # Post-OCR by necessity (trust needs text), one-time by
+            # design: once templates exist, pending is empty and this
+            # costs a truthiness check per frame.
+            if fresh_read and anchor_state["enabled"]:
+                _bp = anchor_pack(screens.name)
+                if _bp.pending:
+                    try:
+                        _gray = decode_half(FRAME)
+                    except Exception:
+                        _gray = None
+                    msg = _bp.maybe_bootstrap(
+                        _gray, screens.trusts_dialogue(blocks))
+                    if msg:
+                        print(f"[anchors] {screens.name}: {msg}", flush=True)
 
             # A read that fused two dialogue rows into one box is not this
             # line — it is the two rows woven together (see
