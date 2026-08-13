@@ -3,8 +3,9 @@
 
     python hoyovoice.py {start|stop|status|log|restart}
 
-On Windows this is THE launcher. On macOS ./hoyovoice.sh still works and
-does the same job; this script is equivalent there.
+On Windows this is THE launcher. On macOS ./hoyovoice.sh still works for
+start/stop/status/log/restart; this script additionally preflights the
+port and the venv and forces UTF-8 stdout, so prefer it when both exist.
 
 Uses a pidfile + process groups: live.py's children (ffmpeg, the OCR
 daemon, sox on macOS) die with it — live.py's own SIGTERM/finally cleanup

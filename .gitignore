@@ -50,3 +50,9 @@ AGENTS.md
 
 # OCR benchmark corpora: frames are game screenshots, and large
 bench/
+
+# sweep_frames.py output: per-frame OCR block dumps are the games' own
+# text — same reason as bench/
+corpus/
+before.json
+after.json

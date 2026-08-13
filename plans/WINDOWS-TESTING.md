@@ -9,8 +9,10 @@ contract holds), OCR → classify → speaker detection → auto-casting, Kokoro
 (~0.9–1.1s synth), playback, dedupe, recording + mux, the output-device picker,
 and both games' profiles.
 
-**Use RapidOCR on DirectML** (~115ms/frame with the English recognition model,
-154ms without it). The built-in Windows engine mangles this font
+**Use RapidOCR on DirectML** (~115–194ms/frame on simple frames; a busy
+dialogue frame averages ~554ms full-frame, ~321ms with the default ROI
+cropping — see §4 on which number to judge by). The built-in Windows
+engine mangles this font
 ("rabbit-head Nt bad or clown"), reports no confidence — so the
 `MIN_CONF` junk filter (`tools/profiles/base.py`) does nothing — and is only
 a fallback.
@@ -98,7 +100,8 @@ $env:HOYOVOICE_OCR_ENGINE="windows"; echo captures/frame_001.png | .venv\Scripts
 - Compare both against `captures/frame_001.ocr.json` (Vision's golden output) — feed each through `python tools\classify.py` and diff the speaker/dialogue.
 - **Resolved (rapid):** the space-dropping ("RinTohsaka") was the Chinese-trained recognition model, not resolution. `setup.ps1` downloads an English-trained one to `models\rec_en.onnx`; `HOYOVOICE_REC_MODEL` / `HOYOVOICE_REC_KEYS` override the path, and deleting the files falls back to the bundled model. Fusion-class defects over an 81-shot corpus: 333 → 144.
 - **Still true (windows engine):** Windows.Media.Ocr reports no confidence (hardcoded 1.0), so the `MIN_CONF` junk filter (`tools/profiles/base.py`) does nothing and confidence-aware stabilization degrades to yesterday's behaviour — watch for HUD noise classified as dialogue.
-- Timing: ~115 ms/frame on DirectML with the English model. Over ~600 ms will lag the 6 fps loop; prefer the faster engine that still classifies correctly. The change gate removes most of these calls on static text anyway (`ocr saved` in the dashboard).
+- Timing — two different numbers, both real: the startup probe and simple frames run **~115–194 ms** on DirectML, while a busy full dialogue frame averages **~554 ms** (the anchor-ROI baseline; live sessions with default cropping average ~321). Judge health by the session's `ocr_avg_ms`, not the probe: over ~600 ms *average* will lag the 6 fps loop. The change gate removes most calls on static text anyway (`ocr saved` in the dashboard).
+- The 2-D gray-input trial's verdict prints here at startup: `gray input verified …` (stack copy dropped) or `gray input differs` (kept). It re-runs every session and decides per machine.
 - Force an engine with `HOYOVOICE_OCR_ENGINE` (`auto`, `rapid`, `windows`).
 
 ## 5. TTS + playback
@@ -144,22 +147,22 @@ python hoyovoice.py log
   → `ajuspuerd. do Mons uapios`, conf 0.6) — the same one-row-garbage
   class. cls is now disabled on every engine call; confirm the bug stays
   gone across the next few book sessions before closing this item.
-- ~~The Windows `ocr_ms` measurement for `settings.anchor_roi`~~ **Done
-  2026-08-13** (09:56 session): `ocr_avg_ms` 321 with 530 crops against
-  the ~554 dialogue baseline — ~42% off, in the predicted band — with
-  anchors self-calibrated at `auto=1.00` and zero lost frames.
-  `anchor_roi` now defaults ON; `false` in settings restores full
-  frames.
-- ~~Check the startup log for the 2-D gray trial's verdict~~ **Done
-  2026-08-13** (09:56 session, hoyovoice-20260813-095613.log): `gray
-  input verified identical on 3 frames — dropping the RGB stack copy`,
-  on DirectML with `rec_en.onnx`. This box reads the 2-D gray array
-  identically, so the per-frame stack copy is gone here. The trial
-  still re-runs every session by design — a rapidocr upgrade that
-  changes the answer flips it back to the stack on its own.
-
 - `Player.playing` still reads sounddevice's module-level stream
   (`sd.get_stream().active`), and `play()` still goes through `sd.play` — now
   with an explicit `device=` for the output picker. If playback ever overlaps
   or stutters, this is still the first suspect; the fix is an explicit
   `OutputStream` the player owns.
+
+## Resolved on this box — kept for the numbers
+
+- **`anchor_roi` Windows `ocr_ms` gate — passed 2026-08-13** (09:56
+  session): `ocr_avg_ms` 321 with 530 crops against the ~554 dialogue
+  baseline — ~42% off, in the predicted band — anchors self-calibrated at
+  `auto=1.00`, zero lost frames. `anchor_roi` defaults ON since;
+  `false` in settings restores full frames.
+- **2-D gray trial — verified 2026-08-13** (same session,
+  hoyovoice-20260813-095613.log): `gray input verified identical on 3
+  frames — dropping the RGB stack copy`, on DirectML with `rec_en.onnx`.
+  The trial re-runs every session by design, so a rapidocr upgrade that
+  changes the answer reverts itself; the verdict lands in the startup log
+  either way (see §4).

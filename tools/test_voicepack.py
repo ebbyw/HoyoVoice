@@ -11,7 +11,6 @@ rather than downloaded so the suite needs no network and no torch.
 """
 import json
 import os
-import pickle
 import struct
 import sys
 import tempfile

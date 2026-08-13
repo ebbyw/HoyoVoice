@@ -1,5 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 
-# anchor templates are reference pixels — never normalize
+# binary assets are never LF-normalized (no PNGs ship today — anchor
+# templates self-calibrate locally — but crop artifacts and any future
+# asset must not be mangled if one is ever added)
 *.png binary

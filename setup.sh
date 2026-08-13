@@ -22,8 +22,11 @@ echo "== creating venv + installing python deps"
 # Windows recogniser, which drops spaces; Apple Vision spaces correctly, so
 # on macOS they are a no-op with a small false-positive risk. The import is
 # optional, so the code simply skips them here. See plans/PRE-MERGE.md.
+# huggingface_hub is a direct import (hv_platform/darwin.py model
+# download), not just mlx-audio's transitive dep — pin it explicitly so
+# an upstream dep change can't break a fresh clone
 .venv/bin/pip install mlx-audio soundfile pillow onnxruntime numpy \
-  flask vaderSentiment -q
+  flask vaderSentiment huggingface_hub -q
 # misaki pins a spacy version that fights py3.13 wheels — install around it
 .venv/bin/pip install --only-binary :all: spacy -q
 .venv/bin/pip install --no-deps misaki -q

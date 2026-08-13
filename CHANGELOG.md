@@ -96,9 +96,11 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
     on, and the only one that costs a human anything.
 
   Corpora come from `extract` (frames out of a session recording) or
-  `capture` (frames out of the LIVE capture file). The distinction turned
-  out to matter more than expected — see below. Corpora are gitignored:
-  they are game screenshots, and large.
+  `capture` (frames out of the LIVE capture file) — and the distinction
+  matters: a recording is re-encoded and its frames re-scaled, so only a
+  `capture` corpus sees the exact bytes the live loop reads, which is
+  what the stability number below is measured on. Corpora are
+  gitignored: they are game screenshots, and large.
 
   What it says so far, on 147 live frames of a held Genshin line: **49.7%
   of frames disagree with their run's majority read**. That is the number
@@ -111,30 +113,30 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   wired for use but NOT used by the app, because measurement says it does
   not help (below).
 
-- **Anchor ROI cropping (OCR plan phase 4b), off by default behind
-  `settings.anchor_roi`.** When the matched anchor chrome implies a screen
-  kind, OCR now reads only that kind's ROI — detector cost scales with
-  area, and the ROI is the bottom two-thirds of the frame (the union of
-  every band the profile needs: bands read off the profiles, HSR
-  `y ≤ 0.62`, Genshin `y ≤ 0.66`, both full-width; derivations in
-  plans/ANCHORS.md). The crop is written lossless (PNG — the frame is
-  already one JPEG generation old, and a second lossy pass softens
-  exactly the glyphs the crop exists to read) and every returned box is
-  remapped to full-frame coordinates at the OCR call boundary, so
-  classify and everything downstream never see crop space. The rules the
-  change gate paid for apply unchanged: no anchor match → full frame
-  (absence is weak evidence), and a bounded crop run
-  (`ANCHOR_MAX_CROP_RUN`, ~2s) forces a periodic full-frame read so a
-  wrong "crop here" can defer, never latch. Verified by replaying a
-  Genshin and an HSR recording with the setting off and on, against an
-  off-vs-off control pair: wall-clock replay flips a handful of marginal
-  VAD-gate lines between ANY two runs (the audio bed carries the
-  original session's TTS), and every on-vs-off difference site also
-  differed off-vs-off — no systematic change, details in
-  plans/ANCHORS.md. Off by default until the `ocr_ms` drop is measured
-  on the Windows box, which is where the win matters (~554ms/frame
-  RapidOCR there; expected ~35–40% off the detector). `roi_crops` on
-  the dashboard metrics shows the crop volume.
+- **Anchor ROI cropping (OCR plan phase 4b), on by default
+  (`settings.anchor_roi`; `false` restores full-frame OCR).** When the
+  matched anchor chrome implies a screen kind, OCR reads only that
+  kind's ROI — detector cost scales with area, and the ROI is the bottom
+  two-thirds of the frame (the union of every band the profile needs:
+  bands read off the profiles, HSR `y ≤ 0.62`, Genshin `y ≤ 0.66`, both
+  full-width; derivations in plans/ANCHORS.md). The crop is written
+  lossless (PNG — the frame is already one JPEG generation old, and a
+  second lossy pass softens exactly the glyphs the crop exists to read),
+  its cost is timed into `ocr_ms` so the on-vs-off comparison sees both
+  sides of the trade, and every returned box is remapped to full-frame
+  coordinates at the OCR call boundary, so classify and everything
+  downstream never see crop space. The rules the change gate paid for
+  apply unchanged: no anchor match → full frame (absence is weak
+  evidence), and a bounded crop run (`ANCHOR_MAX_CROP_RUN`, ~2s) forces
+  a periodic full-frame read so a wrong "crop here" can defer, never
+  latch. The default is measured, both halves: replay decisions on/off
+  sit inside the wall-clock harness's own off-vs-off noise floor (the
+  audio bed carries the original session's TTS; details in
+  plans/ANCHORS.md), and the Windows box measured the win it was built
+  for — `ocr_avg_ms` 321 with 530 crops against its ~554 dialogue
+  baseline, ~42% off the detector and inside the predicted 35–40% band,
+  zero lost frames (2026-08-13 09:56 log). `roi_crops` and `anchor avg`
+  on the dashboard metrics show the crop volume and match cost.
 
 - **`Stuzha` → "STOO-zha", and `maam` → "mam".** Both engines read the
   Nod-Krai name as `stˈʌʒə`, "STUH-zhuh": the zh is already right and the u
@@ -195,7 +197,14 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   `Ms.` is Windows-only and the worst kind of wrong: espeak reads the LETTERS
   — `ˌɛmˈɛs`, "em-ess" (misaki says `mˈɪz`); "Miss" is `mˈɪs` on both. It is
   also the first pronunciation key ending in a period, which exposed a
-  matcher bug (see Fixed). `Imagenae` read "IM-ij-nee" (`ˈɪmɪʤnˌi`) on both
+  matcher bug fixed with it: the substitution wrapped every key in
+  `\b…\b`, and after a trailing period the closing `\b` demands a word
+  character where the following space is — a period-final key silently
+  never fired. Its right edge is now the period itself (word-final keys
+  keep their boundary), the same fix is mirrored in
+  `pronounce_names.py --check`, and `--custom-words` skips period-bearing
+  keys instead of pinning `Ms.` into the OCR vocabulary as a token the
+  recognizer can never emit. `Imagenae` read "IM-ij-nee" (`ˈɪmɪʤnˌi`) on both
   engines; the literal `imagine-ay` was rejected because a standalone "ay"
   chunk is /aɪ/ ("im-AJ-in-EYE"), the same trap as chunk-final "eh" —
   `Imagin-nay` is `ɪmˈæʤɪnnˈA` on both. `Gilgamesh` is Windows-only like
@@ -257,16 +266,6 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Changed
 
-- **Anchor ROI cropping now defaults ON (`anchor_roi: true`).** Both
-  halves of phase 4b's trust gate have passed: replay decisions on/off
-  sit inside the wall-clock harness's own noise floor (plans/ANCHORS.md,
-  2026-08-12), and the Windows box measured the win it was built for —
-  `ocr_avg_ms` 321 with 530 crops against its ~554 dialogue baseline,
-  ~42% off the detector and inside the predicted 35–40% band, with
-  anchors self-calibrating on the first dialogue of the session
-  (`auto=1.00`) and zero lost frames (2026-08-13 09:56 log). Setting
-  `anchor_roi: false` restores full-frame OCR.
-
 - **Anchor templates self-calibrate from your own capture — the last
   game-derived pixels leave the repo.** The two anchor template PNGs
   (Star Rail's ✕-Continue glyph, Genshin's auto-play toggle) were crops
@@ -281,6 +280,7 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   identically. Anchors still gate cost, never speech: until
   calibration happens, every frame is read whole, exactly as a fresh
   install always was.
+
 - **The frame loop stops paying quadratic fuzzy-match costs on open
   panels.** `same_line` now short-circuits on exact equality and runs
   difflib's `quick_ratio` bounds before the full `ratio()` — documented
@@ -315,10 +315,7 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   error → the stack stays, permanently, and the caller always sees the
   stacked result while the trial runs. The decision logic is pinned by
   `tools/test_gray_input.py`.
-- **`ocr_ms` includes the ROI crop's cost.** The Windows on-vs-off
-  measurement that gates `anchor_roi` defaulting on compares `ocr_ms` —
-  which excluded the crop's own decode + PNG encode, i.e. the cost side
-  of the very trade being measured. The timer now starts before the crop.
+
 - **No game text in the repo.** Test fixtures that carried verbatim
   passages (the reader-chunks page, the readable-article bodies, the
   textmap cases, the boot notice) now use invented prose with the same
@@ -328,8 +325,11 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   grant, the README leads with the non-affiliation disclaimer, and
   `voices.example.json` is regenerated from the shipped pronunciation
   tables (dropping a retired `Yae Miko` key and a stale `Sigewinne`
-  respelling) and now seeds `textmap`, `player_name`, `change_gate` and
-  `late_yield` so a fresh install matches the documented settings shape.
+  respelling) and now seeds every setting the README documents —
+  `textmap`, `player_name`, `change_gate`, `change_gate_frac`, `anchors`,
+  `anchor_roi`, `ocr_engine` and `late_yield` — so a fresh install
+  matches the documented settings shape.
+
 - **A readable page starts speaking after one sentence's synthesis, not a
   whole page's.** A full inventory page (~340 words) was synthesized as
   one utterance before any sound — seconds of dead air that read as "it
@@ -403,24 +403,6 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   shapes — the tests pin behavior, not wording, and the whole suite
   passes unchanged. With that, NOTICE's "ships no game text" claim holds
   without qualification.
-- **A loud scene can no longer read as voiceover.** The center-energy
-  layer's sustained-burst arm believed a decisive centre burst with ZERO
-  speechiness as VO if it merely lasted 0.35s — and on the Snezhnaya
-  train (61dB ambience, 2026-08-13 09:56 log) engine rumble lasts
-  forever: four unvoiced NPC lines were silenced at `peak=0.00`,
-  mid+13.7 to +27.3, every one "decisive" and "sustained". Each false
-  skip also RECORDED a voiced observation for a just-met speaker
-  (Vedenev, Firsova, Dementieva), feeding the per-speaker prior that
-  makes the next skip easier — a spiral aimed at exactly the characters
-  the game never voices. Center energy is now believed only WITH
-  corroboration: faint speechiness (peak ≥ 0.15) or a usually-voiced
-  record — the model-deaf-vocoder case (Paimon) this layer exists for
-  keeps its skips, since that record is exactly what it has. Without
-  corroboration the line is spoken; a rare talk-over beats a skipped
-  line, and the poisoned histories from this session self-heal because
-  `usually_voiced` demands a consistent record, not one bad
-  observation. The sustain measurement stays (pinned, and printed in
-  every center-energy log line) as a diagnostic.
 
 - **The Windows engine no longer runs RapidOCR's per-row angle
   classifier — which was intermittently reading rows upside-down.**
@@ -459,10 +441,12 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   accumulated across every session ever run (and slowed the textmap
   seeding scan, which parses all of them). The dump now dies with its
   frame.
+
 - **`./hoyovoice.sh start` writes the pidfile.** The two launchers are
   documented as interchangeable, but a `.sh`-started instance was
   invisible to `python hoyovoice.py status/stop` (pidfile vs pgrep).
   Both now maintain `hoyovoice.pid`; `stop`/`restart` clear it.
+
 - **The world-object newspaper reads.** The Snezhnaya Vestnik article
   overlay draws the same column, title slot and scroll rules as the
   inventory readable, but its exit hint says **Leave** where every other
@@ -486,19 +470,6 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   app knows is the app's to write (the dashboard's own toggles live there),
   and casting is rewritten wholesale by design.
 
-- **A wrapped choice option no longer has a registered sign read out in the
-  middle of it.** Genshin draws the chat-bubble glyph beside each option,
-  vertically centered — so on an option that wraps to two rows it sits
-  beside the MIDDLE, and lands in the text two different ways. As its own
-  box it sorts between the two rows ("I don't know. This seems like it'd be
-  ® quite the pickle…", shot #211); fused into the row it touches it rides
-  in with that row's words ("So they'll sell it to the highest ® bidder…",
-  108 shots across the 2026-08-12 sessions). The existing strip only
-  removed a LEADING glyph from the joined option, which reaches neither.
-  Two fixes, both where the reason already lived: the choice branch of
-  `classify()` now requires letters in a block, the rule `choice_blocks()`
-  documents for exactly this ("a block with no letters is an option's
-  icon"), and the strip runs per BLOCK instead of on the joined option.
   Options that legitimately open with punctuation ("…Is that so?", "(Say
   nothing)") are unaffected — the pattern never ate those. Across the 307
   recorded frames carrying options, none now reaches the synthesizer with a
@@ -655,18 +626,26 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   read at the next quiet gap rather than dropped — a rare talk-over
   beats a skipped line, which is this repo's standing preference.
 
-- **A choice option no longer reads its bubble icon aloud.** Vision fuses
-  the option marker into the first text block, and the misread varies by
-  frame: shot #35 (2026-08-12) spoke "registered sign — Feeling better
-  now?" from `® Feeling better now?`, and the shots corpus also holds
-  `® Inspection?` and `# Goodbye.`. Options now strip 1–2 leading
-  SYMBOL-class characters at the point where choice rows are joined
-  (`option_text` in profiles/base.py) — by class, not literal glyph,
-  because the icon reads differently every time. Leading quotes,
-  ellipses, dots, parens and brackets survive: "...Is that so?" and
-  "(Say nothing)" are real option text. Swept all 351 captured shots
-  through both profiles: exactly the four icon-fused strings change,
-  nothing else — no speaker, dialogue, or trust decision moved.
+- **A choice option no longer reads its bubble icon aloud — including
+  mid-option on a wrapped one.** Vision fuses the option marker into a
+  text block, and the misread varies by frame: shot #35 (2026-08-12)
+  spoke "registered sign — Feeling better now?" from `® Feeling better
+  now?`, and the shots corpus also holds `® Inspection?` and
+  `# Goodbye.`. On an option that WRAPS to two rows the glyph sits
+  beside the middle, so it lands in the text two ways the first strip
+  (leading glyph off the joined option) couldn't reach: as its own box
+  it sorts between the two rows, and fused into the row it touches it
+  rides in with that row's words (108 shots across the 2026-08-12
+  sessions). The strip therefore runs per BLOCK, at 1–2 leading
+  SYMBOL-class characters — by class, not literal glyph, because the
+  icon reads differently every time — and the choice branch of
+  `classify()` requires letters in a block, the rule `choice_blocks()`
+  documents for exactly this ("a block with no letters is an option's
+  icon"). Leading quotes, ellipses, dots, parens and brackets survive:
+  "...Is that so?" and "(Say nothing)" are real option text. Swept all
+  351 captured shots through both profiles: exactly the icon-fused
+  strings change, nothing else — no speaker, dialogue, or trust
+  decision moved.
 
 - **The mac OCR daemon wedged after ~45 seconds of dialogue — every frame
   then read as lost and nothing was spoken.** The URL-decode change in
@@ -687,26 +666,26 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   (1.5 GB → clean exit, live.py's existing respawn path restarts it)
   insures against that ever becoming real dirty memory on a future OS.
 
-- **A dialogue-advance click can no longer silence a streamed first
-  sentence.** "I was a disappointment. I never got into an art school…"
-  (2026-08-12, 10:00 log) lost its first sentence: sentence streaming put
-  the prefix through the VAD gate right at line start, where the advance
-  click — centre-panned against quiet music — measured mid+13.0 side+1.8
-  with VAD peak 0.00. That clears the decisive centre-burst cut (11.2dB
-  over side against the 8.0 threshold), so the sentence was skipped as
-  voiced; the full line then arrived as an extension and only the
-  remainder was spoken. The speaker was five-for-five unvoiced at that
-  point, and the false skip also wrote a `v` into his prior, which is why
-  the fix does NOT key on `never_voiced`: a decisive burst with no
-  corroboration at all (VAD peak < 0.15, no usually-voiced record) must
-  now also LAST like speech — ≥ 0.35s of smoothed windows holding
-  ENERGY_MID_BURST over baseline. The click sustains ~0.26s including the
-  smoothing overlap; even a one-word VO line sustains ~0.5s. Corroborated
-  bursts are believed exactly as before, so the thirteen-session
-  measurements behind the 8.0 cut — and the Kokoro-Paimon vocoder case
-  the decisive rule exists for, whose VO runs seconds — keep their skips.
-  The skip and speak paths both log `sustain=` now, so the next
-  borderline case is measurable from the session log alone.
+- **An uncorroborated centre-energy burst can no longer silence a
+  line — neither a click's transient nor a scene's rumble.** Two
+  sessions drew the rule. A dialogue-advance click (2026-08-12, 10:00
+  log) — centre-panned against quiet music, mid+13.0 side+1.8, VAD peak
+  0.00 — cleared the decisive centre-burst cut and skipped a streamed
+  first sentence as voiced; a first fix required the burst to LAST like
+  speech (≥0.35s; the click sustains ~0.26s), but the Snezhnaya train's
+  engine rumble (61dB ambience, 2026-08-13 09:56 log) lasts forever, and
+  four unvoiced NPC lines were silenced at `peak=0.00` — each false skip
+  also RECORDING a voiced observation for a just-met speaker, feeding
+  the per-speaker prior that makes the next skip easier, a spiral aimed
+  at exactly the characters the game never voices. The shipped rule:
+  centre energy is believed only WITH corroboration — faint speechiness
+  (VAD peak ≥ 0.15) or a usually-voiced record. The model-deaf-vocoder
+  case (Paimon) this layer exists for keeps its skips, since that
+  record is exactly what it has; without corroboration the line is
+  spoken, because a rare talk-over beats a skipped line. Poisoned
+  histories self-heal (`usually_voiced` demands a consistent record),
+  and both the skip and speak paths log `sustain=` as a diagnostic, so
+  the next borderline case is measurable from the session log alone.
 
 - **Paimon auto-casts female — documented gender now beats the name-shape
   guess.** Session hoyovoice-20260812-084224 (0.10.4, macOS) logged
@@ -754,15 +733,6 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   failing 32 seconds: unpatched re-fires the line three times after first
   speak; patched re-fires zero and stops polluting Paimon's voiced prior
   with repeat observations of one line.
-
-- **A pronunciation key ending in a period could never match.** The
-  substitution wrapped every key in `\b…\b`, and after a trailing period the
-  closing `\b` demands a word character where the following space is — so a
-  key like `Ms.` silently never fired. The right edge of a period-final key
-  is now the period itself; word-final keys keep the boundary they had. Same
-  fix mirrored in `pronounce_names.py --check`, and `--custom-words` now
-  skips period-bearing keys instead of pinning `Ms.` into the OCR vocabulary
-  as a token the recognizer can never emit.
 
 - **Standalone `Yae` no longer reads "Yee".** The table keyed the respelling
   on the full `Yae Miko`, but dialogue says "Yae" and "Miss Yae" more often
@@ -1165,6 +1135,7 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 ### Added
 
 - **Per-game layout profiles (`tools/profiles/`), and the beginning of Genshin Impact support.** Screen classification was written against Honkai: Star Rail and had its geometry and chrome assumptions spread through one module — including the rule that gates every unknown speaker's line on the `✕ Continue` hint, which Genshin does not draw at all. That single check is why a Genshin frame whose nameplate and line both read correctly still ended in `skipped (unknown speaker, no Continue hint)`. The bands and detectors now live in a profile per game behind a shared base, and the gate asks the active profile what its story chrome looks like — Star Rail's Continue hint, Genshin's auto-play toggle. `settings.game` (`auto` | `hsr` | `genshin`) and a dashboard dropdown select one; `auto` switches on a sustained run of frames carrying chrome unique to the other game, deliberately sticky so a single misread can't swap layouts mid-conversation. `tools/replay.py --game` pins a profile for a replay. The Star Rail path is unchanged — verified by fuzzing 20,000 randomized frames through the pre-refactor classifier and the new profile side by side, all ten detectors exercised, zero differences.
+
 - **The Genshin profile, calibrated against a real session** (a 4-minute Natlan world quest: 198 dialogue frames of 281). Dialogue screens, choice prompts, full-screen narration and loading-screen tips are all read from measurements off that capture; nothing is enabled on a guessed band, because a wrong one doesn't fail quietly — it narrates menus. Each `CALIBRATE` comment in `tools/profiles/genshin.py` names the capture still needed for what remains. What the capture changed, measured over those frames — 0 lines readable before, 196 parsed cleanly after:
   - Genshin's nameplate can carry a second, smaller line: the speaker's role ("Pucli" over "Entertainment Supervisor"). It lands exactly where the first dialogue row would, and was being read aloud as the opening words of every one of that NPC's lines — 100 frames of the capture. What separates it from a real row is how tightly it hugs the plate (0.023–0.031 below its baseline, against 0.041–0.063 for a first dialogue row); font size does *not*, since Vision returns anything from 0.016 to 0.029 for the same subtitle depending on which glyphs it catches.
   - Rows are accepted across the whole text column instead of by Star Rail's centered-seed test. Genshin centers each row, but only once it is fully typed — the typewriter reveals a row rightward from its final left edge, so a half-typed row's center sits far left of the axis, and the centered test dropped those rows entirely.
@@ -1198,12 +1169,19 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 ### Added
 
 - **Windows 10/11 support.** The pipeline now has a platform backend layer (`hv_platform/`) and runs natively on Windows: DirectShow video capture, in-process WASAPI audio, an OCR daemon (`tools/ocrd_win.py`) speaking the same protocol and coordinate convention as the Apple Vision one, Kokoro TTS through ONNX Runtime, `setup.ps1`, and a cross-platform `hoyovoice.py` launcher. `voices.json` carries over unchanged — the voice IDs are identical on both platforms. RapidOCR on DirectML is the recommended engine (~120ms/frame); the built-in Windows OCR is a fallback. Getting there meant solving a series of platform-specific problems, all handled internally: frames are read as validated complete images (a JPEG caught mid-rewrite yields no text at all), the background is flattened before recognition so light subtitles survive a blown-out sky, playback tracks the duration implied by its own sample count because PortAudio reports a stream idle while WASAPI is still sounding, and the Chinese-trained recognition model's habit of dropping spaces is repaired in post. See `plans/WINDOWS-TESTING.md` for the first-run checklist and the platform quirks worth knowing.
+
 - **Message/group-chat panel reading.** Phone conversations are read incrementally as you scroll, each sender in their own cast voice, with system notices ("… started sharing location") read by the narrator since they're events rather than speech. Sender labels are canonicalised per conversation — OCR renders the same small label several ways — and messages whose label has scrolled off-screen inherit the conversation's name rather than falling back to the narrator.
+
 - **Lore cards** — full-screen title-and-prose screens carrying no UI chrome — are recognised and read by the narrator. Their title reads as a nameplate to the dialogue classifier, so they were previously skipped as an unknown speaker.
+
 - **Sentence streaming.** The typewriter pauses at sentence boundaries, so a completed sentence is spoken at that pause instead of waiting for the whole line; the remainder follows once it renders, after the first part finishes.
+
 - **Per-speaker voiced prior ("soft gate").** Some voiceover sits below every audio threshold that can safely be used: measured on a real capture, a voiced line peaked at 0.18 on the speech detector while a genuinely *unvoiced* line in the same scene showed more sub-threshold activity — no global threshold separates them, and lowering one would silence the unvoiced lines this app exists to fill in. HoyoVoice now tracks how often each speaker turns out to be voiced and, once that's consistent, accepts much weaker evidence before talking over them. For a character with a real voice, silence is the safer error. It self-corrects: every line spoken for a character counts against the prior.
+
 - **Session replay harness (`tools/replay.py`).** Any dashboard recording replays through the real pipeline — actual OCR daemon, classification, stabilisation, dedupe, VAD gate and yield, with only capture, TTS and playback simulated — in a throwaway state directory that can't touch real casting or caches. Every reported problem becomes a reproducible test case.
+
 - **"⤓ Download log" button** in the dashboard. Saves one text file with the environment, live analytics, the casting table, the full decision log and the noise-filtered console log — enough to diagnose a session without a screenshot.
+
 - **Screen kinds are labelled in the log** (`loading screen`, `lore card`, `narration`, `overlay`, `chat`, `chat notice`), on skips as well as reads, plus a `lost frames` analytic counting frames the OCR daemon couldn't read at all.
 
 ### Changed
@@ -1213,8 +1191,11 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 ### Fixed
 
 - **Real voiceover was spoken over when the audio reader fell behind.** Under load the VAD tail-reader could trail the live edge, stamping stale audio with fresh timestamps — so the gate judged "now" against sound from minutes earlier. Backlogs over a second are dropped and the dashboard shows `LAG Xs`.
+
 - **HoyoVoice kept talking when voiceover started mid-line.** The late-VO yield used the same strict thresholds as the gate, so it often never fired. Our own TTS is not in the capture — it plays on the computer's speakers — so any speech heard during playback is game voiceover by definition, and the yield now acts on much weaker evidence.
+
 - **Loading-screen lore was silently skipped as a repeat.** The dedupe window persists across restarts so that restarting mid-scene doesn't re-read the line still on screen, but it never expired — so a loading screen seen every session was suppressed by a read from the previous one. It now goes stale after ten minutes.
+
 - **A line already on screen could re-trigger, and a partly-read nameplate could split a character in two.** Stabilisation was keyed on speaker *and* text, but the nameplate read jitters independently of the line ("Goldy" for "Mysterious Goldy"), restarting the cycle. Jittered re-reads now continue stabilising the same line, and partial nameplates snap to the cast member by containment instead of auto-casting a duplicate with a different voice.
 
 ## [0.5.1] - 2026-07-27
