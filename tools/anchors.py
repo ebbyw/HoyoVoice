@@ -251,6 +251,17 @@ class AnchorPack:
             try:
                 tmpl, ref = self._load_template(a)
                 if tmpl is not None:
+                    if not a.get("measured"):
+                        # the extract CLI's placeholder threshold equals
+                        # the shipped anchors' measured value, so only
+                        # this flag can tell them apart — say so once
+                        # rather than matching on an untrusted number
+                        # silently (ANCHORS.md: measured, not chosen)
+                        print(f"[anchors] {game}/{a['name']}: threshold "
+                              f"{a['threshold']} is UNMEASURED — run the "
+                              f"score distributions (tools/anchors.py "
+                              f"match) and set measured: true",
+                              flush=True)
                     self.anchors.append(Anchor(a["name"], tmpl, a["search"],
                                                a["threshold"], ref,
                                                a.get("roi")))
