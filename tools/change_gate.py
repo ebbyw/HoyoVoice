@@ -104,6 +104,10 @@ class ChangeGate:
         # frame — reuse this instead. Valid only until the next
         # unchanged() call, like any per-frame state.
         self.last_gray = None
+        # ...and the raw bytes that decode came from, for the same
+        # reason: the ROI crop wants to cut the SAME frame the gate
+        # judged, not a re-read that may straddle an ffmpeg rewrite.
+        self.last_bytes = None
 
     def reset(self):
         self.prev = self.key = None
@@ -154,6 +158,7 @@ class ChangeGate:
         baseline forward, so the comparison is strictly frame-to-frame.
         """
         self.last_gray = None
+        self.last_bytes = None
         if not (self.enabled and blocks):
             return False
         if self.run >= MAX_SKIP_RUN:
@@ -172,6 +177,7 @@ class ChangeGate:
             self.reset()          # can't trust a baseline we couldn't decode
             return False
         self.last_gray = g
+        self.last_bytes = data
         H, W = g.shape
         # sorted + deduplicated so the box set is a stable identity across
         # frames: the daemon does not promise a stable block order
