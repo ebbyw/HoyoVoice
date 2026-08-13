@@ -189,6 +189,21 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Fixed
 
+- **Restarting with the dashboard open no longer refuses to start.** The
+  port check binds a probe socket and exits loudly if the port is taken,
+  which is right — a dead serving thread would otherwise leave the app
+  running headless. But the probe bound without `SO_REUSEADDR` where the
+  real server (werkzeug) sets it, so it was answering a different question:
+  an open dashboard tab holds established connections, and when the app
+  exits those sockets sit in TIME_WAIT for a minute or two, which a plain
+  `bind()` reports as "address already in use" with nothing listening at
+  all. Restarting promptly to pick up a fix — the normal way to restart —
+  killed the new instance at startup with "another HoyoVoice instance is
+  still running" while no such instance existed. The probe now binds the
+  way the server will, which steps over TIME_WAIT remains and still refuses
+  a port another process is genuinely listening on; both halves are pinned
+  in `tools/test_port_probe.py`.
+
 - **A frame where Vision fused two dialogue rows into one box is dropped
   instead of spoken.** On a motionless Genshin screen the OCR alternated
   between a clean two-box read of the line and a single box spanning both
