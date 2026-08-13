@@ -7,152 +7,6 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ## [Unreleased]
 
-### Fixed
-
-- **A loud scene can no longer read as voiceover.** The center-energy
-  layer's sustained-burst arm believed a decisive centre burst with ZERO
-  speechiness as VO if it merely lasted 0.35s — and on the Snezhnaya
-  train (61dB ambience, 2026-08-13 09:56 log) engine rumble lasts
-  forever: four unvoiced NPC lines were silenced at `peak=0.00`,
-  mid+13.7 to +27.3, every one "decisive" and "sustained". Each false
-  skip also RECORDED a voiced observation for a just-met speaker
-  (Vedenev, Firsova, Dementieva), feeding the per-speaker prior that
-  makes the next skip easier — a spiral aimed at exactly the characters
-  the game never voices. Center energy is now believed only WITH
-  corroboration: faint speechiness (peak ≥ 0.15) or a usually-voiced
-  record — the model-deaf-vocoder case (Paimon) this layer exists for
-  keeps its skips, since that record is exactly what it has. Without
-  corroboration the line is spoken; a rare talk-over beats a skipped
-  line, and the poisoned histories from this session self-heal because
-  `usually_voiced` demands a consistent record, not one bad
-  observation. The sustain measurement stays (pinned, and printed in
-  every center-energy log line) as a diagnostic.
-
-- **The Windows engine no longer runs RapidOCR's per-row angle
-  classifier — which was intermittently reading rows upside-down.**
-  Session shots from 2026-08-13 caught `golden glow of "friendship."`
-  coming back as `ajuspuerd. do Mons uapios` at conf 0.6, on a frame
-  whose neighbors read the same row upright at 0.96 — the classifier
-  (cls, running on DirectML) had flipped it 180°. Game UI text is
-  always drawn upright, so cls can only ever hurt here, and this is the
-  strongest lead yet on the long-open book-page bug (`hum`, `Ium`,
-  `Culld.` rows spoken from static pages — same one-row-garbage class).
-  Every engine call now passes `use_cls=False` and the cls DirectML
-  session is no longer requested; an engine too old to accept the
-  keyword keeps its old behavior instead of killing the daemon. Also
-  hardened the gray-input trial against engines that report scores as
-  strings (newer rapidocr does) — that comparison sat outside its
-  try-block and a bare subtraction was an uncaught daemon-killing
-  TypeError.
-
-- **`Onigiri` → "oh-nee-GHEE-ree", `Tumaini` → "too-MY-nee".** The rice
-  ball is wrong on both engines and worst on Windows: misaki keeps the hard
-  g but clips the third vowel (`ˌOniɡˈɪɹi`, "oh-nee-GIH-ree") while espeak
-  reads the gi as /ʤ/ and breaks the vowel too (`ˌɑnɪʤˈiəɹi`,
-  "ah-nih-JEE-uh-ree"). The `gh` is what holds the g hard — the ear-gloss
-  spelling "oh-knee-gee-ree" is `ˈOnˈiʤˈiɹˈi` on both, a j where the word
-  has a g — and `oh-nee-ghee-ree` is `ˈOnˈiɡˈiɹˈi` identically on both.
-  Chunked despite the stress cost, because unhyphenated "ohneegheeree"
-  pronounces its h. Capitalised so `--custom-words` pins it in the OCR
-  vocabulary; matching is case-insensitive, so the prose spelling is
-  covered too. Tumaini is an Easybreeze Holiday Resort NPC (28 lines in the
-  6.x TextMap, on neither playable roster): both engines read the ai as
-  /eɪ/, `tˈumAni`, "too-MAY-nee", where `Too-mai-knee` is `tˈumˈInˈi`.
-
-- **Shot block-dumps are pruned with their frames.** Every logged event
-  with a screenshot also writes the raw OCR blocks to `shots/<id>.json`,
-  but the 300-file cap only ever deleted the `.jpg` — the JSONs
-  accumulated across every session ever run (and slowed the textmap
-  seeding scan, which parses all of them). The dump now dies with its
-  frame.
-- **`./hoyovoice.sh start` writes the pidfile.** The two launchers are
-  documented as interchangeable, but a `.sh`-started instance was
-  invisible to `python hoyovoice.py status/stop` (pidfile vs pgrep).
-  Both now maintain `hoyovoice.pid`; `stop`/`restart` clear it.
-- **The world-object newspaper reads.** The Snezhnaya Vestnik article
-  overlay draws the same column, title slot and scroll rules as the
-  inventory readable, but its exit hint says **Leave** where every other
-  readable says Return — and the hint word was a hard requirement, so the
-  screen was never classified and a session sat on the page reading
-  nothing. `leave` now joins `return` as an exit-hint word; the title, the
-  three-plus prose rows on the column edge and the digit guards still
-  carry the actual detection weight.
-
-### Changed
-
-- **Anchor templates self-calibrate from your own capture — the last
-  game-derived pixels leave the repo.** The two anchor template PNGs
-  (Star Rail's ✕-Continue glyph, Genshin's auto-play toggle) were crops
-  of the games' chrome. The spec files now ship the numeric cut rect
-  instead, and the first time the classifier trusts a game's dialogue
-  chrome the app cuts the template from the live capture, holds it for
-  three trusted frames, verifies it against a later frame at the
-  measured threshold (a fade or blurred cut fails and is retried), and
-  persists it under `captures/anchors/`. Self-cut templates measure the
-  same margins as the originals (0.985+ own-game, ≤0.47 cross-game),
-  and both regression replays self-calibrate at 1.00 and read
-  identically. Anchors still gate cost, never speech: until
-  calibration happens, every frame is read whole, exactly as a fresh
-  install always was.
-- **The frame loop stops paying quadratic fuzzy-match costs on open
-  panels.** `same_line` now short-circuits on exact equality and runs
-  difflib's `quick_ratio` bounds before the full `ratio()` — documented
-  upper bounds, so no verdict can change — and the chat-panel dedupe
-  tests set membership before its containment and fuzzy scans. On a
-  motionless 10–30-row panel this was 100–900 full SequenceMatcher
-  passes per frame (~10–45 ms of a 166 ms budget) doing nothing.
-  `wordfreq` lookups in the run-on splitter are now cached the same way:
-  the same line was re-scored on every frame it sat on screen.
-
-  And the loop stops decoding the same JPEG twice: the change gate now
-  exposes the half-scale gray it just decoded and the anchor matcher
-  reuses it (same draft decode, byte for byte) instead of paying a
-  second file read + decode on every fresh-OCR frame — `anchor_ms` was
-  mostly measuring that decode, not the correlation. The dark-frame
-  check decodes at 1/8 draft scale instead of full 1080p to average a
-  48×48 thumbnail (mean shift measured ≤0.16 against a threshold of
-  28); the best-variant vote's raw-read list is bounded at 60 (a line
-  left on screen kept appending long after it fired — a two-minute
-  pause accumulated ~700 entries); the pronunciation respellings are
-  compiled once per settings change instead of ~85 regex builds per
-  pass, twice per line; and the Windows OCR daemon's background
-  flattening does its arithmetic in-place (bit-identical, ~32 MB of
-  float32 intermediates per 1080p frame no longer allocated).
-
-  The Windows daemon also stops stacking the gray frame into RGB — once
-  it has proven that safe on YOUR machine. Whether RapidOCR reads a 2-D
-  gray array identically to the 3-channel stack varies by version, so
-  the first three texty frames of a session are read both ways: results
-  byte-identical → the ~6 MB stack copy is dropped for the session
-  (`[ocrd_win] gray input verified` in the log); any difference or
-  error → the stack stays, permanently, and the caller always sees the
-  stacked result while the trial runs. The decision logic is pinned by
-  `tools/test_gray_input.py`.
-- **`ocr_ms` includes the ROI crop's cost.** The Windows on-vs-off
-  measurement that gates `anchor_roi` defaulting on compares `ocr_ms` —
-  which excluded the crop's own decode + PNG encode, i.e. the cost side
-  of the very trade being measured. The timer now starts before the crop.
-- **No game text in the repo.** Test fixtures that carried verbatim
-  passages (the reader-chunks page, the readable-article bodies, the
-  textmap cases, the boot notice) now use invented prose with the same
-  geometry, corruption shapes and matcher markers — the tests pin
-  behavior, not wording, and all pass unchanged. A `NOTICE` file states
-  that the games and their content are HoYoverse's and outside the MIT
-  grant, the README leads with the non-affiliation disclaimer, and
-  `voices.example.json` is regenerated from the shipped pronunciation
-  tables (dropping a retired `Yae Miko` key and a stale `Sigewinne`
-  respelling) and now seeds `textmap`, `player_name`, `change_gate` and
-  `late_yield` so a fresh install matches the documented settings shape.
-- **A readable page starts speaking after one sentence's synthesis, not a
-  whole page's.** A full inventory page (~340 words) was synthesized as
-  one utterance before any sound — seconds of dead air that read as "it
-  isn't going to read this." The reading pump now cuts a page into
-  sentence-boundary chunks: the first chunk is the first sentence alone,
-  and the next chunk synthesizes while the current one plays, so handoffs
-  land on sentence pauses. The decision log, spoken count, dedupe and
-  replay still treat the page as one item; closing the panel still stops
-  the read and now also drops the unspoken chunks.
-
 ### Added
 
 - **Snapping a read line to the game's own text (`settings.textmap`).**
@@ -403,6 +257,89 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Changed
 
+- **Anchor ROI cropping now defaults ON (`anchor_roi: true`).** Both
+  halves of phase 4b's trust gate have passed: replay decisions on/off
+  sit inside the wall-clock harness's own noise floor (plans/ANCHORS.md,
+  2026-08-12), and the Windows box measured the win it was built for —
+  `ocr_avg_ms` 321 with 530 crops against its ~554 dialogue baseline,
+  ~42% off the detector and inside the predicted 35–40% band, with
+  anchors self-calibrating on the first dialogue of the session
+  (`auto=1.00`) and zero lost frames (2026-08-13 09:56 log). Setting
+  `anchor_roi: false` restores full-frame OCR.
+
+- **Anchor templates self-calibrate from your own capture — the last
+  game-derived pixels leave the repo.** The two anchor template PNGs
+  (Star Rail's ✕-Continue glyph, Genshin's auto-play toggle) were crops
+  of the games' chrome. The spec files now ship the numeric cut rect
+  instead, and the first time the classifier trusts a game's dialogue
+  chrome the app cuts the template from the live capture, holds it for
+  three trusted frames, verifies it against a later frame at the
+  measured threshold (a fade or blurred cut fails and is retried), and
+  persists it under `captures/anchors/`. Self-cut templates measure the
+  same margins as the originals (0.985+ own-game, ≤0.47 cross-game),
+  and both regression replays self-calibrate at 1.00 and read
+  identically. Anchors still gate cost, never speech: until
+  calibration happens, every frame is read whole, exactly as a fresh
+  install always was.
+- **The frame loop stops paying quadratic fuzzy-match costs on open
+  panels.** `same_line` now short-circuits on exact equality and runs
+  difflib's `quick_ratio` bounds before the full `ratio()` — documented
+  upper bounds, so no verdict can change — and the chat-panel dedupe
+  tests set membership before its containment and fuzzy scans. On a
+  motionless 10–30-row panel this was 100–900 full SequenceMatcher
+  passes per frame (~10–45 ms of a 166 ms budget) doing nothing.
+  `wordfreq` lookups in the run-on splitter are now cached the same way:
+  the same line was re-scored on every frame it sat on screen.
+
+  And the loop stops decoding the same JPEG twice: the change gate now
+  exposes the half-scale gray it just decoded and the anchor matcher
+  reuses it (same draft decode, byte for byte) instead of paying a
+  second file read + decode on every fresh-OCR frame — `anchor_ms` was
+  mostly measuring that decode, not the correlation. The dark-frame
+  check decodes at 1/8 draft scale instead of full 1080p to average a
+  48×48 thumbnail (mean shift measured ≤0.16 against a threshold of
+  28); the best-variant vote's raw-read list is bounded at 60 (a line
+  left on screen kept appending long after it fired — a two-minute
+  pause accumulated ~700 entries); the pronunciation respellings are
+  compiled once per settings change instead of ~85 regex builds per
+  pass, twice per line; and the Windows OCR daemon's background
+  flattening does its arithmetic in-place (bit-identical, ~32 MB of
+  float32 intermediates per 1080p frame no longer allocated).
+
+  The Windows daemon also stops stacking the gray frame into RGB — once
+  it has proven that safe on YOUR machine. Whether RapidOCR reads a 2-D
+  gray array identically to the 3-channel stack varies by version, so
+  the first three texty frames of a session are read both ways: results
+  byte-identical → the ~6 MB stack copy is dropped for the session
+  (`[ocrd_win] gray input verified` in the log); any difference or
+  error → the stack stays, permanently, and the caller always sees the
+  stacked result while the trial runs. The decision logic is pinned by
+  `tools/test_gray_input.py`.
+- **`ocr_ms` includes the ROI crop's cost.** The Windows on-vs-off
+  measurement that gates `anchor_roi` defaulting on compares `ocr_ms` —
+  which excluded the crop's own decode + PNG encode, i.e. the cost side
+  of the very trade being measured. The timer now starts before the crop.
+- **No game text in the repo.** Test fixtures that carried verbatim
+  passages (the reader-chunks page, the readable-article bodies, the
+  textmap cases, the boot notice) now use invented prose with the same
+  geometry, corruption shapes and matcher markers — the tests pin
+  behavior, not wording, and all pass unchanged. A `NOTICE` file states
+  that the games and their content are HoYoverse's and outside the MIT
+  grant, the README leads with the non-affiliation disclaimer, and
+  `voices.example.json` is regenerated from the shipped pronunciation
+  tables (dropping a retired `Yae Miko` key and a stale `Sigewinne`
+  respelling) and now seeds `textmap`, `player_name`, `change_gate` and
+  `late_yield` so a fresh install matches the documented settings shape.
+- **A readable page starts speaking after one sentence's synthesis, not a
+  whole page's.** A full inventory page (~340 words) was synthesized as
+  one utterance before any sound — seconds of dead air that read as "it
+  isn't going to read this." The reading pump now cuts a page into
+  sentence-boundary chunks: the first chunk is the first sentence alone,
+  and the next chunk synthesizes while the current one plays, so handoffs
+  land on sentence pauses. The decision log, spoken count, dedupe and
+  replay still treat the page as one item; closing the panel still stops
+  the read and now also drops the unspoken chunks.
+
 - **Two OCR ideas measured and NOT shipped.** Both were on the list of
   things that would obviously help. Neither does, and the benchmark is
   what says so rather than an opinion:
@@ -457,6 +394,75 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   reads the lexicon, and the model reload costs seconds).
 
 ### Fixed
+
+- **A loud scene can no longer read as voiceover.** The center-energy
+  layer's sustained-burst arm believed a decisive centre burst with ZERO
+  speechiness as VO if it merely lasted 0.35s — and on the Snezhnaya
+  train (61dB ambience, 2026-08-13 09:56 log) engine rumble lasts
+  forever: four unvoiced NPC lines were silenced at `peak=0.00`,
+  mid+13.7 to +27.3, every one "decisive" and "sustained". Each false
+  skip also RECORDED a voiced observation for a just-met speaker
+  (Vedenev, Firsova, Dementieva), feeding the per-speaker prior that
+  makes the next skip easier — a spiral aimed at exactly the characters
+  the game never voices. Center energy is now believed only WITH
+  corroboration: faint speechiness (peak ≥ 0.15) or a usually-voiced
+  record — the model-deaf-vocoder case (Paimon) this layer exists for
+  keeps its skips, since that record is exactly what it has. Without
+  corroboration the line is spoken; a rare talk-over beats a skipped
+  line, and the poisoned histories from this session self-heal because
+  `usually_voiced` demands a consistent record, not one bad
+  observation. The sustain measurement stays (pinned, and printed in
+  every center-energy log line) as a diagnostic.
+
+- **The Windows engine no longer runs RapidOCR's per-row angle
+  classifier — which was intermittently reading rows upside-down.**
+  Session shots from 2026-08-13 caught `golden glow of "friendship."`
+  coming back as `ajuspuerd. do Mons uapios` at conf 0.6, on a frame
+  whose neighbors read the same row upright at 0.96 — the classifier
+  (cls, running on DirectML) had flipped it 180°. Game UI text is
+  always drawn upright, so cls can only ever hurt here, and this is the
+  strongest lead yet on the long-open book-page bug (`hum`, `Ium`,
+  `Culld.` rows spoken from static pages — same one-row-garbage class).
+  Every engine call now passes `use_cls=False` and the cls DirectML
+  session is no longer requested; an engine too old to accept the
+  keyword keeps its old behavior instead of killing the daemon. Also
+  hardened the gray-input trial against engines that report scores as
+  strings (newer rapidocr does) — that comparison sat outside its
+  try-block and a bare subtraction was an uncaught daemon-killing
+  TypeError.
+
+- **`Onigiri` → "oh-nee-GHEE-ree", `Tumaini` → "too-MY-nee".** The rice
+  ball is wrong on both engines and worst on Windows: misaki keeps the hard
+  g but clips the third vowel (`ˌOniɡˈɪɹi`, "oh-nee-GIH-ree") while espeak
+  reads the gi as /ʤ/ and breaks the vowel too (`ˌɑnɪʤˈiəɹi`,
+  "ah-nih-JEE-uh-ree"). The `gh` is what holds the g hard — the ear-gloss
+  spelling "oh-knee-gee-ree" is `ˈOnˈiʤˈiɹˈi` on both, a j where the word
+  has a g — and `oh-nee-ghee-ree` is `ˈOnˈiɡˈiɹˈi` identically on both.
+  Chunked despite the stress cost, because unhyphenated "ohneegheeree"
+  pronounces its h. Capitalised so `--custom-words` pins it in the OCR
+  vocabulary; matching is case-insensitive, so the prose spelling is
+  covered too. Tumaini is an Easybreeze Holiday Resort NPC (28 lines in the
+  6.x TextMap, on neither playable roster): both engines read the ai as
+  /eɪ/, `tˈumAni`, "too-MAY-nee", where `Too-mai-knee` is `tˈumˈInˈi`.
+
+- **Shot block-dumps are pruned with their frames.** Every logged event
+  with a screenshot also writes the raw OCR blocks to `shots/<id>.json`,
+  but the 300-file cap only ever deleted the `.jpg` — the JSONs
+  accumulated across every session ever run (and slowed the textmap
+  seeding scan, which parses all of them). The dump now dies with its
+  frame.
+- **`./hoyovoice.sh start` writes the pidfile.** The two launchers are
+  documented as interchangeable, but a `.sh`-started instance was
+  invisible to `python hoyovoice.py status/stop` (pidfile vs pgrep).
+  Both now maintain `hoyovoice.pid`; `stop`/`restart` clear it.
+- **The world-object newspaper reads.** The Snezhnaya Vestnik article
+  overlay draws the same column, title slot and scroll rules as the
+  inventory readable, but its exit hint says **Leave** where every other
+  readable says Return — and the hint word was a hard requirement, so the
+  screen was never classified and a session sat on the page reading
+  nothing. `leave` now joins `return` as an exit-hint word; the title, the
+  three-plus prose rows on the column edge and the digit guards still
+  carry the actual detection weight.
 
 - **A setting added to `voices.json` by hand mid-session is no longer
   wiped.** The file is rewritten whenever casting changes — an auto-cast, a

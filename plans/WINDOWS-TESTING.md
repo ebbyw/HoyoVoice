@@ -138,13 +138,18 @@ python hoyovoice.py log
   [OCR-INTEGRATION-PLAN.md](OCR-INTEGRATION-PLAN.md)) shipped as the lever —
   user-seeded and local-only, so it only helps a box whose user points it at
   a map.
-- **Open bug: book-page rows misread as `hum`/`Ium` on Windows.** Smells like
-  detector/frame rather than glyph shape; diagnosis waits on this box's
-  `captures/shots/*.json` from a session that reproduces it.
-- The Windows `ocr_ms` measurement for `settings.anchor_roi` (phase 4b) is
-  still owed: replay a scroll-heavy recording here with `anchor_roi: true`
-  and compare `ocr_ms` on vs off. The setting stays off by default until
-  this is done.
+- **Open bug: book-page rows misread as `hum`/`Ium` on Windows.** Best
+  lead (2026-08-13): RapidOCR's per-row angle classifier on DirectML was
+  caught reading a static row upside-down (`golden glow of "friendship."`
+  → `ajuspuerd. do Mons uapios`, conf 0.6) — the same one-row-garbage
+  class. cls is now disabled on every engine call; confirm the bug stays
+  gone across the next few book sessions before closing this item.
+- ~~The Windows `ocr_ms` measurement for `settings.anchor_roi`~~ **Done
+  2026-08-13** (09:56 session): `ocr_avg_ms` 321 with 530 crops against
+  the ~554 dialogue baseline — ~42% off, in the predicted band — with
+  anchors self-calibrated at `auto=1.00` and zero lost frames.
+  `anchor_roi` now defaults ON; `false` in settings restores full
+  frames.
 - Next session here, check the startup log for the 2-D gray trial's
   verdict: `[ocrd_win] gray input verified` (stack copy dropped) or
   `gray input differs` (kept). Either is fine — it self-decides — but the

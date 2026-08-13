@@ -243,8 +243,12 @@ drop on the Windows box.
   reading one line's mid-sentence punctuation differently on the crop
   ("Here we are." vs "Here we are:") — normalize_text erases it for
   dedupe and both runs skipped the line as voiced. The Windows `ocr_ms`
-  half of the gate is still owed — replay a scroll-heavy recording
-  there after pulling, with `anchor_roi: true` in voices.json.
+  half of the gate **passed 2026-08-13** (09:56 session log): anchors
+  self-calibrated on the first dialogue (`auto=1.00`), 530 crops,
+  `ocr_avg_ms` 321 against the ~554 dialogue baseline — ~42% off, in
+  the predicted 35–40% band — zero lost frames, and the four misses in
+  that session were all audio-gate (center-energy), not detection.
+  `anchor_roi` defaults ON as of that date.
 
 ### (c) A screen ships as data
 
