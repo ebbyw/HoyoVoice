@@ -30,6 +30,20 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Changed
 
+- **Anchor templates self-calibrate from your own capture — the last
+  game-derived pixels leave the repo.** The two anchor template PNGs
+  (Star Rail's ✕-Continue glyph, Genshin's auto-play toggle) were crops
+  of the games' chrome. The spec files now ship the numeric cut rect
+  instead, and the first time the classifier trusts a game's dialogue
+  chrome the app cuts the template from the live capture, holds it for
+  three trusted frames, verifies it against a later frame at the
+  measured threshold (a fade or blurred cut fails and is retried), and
+  persists it under `captures/anchors/`. Self-cut templates measure the
+  same margins as the originals (0.985+ own-game, ≤0.47 cross-game),
+  and both regression replays self-calibrate at 1.00 and read
+  identically. Anchors still gate cost, never speech: until
+  calibration happens, every frame is read whole, exactly as a fresh
+  install always was.
 - **The frame loop stops paying quadratic fuzzy-match costs on open
   panels.** `same_line` now short-circuits on exact equality and runs
   difflib's `quick_ratio` bounds before the full `ratio()` — documented

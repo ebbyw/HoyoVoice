@@ -35,6 +35,11 @@ hoyovoice.pid
 # historical planning docs (kept locally, not tracked)
 archive/
 
+# anchor template PNGs are crops of the games' own chrome and never ship:
+# the app self-calibrates them into captures/anchors/ from the user's own
+# capture, and `anchors.py extract` output here stays local too
+tools/profiles/anchors/*/*.png
+
 # Claude Code worktrees and local session state
 .claude/worktrees/
 .claude/settings.local.json

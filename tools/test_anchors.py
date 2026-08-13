@@ -101,6 +101,55 @@ def test_pack_without_data_is_empty():
     assert pack.roi_for(()) is None
 
 
+def test_bootstrap_cut_verify_persist():
+    """The self-calibration lifecycle: a pending entry is held for
+    BOOT_HOLD trusted frames, cut, verified against a LATER frame, and
+    only then persisted (PNG + ref sidecar) and armed. An untrusted frame
+    resets the hold; a verify miss throws the candidate away."""
+    import json as _json
+    import tempfile
+    from anchors import BOOT_HOLD
+    frame, _ = make_frame()
+    user = Path(tempfile.mkdtemp())
+    entry = {"name": "g", "template": "test/g.png",
+             # the glyph planted by make_frame: x 0.90-0.94, y 0.02-0.06
+             # (22px at 960x540 ≈ 0.0229 x 0.0407 — cut a hair inside)
+             "cut": {"x": [0.901, 0.921], "y": [0.025, 0.058]},
+             "search": {"x": [0.88, 0.96], "y": [0.0, 0.10]},
+             "threshold": 0.75, "ref": [960, 540]}
+    pack = AnchorPack("no-such-game", user_dir=user)
+    pack.pending = [dict(entry)]
+
+    # untrusted frames do nothing and reset the hold
+    assert pack.maybe_bootstrap(frame, False) is None and pack.pending
+    for _i in range(BOOT_HOLD - 1):
+        assert pack.maybe_bootstrap(frame, True) is None
+    assert pack.maybe_bootstrap(frame, False) is None    # reset
+    # hold, cut (frame BOOT_HOLD), verify (the next one), commit
+    for _i in range(BOOT_HOLD):
+        assert pack.maybe_bootstrap(frame, True) is None
+    msg = pack.maybe_bootstrap(frame, True)
+    assert msg and "self-calibrated" in msg, msg
+    assert not pack.pending and len(pack.anchors) == 1
+    score, ok = pack.anchors[0].match(frame)
+    assert ok and score > 0.98, score
+    png, meta = user / "test/g.png", user / "test/g.json"
+    assert png.exists() and _json.loads(meta.read_text())["ref"] == [960, 540]
+
+    # a fresh pack finds the persisted template and has nothing pending
+    pack2 = AnchorPack("no-such-game", user_dir=user)
+    tmpl2, ref2 = pack2._load_template(entry)
+    assert tmpl2 is not None and ref2 == (960, 540)
+
+    # a flat cut (fade) is never even held
+    pack3 = AnchorPack("no-such-game", user_dir=user)
+    pack3.pending = [dict(entry, template="test/h.png")]
+    black = np.zeros((540, 960), dtype=np.float32)
+    for _i in range(BOOT_HOLD + 3):
+        assert pack3.maybe_bootstrap(black, True) is None
+    assert pack3.pending and pack3._candidate is None
+
+
 def test_roi_for_union_and_absence():
     _, glyph = make_frame()
     pack = AnchorPack("no-such-game")
