@@ -39,7 +39,7 @@ COMMS_FRAME = [
      "x": 0.2224, "y": 0.6408, "w": 0.0610, "h": 0.0258},
     {"text": "Eye of Gnaeae", "confidence": 0.5,
      "x": 0.3605, "y": 0.2016, "w": 0.0814, "h": 0.0234},
-    {"text": "You have a new message from the Eye of Graeae....",
+    {"text": "A fresh dispatch from the Eye of Graeae awaits....",
      "confidence": 1,
      "x": 0.3372, "y": 0.1546, "w": 0.3256, "h": 0.0288},
     {"text": "768 / 41195", "confidence": 1,
@@ -55,7 +55,7 @@ COMMS_FRAME = [
 ]
 
 WANT = ("Eye of Gnaeae",
-        "You have a new message from the Eye of Graeae....")
+        "A fresh dispatch from the Eye of Graeae awaits....")
 
 
 def shift(frame, dx):
