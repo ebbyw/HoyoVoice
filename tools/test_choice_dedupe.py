@@ -2,11 +2,12 @@
 
 Vision fuses Genshin's choice bullet into the option's first word, and the
 prompt sits on screen for as long as the player takes to click it — so the
-same static option comes back differently on almost every pass. The reads
-below are the real ones: shots 795-804 of the 2026-08-12 15:48 Snezhnaya
-session, one option ("I'll go rescue them.") over 40 seconds. Whole-string
-similarity puts several of those pairs under same_line's 0.9 cutoff, which
-made the prompt look new and had it spoken again.
+same static option comes back differently on almost every pass. The
+MANGLING patterns below are the real ones — shots 795-804 of the
+2026-08-12 15:48 session, one option read ten ways over 40 seconds — with
+invented option text under them; no game text ships in this repo.
+Whole-string similarity puts several of those pairs under same_line's 0.9
+cutoff, which made the prompt look new and had it spoken again.
 
 The opposite error matters just as much and is pinned too: two genuinely
 different options must never collapse onto each other, or one of them is
@@ -22,26 +23,26 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import live                                    # noqa: E402
 
 # every read of the one option, in order
-JITTER = ["T'ul go rescue them.",
-          "@ILL go rescue them.",
-          "• I'I go rescue them.",
-          "TIL go rescue them.",
-          "TU go rescue them.",
-          "TU go rescue them.",
-          "• rIgo rescue them.",
-          "TU go rescue them.",
-          "TU go rescue them.",
-          "TIl go rescue them."]
+JITTER = ["T'ul go warn the crew.",
+          "@ILL go warn the crew.",
+          "• I'I go warn the crew.",
+          "TIL go warn the crew.",
+          "TU go warn the crew.",
+          "TU go warn the crew.",
+          "• rIgo warn the crew.",
+          "TU go warn the crew.",
+          "TU go warn the crew.",
+          "TIl go warn the crew."]
 
 # (a, b, same option?)
 PAIRS = [
     # the mangling is always on the first word
-    ("TU go rescue them.", "• rIgo rescue them.", True),
-    ("T'ul go rescue them.", "@ILL go rescue them.", True),
-    ("I'll go rescue them.", "TIL go rescue them.", True),
+    ("TU go warn the crew.", "• rIgo warn the crew.", True),
+    ("T'ul go warn the crew.", "@ILL go warn the crew.", True),
+    ("I'll go warn the crew.", "TIL go warn the crew.", True),
     # different options that happen to share a first word — the tail decides
-    ("I'll go rescue them.", "I'll wait here for you.", False),
-    ("Let's go find the miners.", "Let's ask around the camp.", False),
+    ("I'll go warn the crew.", "I'll wait here for you.", False),
+    ("Let's go find the divers.", "Let's ask around the docks.", False),
     # short options differ ONLY in their first word: the tail is too thin to
     # stand in for the whole option, so they must not collapse
     ("Yes.", "No.", False),

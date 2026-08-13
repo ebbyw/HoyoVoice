@@ -31,14 +31,14 @@ def n(t):
 CASES = [
     # --- extensions: the typewriter grew a line we already spoke ---
     ("grew mid-line",
-     w(("Leyla", "The stems of some vegetables grow quickly.")), "Leyla",
-     "The stems of some vegetables grow quickly. They absorb nutrients.",
-     n("The stems of some vegetables grow quickly.")),
+     w(("Leyla", "The masts of some longships season quickly.")), "Leyla",
+     "The masts of some longships season quickly. They absorb the salt.",
+     n("The masts of some longships season quickly.")),
     # the plate flickered out while the line was still typing: the window
     # entry has no speaker, but it is plainly the same line
     ("grew with the plate missing",
      w((None, "I truly was held back by something.")), "Leyla",
-     "I truly was held back by something. Apical dominance, it turns out.",
+     "I truly was held back by something. A jammed rudder, it turns out.",
      n("I truly was held back by something.")),
 
     # --- the bug: a short line from ANOTHER speaker is not a prefix ---
@@ -46,7 +46,7 @@ CASES = [
     # of it, and Leyla lost her opening words.
     ("other speaker's line is not a prefix",
      w(("Paimon", "And then?")), "Leyla",
-     "And then I blossomed into a healthy vegetable with lush foliage.",
+     "And then I grew into a steady deckhand with sure footing.",
      "new"),
     # A repeat is ONE character saying the same words twice running. Two
     # characters saying the same words is a scene — one repeating the
@@ -54,18 +54,18 @@ CASES = [
     # to dedupe on length alone, which silently dropped the second half of
     # every such exchange.
     ("another character may echo a line word for word",
-     w(("Paimon", "So the treasure was buried under the old bridge?")),
-     "Leyla", "So the treasure was buried under the old bridge?", "new"),
+     w(("Paimon", "So the treasure was buried under the north pier?")),
+     "Leyla", "So the treasure was buried under the north pier?", "new"),
     # ...and the same character saying it again IS a repeat
     ("the same character saying it twice running is a repeat",
-     w(("Leyla", "So the treasure was buried under the old bridge?")),
-     "Leyla", "So the treasure was buried under the old bridge?", "dup"),
+     w(("Leyla", "So the treasure was buried under the north pier?")),
+     "Leyla", "So the treasure was buried under the north pier?", "dup"),
 
     # --- dups ---
-    ("exact repeat", w(("Leyla", "It's a botanical phenomenon.")), "Leyla",
-     "It's a botanical phenomenon.", "dup"),
-    ("punctuation jitter", w(("Leyla", "It's a botanical phenomenon.")),
-     "Leyla", "It's a botanical phenomenon", "dup"),
+    ("exact repeat", w(("Leyla", "It's a tidal phenomenon.")), "Leyla",
+     "It's a tidal phenomenon.", "dup"),
+    ("punctuation jitter", w(("Leyla", "It's a tidal phenomenon.")),
+     "Leyla", "It's a tidal phenomenon", "dup"),
     ("trivial tail is jitter, not growth",
      w(("Leyla", "That is quite enough of that")), "Leyla",
      "That is quite enough of that.", "dup"),
@@ -76,31 +76,32 @@ CASES = [
     ("empty window", [], "Leyla", "Master Ororon said so.", "new"),
 
     # --- pure insertion: an OCR ghost box splices a re-read of one row
-    # into the middle of a line already spoken. Verbatim from
-    # rec_20260812_083939: the splice lands mid-line, so the substring
-    # rule can't see the recent line contiguously, and a 25-char splice
-    # into an 83-char line scores 0.869 — under the 0.90 ratio. With a
-    # 1-deep window each miss evicts the clean entry, so the clean line
-    # and its ghost variant ping-ponged and the same line was spoken
-    # four times in fifteen seconds.
+    # into the middle of a line already spoken. The splice SHAPE is
+    # verbatim from rec_20260812_083939 (the prose is invented): the
+    # splice lands mid-line, so the substring rule can't see the recent
+    # line contiguously, and a ~25-char splice into an ~83-char line
+    # scores ~0.87 — under the 0.90 ratio. With a 1-deep window each
+    # miss evicts the clean entry, so the clean line and its ghost
+    # variant ping-ponged and the same line was spoken four times in
+    # fifteen seconds.
     ("ghost splice mid-line is a dup",
-     w(("Paimon", "Wow, it's so majestic! Just flying from one side to the"
+     w(("Paimon", "Wow, it's so breezy! Just rowing from one side to the"
         " other would probably leave Paimon out of breath…")), "Paimon",
-     "Wow, it s so majestic! Just flying from one side to the other would"
-     " probably leave Paimon Wow, its so majestic Just Flyin out of breath…",
+     "Wow, it s so breezy! Just rowing from one side to the other would"
+     " probably leave Paimon Wow, its so breezy Just Rowin out of breath…",
      "dup"),
     ("ghost splice with different jitter is still a dup",
-     w(("Paimon", "Wow, it's so majestic! Just flying from one side to the"
+     w(("Paimon", "Wow, it's so breezy! Just rowing from one side to the"
         " other would probably leave Paimon out of breath…")), "Paimon",
-     "Wow, it's so majestic! Just flying from one side to the other would"
-     " probably leave Paimon Wow, it's so majestic! just flyin out of"
+     "Wow, it's so breezy! Just rowing from one side to the other would"
+     " probably leave Paimon Wow, it's so breezy! just rowin out of"
      " breath…", "dup"),
     # a genuinely new line that shares phrases with the recent one is NOT
     # a splice: the recent line does not survive in order and in full
     ("shared phrasing is not a splice",
-     w(("Paimon", "Wow, it's so majestic! Just flying from one side to the"
+     w(("Paimon", "Wow, it's so breezy! Just rowing from one side to the"
         " other would probably leave Paimon out of breath…")), "Paimon",
-     "Just flying from one side of Dragonspine to the other would leave"
+     "Just rowing from one side of the breakwater to the other would leave"
      " anyone out of breath, honestly.", "new"),
 ]
 
@@ -132,17 +133,18 @@ def main():
               "speaker — dialogue must REPLACE the window")
         bad += 1
     live.remember_line(win, "Paimon", n("Obviously, the question is: what "
-                                        "is the Tsaritsa planning?"))
-    for opt in ("Feeling better now?", "They're all Fatui."):
+                                        "is the harbormaster planning?"))
+    for opt in ("Feeling better now?", "They're all smugglers."):
         live.remember_line(win, "Traveler", n(opt), stack=True)
     dup, _ = live.window_verdict(
-        n("Obviousk the question is: what is the Tsaritsa planning?"),
+        n("Obviousk the question is: what is the harbormaster planning?"),
         "Paimon", win)
     if not dup:
         print("FAIL stack: choice read evicted the on-screen line — its "
               "jitter variant would be re-spoken")
         bad += 1
-    dup, _ = live.window_verdict(n("They're all Fatui."), "Traveler", win)
+    dup, _ = live.window_verdict(n("They're all smugglers."), "Traveler",
+                                 win)
     if not dup:
         print("FAIL stack: the picked option's echo was not deduped")
         bad += 1
