@@ -16,7 +16,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from textmap import TextMap                      # noqa: E402
+from textmap import TextMap, variants            # noqa: E402
 
 # the game's text
 MAP = [
@@ -67,8 +67,61 @@ CASES = [
 ]
 
 
+# A real dump is not the text on screen: these are verbatim entry shapes
+# from the shipped Genshin and Star Rail TextMapEN.json files, with what
+# the game actually draws beside them.
+RAW = [
+    # the '#' sentinel, and the player's name substituted at runtime
+    ("#My name's Paimon, and this is {NICKNAME}.",
+     ["My name's Paimon, and this is Ebby."]),
+    # gender: the game picks one, so BOTH are indexed
+    ("#Huh? {M#He}{F#She} has to jump off a cliff at the end?",
+     ["Huh? She has to jump off a cliff at the end?",
+      "Huh? He has to jump off a cliff at the end?"]),
+    # a ruby annotation is a gloss drawn ABOVE the word, not part of the
+    # line — keeping it spliced "Moon Maiden" into the middle of "Kuutar"
+    ("The Kuu{RUBY#[S]Moon Maiden}tar is a Fatui Harbinger.",
+     ["The Kuutar is a Fatui Harbinger."]),
+    # rich text renders as its content
+    ("Old <color=#00E1FFFF>Ruin Hunters</color> who lost flight.",
+     ["Old Ruin Hunters who lost flight."]),
+    ("Your mailbox holds <unbreak>1000</unbreak> messages.",
+     ["Your mailbox holds 1000 messages."]),
+    # escaped newlines are line breaks in one drawn line
+    ("First part\\nsecond part of the same line.",
+     ["First part second part of the same line."]),
+    # unresolvable at load: whatever the runtime would put there, this
+    # entry can never match what is drawn, so it is not indexed at all
+    ("In the end you reach the final count: 1{TEXTJOIN#44} coins.", []),
+]
+
+
 def main():
     bad = 0
+    for raw, want in RAW:
+        got = variants(raw, "Ebby")
+        if got != want:
+            print(f"FAIL  cleaning {raw[:48]!r}\n        got  {got}\n"
+                  f"        want {want}")
+            bad += 1
+        else:
+            print(f"ok    cleaned: {raw[:52]!r}")
+
+    # the two halves of a gendered entry must not veto each other: they are
+    # each other's runner-up at 0.98, and the margin gate refused every
+    # gendered line in the map until it learned they are one entry
+    gendered = TextMap(["Huh? {M#He}{F#She} has to jump off a cliff at the "
+                        "end? That's really dangerous.",
+                        "Hello, Lady Marionette."], nickname="Ebby")
+    got = gendered.snap("Huh? She has to jump off a cliff at the end? That's "
+                        "realIy dangerous.")
+    if got != ("Huh? She has to jump off a cliff at the end? That's really "
+               "dangerous."):
+        print(f"FAIL  a gendered entry's own twin vetoed it: {got}")
+        bad += 1
+    else:
+        print("ok    a gendered entry is not its own runner-up")
+
     tm = TextMap(MAP)
     for read, want in CASES:
         got = tm.snap(read)
