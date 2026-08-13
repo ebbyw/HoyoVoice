@@ -11,8 +11,9 @@ and both games' profiles.
 
 **Use RapidOCR on DirectML** (~115ms/frame with the English recognition model,
 154ms without it). The built-in Windows engine mangles this font
-("rabbit-head Nt bad or clown"), reports no confidence — so `classify.py`'s
-`MIN_CONF` junk filter does nothing — and is only a fallback.
+("rabbit-head Nt bad or clown"), reports no confidence — so the
+`MIN_CONF` junk filter (`tools/profiles/base.py`) does nothing — and is only
+a fallback.
 
 The checklist below is still the way to bring up a *new* Windows box, or to
 isolate a subsystem when one misbehaves: each step exercises one file.
@@ -96,7 +97,7 @@ $env:HOYOVOICE_OCR_ENGINE="windows"; echo captures/frame_001.png | .venv\Scripts
 
 - Compare both against `captures/frame_001.ocr.json` (Vision's golden output) — feed each through `python tools\classify.py` and diff the speaker/dialogue.
 - **Resolved (rapid):** the space-dropping ("RinTohsaka") was the Chinese-trained recognition model, not resolution. `setup.ps1` downloads an English-trained one to `models\rec_en.onnx`; `HOYOVOICE_REC_MODEL` / `HOYOVOICE_REC_KEYS` override the path, and deleting the files falls back to the bundled model. Fusion-class defects over an 81-shot corpus: 333 → 144.
-- **Still true (windows engine):** Windows.Media.Ocr reports no confidence (hardcoded 1.0), so `classify.py`'s junk filter does nothing and confidence-aware stabilization degrades to yesterday's behaviour — watch for HUD noise classified as dialogue.
+- **Still true (windows engine):** Windows.Media.Ocr reports no confidence (hardcoded 1.0), so the `MIN_CONF` junk filter (`tools/profiles/base.py`) does nothing and confidence-aware stabilization degrades to yesterday's behaviour — watch for HUD noise classified as dialogue.
 - Timing: ~115 ms/frame on DirectML with the English model. Over ~600 ms will lag the 6 fps loop; prefer the faster engine that still classifies correctly. The change gate removes most of these calls on static text anyway (`ocr saved` in the dashboard).
 - Force an engine with `HOYOVOICE_OCR_ENGINE` (`auto`, `rapid`, `windows`).
 
@@ -106,7 +107,7 @@ $env:HOYOVOICE_OCR_ENGINE="windows"; echo captures/frame_001.png | .venv\Scripts
 .venv\Scripts\python.exe -c "from hv_platform import get_backend; import time; b = get_backend(); t = b.create_tts(); p = b.create_player(); a = t.synth('Testing, one two three.', 'af_nova', 1.0); print(len(a)/24000, 'sec'); import soundfile as sf; sf.write('tts_out/win_test.wav', a, 24000); p.play('tts_out/win_test.wav', a); time.sleep(1); print('playing:', p.playing); print('interrupted:', p.stop())"
 ```
 
-- Measure synth time for a ~10-word line; budget expectation on CPU is 0.5–1.5 s. Record it — the README latency table needs a Windows column.
+- Measure synth time for a ~10-word line; budget expectation on CPU is 0.5–1.5 s.
 - `p.stop()` must cut audio near-instantly (this is the late-VO yield path).
 
 ## 6. Full app
@@ -133,9 +134,17 @@ python hoyovoice.py log
   CPU is inside the latency budget.
 - Same-PC window capture (no capture card) — future idea, separate backend.
 - Windows OCR remains noisier than Apple Vision even with the English model.
-  The next real lever is canonical-text snapping (phase 5 of
-  [OCR-INTEGRATION-PLAN.md](OCR-INTEGRATION-PLAN.md)), which is blocked on
-  datamined text that can't ship in a public repo.
+  Canonical-text snapping (`settings.textmap`, phase 5 of
+  [OCR-INTEGRATION-PLAN.md](OCR-INTEGRATION-PLAN.md)) shipped as the lever —
+  user-seeded and local-only, so it only helps a box whose user points it at
+  a map.
+- **Open bug: book-page rows misread as `hum`/`Ium` on Windows.** Smells like
+  detector/frame rather than glyph shape; diagnosis waits on this box's
+  `captures/shots/*.json` from a session that reproduces it.
+- The Windows `ocr_ms` measurement for `settings.anchor_roi` (phase 4b) is
+  still owed: replay a scroll-heavy recording here with `anchor_roi: true`
+  and compare `ocr_ms` on vs off. The setting stays off by default until
+  this is done.
 
 - `Player.playing` still reads sounddevice's module-level stream
   (`sd.get_stream().active`), and `play()` still goes through `sd.play` — now

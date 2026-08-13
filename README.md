@@ -1,5 +1,7 @@
 # HoyoVoice
 
+> Fan-made accessibility tool. **Not affiliated with or endorsed by HoYoverse/miHoYo**; Genshin Impact, Honkai: Star Rail and their text, art and marks are theirs. HoyoVoice only observes an HDMI feed and plays audio on your computer — it does not modify the game, inject input, or touch game files, and no game content ships in this repository. See the full [Disclaimer](#disclaimer) and [NOTICE](NOTICE).
+
 **Live TTS voiceover for the dialogue Hoyoverse forgot to voice.**
 
 *Runs on macOS (Apple Silicon) and Windows 10/11 — see [Requirements](#requirements).*
@@ -111,13 +113,13 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 - **OCR repair** — the game font's I/l confusion, dropped apostrophes ("youre" → "you're") and decorative glyphs are all fixed before synthesis.
   - *macOS:* Apple Vision is fed a custom vocabulary built from your casting and `settings.custom_words`.
   - *Windows:* RapidOCR reads with an English-trained recognition model (`models\rec_en.onnx`, downloaded by `setup.ps1`). Without it RapidOCR falls back to its bundled Chinese-trained model, which drops spaces — so punctuation spacing is still restored and fused word pairs are still split ("mercyis" → "mercy is"), with capitalised tokens protected so game proper nouns survive. Where several reads of one line disagree, the one that scans as the most real words is the one spoken.
-- **Snapping to the game's text** — `settings.textmap` names a file of the game's own dialogue strings, per game (`{"genshin": "…/TextMapEN.json", "hsr": "…/TextMapEN.json"}`; a bare string is taken as the current game's). A settled line is matched back to the line it came from before anything else sees it, which repairs the everyday damage at the source: `Ves.` becomes `Yes.`, `Choosel"mission budget"` becomes `Choose "mission budget"`, a dropped full stop comes back (sentence streaming reads punctuation), and the repaired line then *matches the next read of itself*, so the jitter that makes a line read twice stops before dedupe ever sees it. A match has to score 0.82 and beat the runner-up by 0.05, or the read is kept exactly as it was — measured on 164 real misreads from recorded sessions, 113 were repaired to the right line, 51 refused, and none snapped to a wrong one. Refusals are the point: a garbled line read aloud sounds worse, but a confident wrong sentence *is* worse.
+- **Snapping to the game's text** — `settings.textmap` names a file of the game's own dialogue strings, per game (`{"genshin": "…/TextMapEN.json", "hsr": "…/TextMapEN.json"}`; a bare string is taken as the current game's). A settled line is matched back to the line it came from before anything else sees it, which repairs the everyday damage at the source: `Ves.` becomes `Yes.`, `Choosel"harbor repairs"` becomes `Choose "harbor repairs"`, a dropped full stop comes back (sentence streaming reads punctuation), and the repaired line then *matches the next read of itself*, so the jitter that makes a line read twice stops before dedupe ever sees it. A match has to score 0.82 and beat the runner-up by 0.05, or the read is kept exactly as it was — measured on 164 real misreads from recorded sessions, 113 were repaired to the right line, 51 refused, and none snapped to a wrong one. Refusals are the point: a garbled line read aloud sounds worse, but a confident wrong sentence *is* worse.
 
   Set `settings.player_name` to your character's in-game name. Thousands of entries carry a `{NICKNAME}` placeholder the game substitutes at runtime, and without it every one of those lines is unmatchable. The rest of a dump's markup is unwrapped the way the game draws it — the `#` sentinel, `{F#…}{M#…}` gender pairs (both indexed, since the game picks one), `{RUBY#…}` glosses (drawn above the word, not in the line), `<color>`/`<unbreak>`/`<i>` spans, escaped newlines — and an entry still holding a runtime placeholder is dropped rather than indexed subtly wrong. A map loads on first use of its game — the current full dumps are 398k usable lines (Genshin) and 315k (Star Rail), which cost ~9 s to index and 600-770 MB resident, so the other game's map is never built for a session that doesn't read it. A lookup is ~20 ms against a dump that size, paid once per spoken line.
 
-  **Check a dump before trusting it:** `python tools/textmap.py <map.json> --nickname <name>` scores it against the lines this install has actually read. A dump built for the patch you are playing scores most of them 0.95+; a stale one leaves them under 0.60, because those lines are simply not in it and snapping will do nothing at all. Plain text (one line per entry), a JSON array, or a JSON object of id → line. **No such file ships with HoyoVoice** — the games' text is HoYoverse's, and extracting it from your own installation is up to you; leave the setting empty and nothing changes.
+  **Check a dump before trusting it:** `python tools/textmap.py <map.json> --nickname <name>` scores it against the lines this install has actually read. A dump built for the patch you are playing scores most of them 0.95+; a stale one leaves them under 0.60, because those lines are simply not in it and snapping will do nothing at all. Plain text (one line per entry), a JSON array, or a JSON object of id → line. **No such file ships with HoyoVoice, and this project does not help you obtain one** — the games' text is HoYoverse's. If you have such a file, the setting will use it; leave it empty and nothing changes.
 
-- **Pronunciations** — `settings.pronunciations` substitutes spoken forms at synthesis only ("Wishpower" → "Wish power"); logs, dedupe and casting keep the real spelling. Ships with 70 character names Kokoro reads wrong, because it applies English spelling rules to pinyin and romaji: x becomes /z/ ("Xiao" → "ZY-ah-oh"), q becomes /k/ ("Qiqi" → "KIH-kee"), zh becomes /ʒ/, and a final -e disappears ("Shenhe" → "shenh"). Lore terms live in the same map but a separate table (`TERMS`), since no roster lists them and the coverage report can't check them — an invented word is exactly what English spelling rules mangle, so they ship for the same reason, and `--custom-words` feeds them to OCR too. `python tools/pronounce_names.py` prints what the synthesizer says for every entry with and without its respelling, checked against the same phonemizer Kokoro uses; `--check` reports what your own `voices.json` would actually say and what it's missing; `--write` merges the table in, and `--custom-words` also feeds both games' full rosters to the OCR vocabulary. Matching is case-insensitive so OCR case jitter can't miss a name — for a name that is *also* an ordinary word ("Gaming", and any entry you add for Jade, Sunday, Hook, Blade, Archer, Robin), list it in `settings.pronunciations_exact` and only the capitalised spelling is respelled.
+- **Pronunciations** — `settings.pronunciations` substitutes spoken forms at synthesis only ("Wishpower" → "Wish power"); logs, dedupe and casting keep the real spelling. Ships with ~76 character names Kokoro reads wrong, because it applies English spelling rules to pinyin and romaji: x becomes /z/ ("Xiao" → "ZY-ah-oh"), q becomes /k/ ("Qiqi" → "KIH-kee"), zh becomes /ʒ/, and a final -e disappears ("Shenhe" → "shenh"). Lore terms live in the same map but a separate table (`TERMS`), since no roster lists them and the coverage report can't check them — an invented word is exactly what English spelling rules mangle, so they ship for the same reason, and `--custom-words` feeds them to OCR too. `python tools/pronounce_names.py` prints what the synthesizer says for every entry with and without its respelling, checked against the same phonemizer Kokoro uses; `--check` reports what your own `voices.json` would actually say and what it's missing; `--write` merges the table in, and `--custom-words` also feeds both games' full rosters to the OCR vocabulary. Matching is case-insensitive so OCR case jitter can't miss a name — for a name that is *also* an ordinary word ("Gaming", and any entry you add for Jade, Sunday, Hook, Blade, Archer, Robin), list it in `settings.pronunciations_exact` and only the capitalised spelling is respelled.
 - **Startup health warning** — the ~150-word epilepsy notice both games open on is skipped, and appears in the log as `skipped (legal notice)` so it's clear it was seen rather than missed. It has to be recognised by what it says: it renders as a chrome-free title + prose card, structurally identical to a real lore card. The markers are all medical (`epilep`, `consult your physician`, `seek medical attention`, `immediately stop playing`) and none are from the title — `before playing` would catch it too, but also catches "Read the notice before playing", and silently eating a real line is the worse failure. Several markers rather than one, so a single OCR slip inside a word can't hand you the whole wall of text.
 - **Sentence-by-sentence synthesis** — Kokoro predicts prosody for a whole utterance in one pass, and a long line degrades its own opening: `Huh!? You… You're Paimon, travel companion of the great hero Ebby!` hisses through the interjection and into the word after it, while `Huh!?` and the rest of the line each come out clean synthesized alone. So a settled line is split at sentence ends, each sentence is synthesized on its own, and the pieces are spliced with an 80 ms pause (`SENTENCE_GAP`). Found by bisection against the failing line, which also ruled out the `!?`, the ellipsis and the name's respelling — all three A/B'd identical. A single-sentence line is one call and one piece exactly as before, so the common case costs nothing; the extra call on a two-sentence line is invocation overhead, not synthesis, and measured at ~50 ms. `…` is not a boundary here, same as in sentence streaming.
 - **Stage directions** — `*cough*` is a noise rather than a word, so `settings.sound_effects` maps the inside of a stage direction to an audio file, spliced into the line where the direction sat (Kokoro can't cough; the only convincing cough is a recording), or to a respelling to speak in its place: `{"cough": "sounds/cough.wav", "sigh": "Ahem."}`. Relative paths are from the project directory, any sample rate and channel count is accepted, and a direction with no entry is read as the bare word exactly as before — which for `*sigh*` is what you want anyway. Map one to `""` to cut it silently.
@@ -152,6 +154,13 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
     "player_name": "",                      // your character's in-game name,
                                             // for the map's {NICKNAME} entries
     "change_gate": true,                    // skip OCR while the text is static
+    "change_gate_frac": 0.01,               // gate sensitivity: share of a
+                                            // box's text pixels that may move
+    "anchors": true,                        // match game-chrome templates
+                                            // (log + ROI evidence)
+    "anchor_roi": false,                    // crop OCR to the matched screen's
+                                            // ROI (off until the Windows
+                                            // ocr_ms win is measured)
     "late_yield": true,                     // stop talking if game VO starts
     "dashboard_bind": "127.0.0.1"           // "0.0.0.0" to reach the dashboard
   }                                         // from other machines you trust —
@@ -159,7 +168,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 }
 ```
 
-Everything above is editable live from the dashboard. Kokoro ships ~50 voices (`af_*`/`am_*` American, `bf_*`/`bm_*` British); `af_nicole` is broken in the packaged model. OCR misreads within ~80% similarity of a known name snap to it; names in quotes are distinct characters from the narrator.
+Everything above is editable live from the dashboard. The packaged model ships ~54 voices across eight languages (see [Adding your own voice actors](#adding-your-own-voice-actors)); `af_nicole` is broken in the packaged model. OCR misreads within ~80% similarity of a known name snap to it; names in quotes are distinct characters from the narrator.
 
 ### Adding your own voice actors
 
@@ -219,6 +228,10 @@ Calibrating a screen type takes captures, not guesswork: every logged event save
 | `tools/ocrd_win.py` | Windows OCR daemon (RapidOCR / Windows.Media.Ocr, same protocol) |
 | `tools/classify.py` | Game-agnostic entry point to classification |
 | `tools/profiles/` | Per-game screen layouts — `hsr.py` / `genshin.py` behind `base.py` |
+| `tools/change_gate.py` | Pixel gate that skips OCR while on-screen text is static |
+| `tools/anchors.py` | Game-chrome template matching + ROI cropping (`tools/profiles/anchors/`) |
+| `tools/textmap.py` | Snap a read line back to the game's own text (`settings.textmap`); also the dump checker CLI |
+| `tools/ocr_bench.py` | OCR timing benchmark for gate/ROI measurements |
 | `tools/vad.py` | Silero VAD onnx wrapper (torch-free) |
 | `tools/webui.py` | Dashboard (Flask, single page) + `VERSION` |
 | `tools/replay.py` | Replay a recording through the real pipeline (see below) |
@@ -228,7 +241,7 @@ Calibrating a screen type takes captures, not guesswork: every logged event save
 | `voices_custom/` | Voice packs added from the dashboard, in canonical form |
 | `setup.sh` / `setup.ps1` | One-time install (macOS / Windows) |
 | `hoyovoice.sh` / `hoyovoice.py` | start / stop / status / log / restart (macOS shell / cross-platform) |
-| `plans/` | Release process, pre-merge checklist, Windows first-run checklist, OCR roadmap |
+| `plans/` | Release process, pre-merge checklist, Windows first-run checklist, OCR roadmap, anchor/ROI design, OCR engine research |
 
 ## Debugging a session
 
@@ -263,7 +276,7 @@ That runs the actual OCR daemon, classifier, stabilization, dedupe, VAD gate and
 
 ## Contributing / releases
 
-Changes go in `CHANGELOG.md` under *Unreleased* (Keep a Changelog, SemVer). Most-wanted contribution: finishing the Genshin Impact layout profile — see **Games** above and the `CALIBRATE` comments in `tools/profiles/genshin.py`; each one names the screen a capture is needed of.
+Changes go in `CHANGELOG.md` under *Unreleased* (Keep a Changelog, SemVer). Both game profiles are fully calibrated today; the most-wanted contribution is captures of screens that misbehave — every logged event saves its raw OCR blocks to `captures/shots/<id>.json`, and that file plus the log tail is what a new detector or band fix needs (see **Debugging a session**).
 
 ## Disclaimer
 

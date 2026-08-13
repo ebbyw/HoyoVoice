@@ -16,7 +16,6 @@ which detectors a profile has opted into.
 `profiles/hsr.py` is the reference implementation (Honkai: Star Rail);
 `profiles/genshin.py` is Genshin Impact.
 """
-import difflib
 import re
 
 
