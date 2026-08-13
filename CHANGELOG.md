@@ -6,6 +6,29 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ## [Unreleased]
 
+### Fixed
+
+- **The world-object newspaper reads.** The Snezhnaya Vestnik article
+  overlay draws the same column, title slot and scroll rules as the
+  inventory readable, but its exit hint says **Leave** where every other
+  readable says Return — and the hint word was a hard requirement, so the
+  screen was never classified and a session sat on the page reading
+  nothing. `leave` now joins `return` as an exit-hint word; the title, the
+  three-plus prose rows on the column edge and the digit guards still
+  carry the actual detection weight.
+
+### Changed
+
+- **A readable page starts speaking after one sentence's synthesis, not a
+  whole page's.** A full inventory page (~340 words) was synthesized as
+  one utterance before any sound — seconds of dead air that read as "it
+  isn't going to read this." The reading pump now cuts a page into
+  sentence-boundary chunks: the first chunk is the first sentence alone,
+  and the next chunk synthesizes while the current one plays, so handoffs
+  land on sentence pauses. The decision log, spoken count, dedupe and
+  replay still treat the page as one item; closing the panel still stops
+  the read and now also drops the unspoken chunks.
+
 ### Added
 
 - **Snapping a read line to the game's own text (`settings.textmap`).**

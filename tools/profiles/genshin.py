@@ -323,21 +323,30 @@ class Genshin(Profile):
     READABLE_MIN_CONF = 0.3
     _WORD = re.compile(r"[A-Za-z]+")
 
+    # The word in the panel's exit hint. Books and inventory articles say
+    # Return; the world-object newspaper (Snezhnaya Vestnik,
+    # rec_20260812_201648) draws the same column, same title slot, same
+    # rules — but its hint says Leave (measured x=0.903 cy=0.076, the
+    # exact slot Return occupies). One word is not enough to carry
+    # detection either way: the title, the ≥3 prose rows on the column
+    # edge and the digit guards do that; this list only names the exits.
+    READABLE_HINT_WORDS = ("return", "leave")
+
     def _is_return_hint(self, text):
-        """True if this block is the panel's Return hint.
+        """True if this block is the panel's Return/Leave hint.
 
         The button glyph beside it is not always a separate block: on the
         inventory-opened article Vision returned 'Return e', the ◯ read as
         a letter and merged into the word. The same thing happens all over
         this pipeline ('R Scroll', 'O Back', '5 Quick Read'), so match on
-        the WORDS: 'return' must be there, and anything else in the block
-        has to be single-glyph noise. 'Return to Title' and the like are
-        still rejected.
+        the WORDS: an exit word must be there, and anything else in the
+        block has to be single-glyph noise. 'Return to Title' and the like
+        are still rejected.
         """
         words = self._WORD.findall(text)
-        return (any(w.lower() == "return" for w in words)
+        return (any(w.lower() in self.READABLE_HINT_WORDS for w in words)
                 and all(len(w) <= 1 for w in words
-                        if w.lower() != "return"))
+                        if w.lower() not in self.READABLE_HINT_WORDS))
 
     def _readable_unclipped(self, block):
         """True if this row is drawn WHOLE — clear of both scroll rules."""

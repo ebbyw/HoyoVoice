@@ -125,6 +125,30 @@ FRAMES = [
                   and "Quest Item" not in got and "1880" not in got
                   and "left behind in a hurry" not in got)),
 
+    # --- the world-object newspaper ----------------------------------
+    # Snezhnaya Vestnik, opened at the paper on a bench rather than from
+    # the inventory: same column (left edge 0.266), same title slot, same
+    # rules — but the exit hint says 'Leave', not 'Return'. Measured off
+    # rec_20260812_201648 at 1080p; a session sat on this page for 20
+    # seconds and read nothing before 'leave' joined the hint words.
+    ("the newspaper article with a Leave hint",
+     [centered("Snezhnaya Vestnik", 0.924, w=0.163),
+      row("As everyone knows, a caterpillar spins a cocoon within a leaf and",
+          0.843, h=0.031),
+      row("transforms into an ominous moth; the spawn of a frog lies in the muck,",
+          0.810),
+      row("eventually sprouting legs to become a leaping, swimming frog. Ancient",
+          0.778, h=0.031),
+      row("fae legends even held that when a person died, was buried, and rotted",
+          0.747, h=0.031),
+      row("away, their spine would transform into a snake.", 0.713, h=0.031,
+          w=0.311),
+      row("1/3", 0.066, x=0.488, w=0.022, h=0.023),
+      row("Leave", 0.076, x=0.903, w=0.032, h=0.018),
+      UID],
+     lambda got: ("Snezhnaya Vestnik." in got and "caterpillar" in got
+                  and "into a snake." in got and "1/3" not in got)),
+
     # --- things that are not articles --------------------------------
     # A menu: same title-over-column shape, same Return hint, but two rows
     # sharing a margin is a list, not a page.
