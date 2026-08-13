@@ -81,8 +81,8 @@ RAW = [
      ["Huh? She has to cross the rope bridge at the end?",
       "Huh? He has to cross the rope bridge at the end?"]),
     # a ruby annotation is a gloss drawn ABOVE the word, not part of the
-    # line — keeping it spliced "Moon Maiden" into the middle of "Kuutar"
-    ("The Kuu{RUBY#[S]Moon Maiden}tar shines over the northern ice.",
+    # line — keeping it spliced "Sea Lantern" into the middle of "Kuutar"
+    ("The Kuu{RUBY#[S]Sea Lantern}tar shines over the northern ice.",
      ["The Kuutar shines over the northern ice."]),
     # rich text renders as its content
     ("Old <color=#00E1FFFF>cliff wardens</color> who lost their footing.",

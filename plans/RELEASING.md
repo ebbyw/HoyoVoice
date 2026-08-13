@@ -26,8 +26,8 @@ messages, which is why releases merge rather than squash.)
 ## 2. Version
 
 `VERSION` in `tools/webui.py` — the single source of truth; the dashboard
-header and the downloaded log both read it. Patch for fixes, minor for
-features.
+header and the downloaded log render it through `BUILD` (VERSION plus the
+running commit's sha). Patch for fixes, minor for features.
 
 ## 3. Verify before tagging
 
@@ -35,12 +35,17 @@ features.
 for t in tools/test_*.py; do .venv/bin/python "$t" || break; done
 
 ./hoyovoice.sh start && sleep 40
-curl -s http://127.0.0.1:8470/ | grep -o 'v[0-9.]*'   # header
-curl -s http://127.0.0.1:8470/log.txt | head -1        # downloaded log
+curl -s http://127.0.0.1:8470/ | grep -o 'v[0-9][^<]*'   # header
+curl -s http://127.0.0.1:8470/log.txt | head -1           # downloaded log
 ./hoyovoice.sh stop
 ```
 
-Both must show the new number, or the bump didn't land everywhere.
+Both must show the new number, or the bump didn't land everywhere. The
+suffix in parentheses is the running commit's sha, and `-dirty` is
+EXPECTED at this step — step 4's commit hasn't happened yet; only the
+version number before the parenthesis has to be the new one. (The old
+grep `v[0-9.]*` matched every bare `v` on the page; the `[^<]` form
+isolates the one version string.)
 
 If the release touches `FIXES`/`TERMS` in `tools/pronounce_names.py`, say so in
 the changelog entry with the `--write` line: `voices.json` is gitignored and
@@ -70,7 +75,7 @@ V=0.7.0
 python3 - <<PY
 import re, pathlib
 s = pathlib.Path('CHANGELOG.md').read_text()
-m = re.search(rf"## \[$V\][^\n]*\n(.*?)(?=\n## \[)", s, re.S)
+m = re.search(r"## \[$V\][^\n]*\n(.*?)(?=\n## \[)", s, re.S)
 pathlib.Path('/tmp/notes.md').write_text(m.group(1).strip() + "\n")
 PY
 gh release create "v$V" --title "HoyoVoice $V" --notes-file /tmp/notes.md --latest

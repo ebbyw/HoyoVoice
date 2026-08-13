@@ -58,18 +58,20 @@ HP_RADIUS, HP_GAIN, HP_OFFSET = 12, 3.0, 40
 def _flatten_background(data):
     """Bytes of an image → grayscale ndarray with the background removed.
 
-    In-place arithmetic on one float32 buffer: the expression form
-    allocated five full-frame float32 intermediates (~40 MB per 1080p
-    frame at 6 fps); `out=` reuses the first copy for all of them. Same
-    values to the bit — float32 ops in the same order."""
+    In-place arithmetic on one int16 buffer: the expression form
+    allocated five full-frame float intermediates (~40 MB per 1080p
+    frame at 6 fps). Every intermediate is an exact integer — the
+    difference spans [-255, 255], ×3 spans [-765, 765], +40, clip to
+    0-255 — so int16 is bit-identical to the float path (verified with
+    array_equal on a real frame) at half the allocation."""
     from PIL import Image, ImageFilter
     import numpy as np
     with Image.open(io.BytesIO(data)) as img:
         g = img.convert("L")
         bg = g.filter(ImageFilter.GaussianBlur(HP_RADIUS))
-        a = np.asarray(g, dtype=np.float32)      # dtype conversion = a copy
-        np.subtract(a, np.asarray(bg, dtype=np.float32), out=a)
-    np.multiply(a, HP_GAIN, out=a)
+        a = np.asarray(g, dtype=np.int16)        # dtype conversion = a copy
+        np.subtract(a, np.asarray(bg, dtype=np.int16), out=a)
+    np.multiply(a, int(HP_GAIN), out=a)
     np.add(a, HP_OFFSET, out=a)
     np.clip(a, 0, 255, out=a)
     return a.astype(np.uint8)
@@ -324,7 +326,11 @@ class WindowsEngine:
         try:
             from PIL import Image
             buf = io.BytesIO()
-            Image.fromarray(_flatten_background(data)).save(buf, format="PNG")
+            # compress_level=0: the buffer's only consumer is the decoder
+            # two lines later — PIL's default level 6 spent ~46ms
+            # compressing bytes nobody stores (level 0: ~6ms, lossless)
+            Image.fromarray(_flatten_background(data)).save(
+                buf, format="PNG", compress_level=0)
             return buf.getvalue()
         except Exception:
             return data

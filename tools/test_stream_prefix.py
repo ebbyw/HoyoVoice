@@ -31,7 +31,7 @@ HOLDS = [
     "Hi. Wh",                       # head too short to be worth its own read
     "Mr. Ito said so, and then some",   # abbreviation, not a sentence end
     "Hmm… I really do not know about that but",  # "…" is a pause, not an end
-    "That is quite enough of that.",             # nothing typed past the end
+    "That is quite enough rowing for today.",             # nothing typed past the end
     "It costs 3.50 mora and then some more",     # decimal
 ]
 
@@ -44,8 +44,8 @@ SPLITS = [
     ("Huh!? You… You're Pell, sailing companion of the great captain Ebby!",
      ["Huh!?",
       "You… You're Pell, sailing companion of the great captain Ebby!"]),
-    ("Hello, you two. Is something the matter?",
-     ["Hello, you two.", "Is something the matter?"]),
+    ("Hello, you two. Is the ferry running late?",
+     ["Hello, you two.", "Is the ferry running late?"]),
     # one sentence: one piece, no splice
     ("Is something the matter?", ["Is something the matter?"]),
     ("It costs 3.50 mora.", ["It costs 3.50 mora."]),

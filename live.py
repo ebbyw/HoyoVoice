@@ -388,7 +388,7 @@ stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
 # nothing inside the crop will ever disagree. Packs are cached per game; a
 # game without anchor data gets an empty pack and zero behavior change.
 anchor_packs = {}
-anchor_state = {"enabled": True, "roi": False, "matched": (),
+anchor_state = {"enabled": True, "roi": True, "matched": (),
                 "crop_run": 0, "crops": 0}
 # Consecutive cropped reads before one full-frame read re-arms the set
 # (~2s at 6fps) — the same medicine, and the same number, as the change
@@ -422,14 +422,17 @@ def match_anchors(profile_name, gray=None):
     `gray` is the change gate's half-scale decode of THIS frame
     (gate.last_gray) — the identical draft decode this matcher needs, so
     passing it saves a second file read + decode per fresh-OCR frame.
-    None (gate disabled, torn frame, skip-run break) falls back to
-    decoding here."""
+    When the gate didn't decode (disabled, skip-run break), the caller
+    reads the bytes ONCE and decodes here from those — so the anchors,
+    the bootstrap and the ROI crop always judge one frame, not three
+    reads straddling ffmpeg rewrites. None with no bytes (torn frame)
+    matches nothing, which is the full-frame fallback."""
     pack = anchor_pack(profile_name)
     if not pack.anchors:
         return None
     t0 = time.perf_counter()
     try:
-        hits = pack.match(decode_half(FRAME) if gray is None else gray)
+        hits = pack.match(gray)
     except Exception:
         return None                 # a torn frame is OCR's problem, not ours
     stats["anchor_ms"].append(int((time.perf_counter() - t0) * 1000))
@@ -499,10 +502,22 @@ def save_shot(eid):
             shot_ids = deque(p.stem for p in sorted(
                 SHOTS.glob("*.jpg"), key=lambda p: p.stat().st_mtime))
         img.save(SHOTS / f"{eid}.jpg", quality=68)
+        # event ids RESTART at 1 every session, so a fresh session's ids
+        # collide with the seeded previous-session ids for its first
+        # SHOTS_KEEP events — without this remove, appending the reused id
+        # pushed the deque over the cap and popleft returned the SAME id,
+        # deleting the file just written (and its 📷 with it), 300 times
+        # per restart. Tracked immediately after the jpg lands, before the
+        # json write can fail, so a half-saved shot still gets pruned.
+        sid = str(eid)
+        try:
+            shot_ids.remove(sid)
+        except ValueError:
+            pass
+        shot_ids.append(sid)
         if latest_ocr["blocks"] is not None:
             (SHOTS / f"{eid}.json").write_text(json.dumps(
                 latest_ocr["blocks"], indent=1), encoding="utf-8")
-        shot_ids.append(str(eid))
         while len(shot_ids) > SHOTS_KEEP:
             old = shot_ids.popleft()
             # the block dump rides with its frame — pruning only the JPEG
@@ -1062,8 +1077,8 @@ def sentences(text):
     """A line split at sentence ends, punctuation kept.
 
     Kokoro predicts prosody for a whole utterance in one pass, so a long line
-    degrades its own opening: "Huh?! You… You're Paimon, travel companion of
-    the great hero Ebby!" hisses through the interjection and into the word
+    degrades its own opening: "Huh?! You… You're Pell, sailing companion of
+    the great captain Ebby!" (shape of the measured real line) hisses through the interjection and into the word
     after it, while "Huh?!" and the rest of the line each come out clean
     synthesized alone. Measured by bisection against the failing line — it is
     not the "!?", not the ellipsis, and not the name's respelling, all of
@@ -1302,7 +1317,7 @@ def window_verdict(new_norm, speaker, recent_lines):
         # The same-character gate above is what protects this: a line grows
         # by typewriter and the typewriter never changes speaker mid-line,
         # so before that gate covered extensions too, Paimon's "And then?"
-        # made Leyla's "And then I blossomed into a healthy vegetable…" look
+        # made Leyla's own "And then I…" answer look
         # like a continuation of it, and Leyla was cut off at the front.
         if new_norm != o and new_norm.startswith(o):
             if len(new_norm) - len(o) < 8:   # trivial tail = jitter
@@ -2485,7 +2500,20 @@ def main():
                 # classify — which is right: during a game switch the old
                 # game's chrome stops matching, so the frames the switch
                 # decision needs are read whole.
-                roi = (match_anchors(game.profile.name, gate.last_gray)
+                # One read, one decode, shared by the gate, the anchors,
+                # the bootstrap and the crop: when the gate decoded, its
+                # bytes/gray are used; when it didn't (disabled, skip-run
+                # break), the file is read ONCE here so all of them still
+                # judge the same frame instead of three reads straddling
+                # ffmpeg rewrites.
+                frame_bytes, frame_gray = gate.last_bytes, gate.last_gray
+                if frame_gray is None and anchor_state["enabled"]:
+                    try:
+                        frame_bytes = FRAME.read_bytes()
+                        frame_gray = decode_half(frame_bytes)
+                    except Exception:
+                        frame_bytes = frame_gray = None
+                roi = (match_anchors(game.profile.name, frame_gray)
                        if anchor_state["enabled"] else None)
                 crop = None
                 # the timer starts BEFORE the crop: crop_frame is a full
@@ -2502,7 +2530,7 @@ def main():
                         anchor_state["crop_run"] = 0
                     else:
                         crop = crop_frame(FRAME, roi, CROP,
-                                          data=gate.last_bytes)
+                                          data=frame_bytes)
                 blocks = ocr.recognize(CROP if crop else FRAME)
                 if blocks is None:      # daemon died; it respawned itself
                     continue
@@ -2552,9 +2580,13 @@ def main():
                     # decode only on TRUSTED frames — maybe_bootstrap
                     # checks trust before gray, so passing None on the
                     # (majority) untrusted frames keeps the hold-reset
-                    # exact and skips a ~5ms decode per frame
+                    # exact and skips a ~5ms decode per frame. The gray
+                    # is this frame's shared decode (gate's, or the one
+                    # read in the fresh-OCR branch above), so the cut
+                    # comes from the same frame the trust verdict's OCR
+                    # ran on whenever that decode exists.
                     _trusted = screens.trusts_dialogue(blocks)
-                    _gray = gate.last_gray if _trusted else None
+                    _gray = frame_gray if _trusted else None
                     if _trusted and _gray is None:
                         try:
                             _gray = decode_half(FRAME)

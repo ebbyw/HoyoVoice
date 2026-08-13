@@ -51,7 +51,7 @@ SKIP = [
 ]
 
 KEEP = [
-    "Hello, you two. Is something the matter?",
+    "Hello, you two. Is the ferry running late?",
     "The Warning Bell tolled at dawn. Read the notice before playing.",
     "I have a headache. Stop playing that lyre, would you?",
     "Consult the almanac before you set out.",
