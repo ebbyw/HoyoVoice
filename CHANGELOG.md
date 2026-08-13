@@ -45,12 +45,18 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   `Kuutar`, not `KuuMoon Maidentar`), and an entry still holding a runtime
   placeholder is dropped rather than indexed subtly wrong.
 
-  Maps are per game and load on first use of that game — ~4 s and ~390 MB
-  resident for a full dump, which is not worth paying at startup for a game
+  Maps are per game and load on first use of that game, which for the
+  current dumps is ~9 s and 600-770 MB resident (398k usable lines for
+  Genshin, 315k for Star Rail) — not a price to pay at startup for a game
   the session may never read. Lookup is a length-bucketed trigram index
   over the rarest two dozen trigrams of the query, then a real comparison
-  of the top 40: 11 ms against a 100k-line map (66 ms for the naive
-  version), paid once per spoken line rather than once per frame.
+  of the top 40: 20 ms against a 400k-line dump, paid once per spoken line
+  rather than once per frame. Three things keep that affordable at dump
+  scale: only every third trigram is indexed (chosen by a stable crc32 of
+  the trigram, so entry and query pick the same subset — measured
+  identical repair quality for ~150 MB less), postings are machine ints
+  rather than Python lists (~80 MB of pointers saved), and a posting list
+  longer than 3000 is skipped as a trigram that names nothing.
 
   **`python tools/textmap.py <map.json> --nickname <name>` scores a dump
   against the lines this install has actually read**, which is the only way
