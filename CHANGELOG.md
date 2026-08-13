@@ -9,6 +9,25 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **A loud scene can no longer read as voiceover.** The center-energy
+  layer's sustained-burst arm believed a decisive centre burst with ZERO
+  speechiness as VO if it merely lasted 0.35s — and on the Snezhnaya
+  train (61dB ambience, 2026-08-13 09:56 log) engine rumble lasts
+  forever: four unvoiced NPC lines were silenced at `peak=0.00`,
+  mid+13.7 to +27.3, every one "decisive" and "sustained". Each false
+  skip also RECORDED a voiced observation for a just-met speaker
+  (Vedenev, Firsova, Dementieva), feeding the per-speaker prior that
+  makes the next skip easier — a spiral aimed at exactly the characters
+  the game never voices. Center energy is now believed only WITH
+  corroboration: faint speechiness (peak ≥ 0.15) or a usually-voiced
+  record — the model-deaf-vocoder case (Paimon) this layer exists for
+  keeps its skips, since that record is exactly what it has. Without
+  corroboration the line is spoken; a rare talk-over beats a skipped
+  line, and the poisoned histories from this session self-heal because
+  `usually_voiced` demands a consistent record, not one bad
+  observation. The sustain measurement stays (pinned, and printed in
+  every center-energy log line) as a diagnostic.
+
 - **The Windows engine no longer runs RapidOCR's per-row angle
   classifier — which was intermittently reading rows upside-down.**
   Session shots from 2026-08-13 caught `golden glow of "friendship."`
