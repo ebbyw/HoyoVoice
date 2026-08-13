@@ -218,8 +218,17 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   and unset for Star Rail, whose row heights have not been measured against
   a real fusion, so nothing changes there. Fused reads are counted on the
   dashboard and in the log's analytics line, and the drop logs an event
-  (rate-limited to one in twelve) with the offending text, because a silent
-  drop is what makes this class of bug undiagnosable.
+  carrying the fused box's own text, because a silent drop is what makes
+  this class of bug undiagnosable. That event is written once per fused
+  LINE, not per fused frame: the fusion alternates at the sampling rate for
+  as long as the player leaves the line up, so the first rule here — one
+  event in every twelve drops — still filled the log with 380 entries in
+  two minutes on the very next session. It is keyed on the text instead,
+  the same way the unknown-speaker skip is, and compared against what the
+  log already says rather than the previous frame, since the weave drifts
+  and would otherwise walk past the cutoff a step at a time. Over the 106
+  fused frames recorded so far — four distinct lines — that writes seven
+  events.
 
 - **A choice option whose first word OCR keeps mangling is read once, not
   once per mangling.** Vision fuses Genshin's choice bullet into the
