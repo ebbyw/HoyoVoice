@@ -2,10 +2,11 @@
 
 The panel is a gold title over a prose column, clipped top and bottom by
 two ornate rules, with 'Return' alone in the hint strip. Every number here
-is measured off rec_20260808_190712 ("Investigative Report: Bakunawa") at
-1080p: the rules sit at cy=0.896 and cy=0.052, the title at cy=0.924, and
-the body rows share a left edge at x=0.266 running from cy=0.859 down at a
-pitch of 0.033.
+is measured off rec_20260808_190712 at 1080p: the rules sit at cy=0.896
+and cy=0.052, the title at cy=0.924, and the body rows share a left edge
+at x=0.266 running from cy=0.859 down at a pitch of 0.033. The geometry
+is the measurement; the prose riding on it is invented — no game text
+ships in this repo.
 
 Two failures are guarded. Reading a MENU aloud — 'Return' is an ordinary
 hint, and a menu's heading over its first column has the same shape as a
@@ -37,22 +38,22 @@ def centered(text, cy, w=0.275, h=0.034, conf=1.0):
     return row(text, cy, x=0.5 - w / 2, w=w, h=h, conf=conf)
 
 
-TITLE = centered("Investigative Report: Bakunawa", 0.924)
+TITLE = centered("Field Report: The Harbor Colossus", 0.924)
 RETURN = row("Return", 0.076, x=0.897, w=0.036, h=0.018)
 # The same hint with its ◯ button glyph merged into the word, exactly as
 # Vision returned it on the inventory-opened article.
 RETURN_GLYPH = row("Return e", 0.076, x=0.895, w=0.048, h=0.018)
-UID = row("UID: 603275577", 0.014, x=0.875, w=0.094, h=0.023)
+UID = row("UID: 100000000", 0.014, x=0.875, w=0.094, h=0.023)
 CHROME = [RETURN, UID]
 
-# the article as first opened: 11 rows from cy=0.859 down, and the one
-# stylized proper noun Vision only half believes
-BODY = [row("A gigantic beast that appeared on the Western side of Natlan five", 0.859),
-        row("hundred years ago, accompanied by other Abyssal monsters. Its body", 0.825),
-        row("was like that of a mountain, and it devoured the tribespeople of", 0.795),
-        row("Tenochtzitoc.", 0.762, w=0.092, h=0.026, conf=0.50),
-        row("An out-of-control creation identified as one of \"Gold\"'s that once", 0.733),
-        row("attacked and swallowed part of her body. Lacking in intelligence, its", 0.698)]
+# the article as first opened: rows from cy=0.859 down at the measured
+# pitch, and the one stylized proper noun Vision only half believes
+BODY = [row("A gigantic beast that surfaced on the western side of the harbor", 0.859),
+        row("five hundred years ago, trailed by other deepwater creatures. Its", 0.825),
+        row("body was like that of a mountain, and it swallowed the boats of", 0.795),
+        row("Tezquanotl.", 0.762, w=0.092, h=0.026, conf=0.50),
+        row("An out-of-control engine said to be one of the old foundry's that", 0.733),
+        row("once dragged down part of the pier. Lacking any pilot, its", 0.698)]
 
 
 def article(*extra):
@@ -62,13 +63,13 @@ def article(*extra):
 # (name, frame, expected read — None means "not a readable")
 FRAMES = [
     ("the article as opened", article(),
-     "Investigative Report: Bakunawa. "
+     "Field Report: The Harbor Colossus. "
      + " ".join(b["text"] for b in BODY)),
 
     # The weak row is the point of the lower confidence floor: at the 0.8
-    # default "Tenochtzitoc." vanished from the middle of a sentence.
+    # default "Tezquanotl." vanished from the middle of a sentence.
     ("a weak proper noun is still read", article(),
-     lambda got: "Tenochtzitoc." in got),
+     lambda got: "Tezquanotl." in got),
 
     # --- scrolling ---------------------------------------------------
     # A row sliding under the upper rule (cy=0.896): its visible box reaches
@@ -105,16 +106,16 @@ FRAMES = [
     # this frame is why the "nothing else on screen" rule had to go, and
     # the read must still contain none of the bag's own text.
     ("the article opened from the inventory",
-     [centered("Investigative Report: Mare Jivari", 0.925, w=0.282),
+     [centered("Field Report: The Glass Shallows", 0.925, w=0.282),
       row("Quest", 0.932, x=0.099, w=0.029, h=0.018),
       row("Inventory capacity 1185/2300", 0.930, x=0.799, w=0.144, h=0.021),
-      row("No extant records suggest how the Mare Jivari could have", 0.857),
-      row("It seems that all related information was erased alongside", 0.828),
+      row("No extant records suggest how the glass shallows could have", 0.857),
+      row("It seems that every chart of the channel was lost alongside", 0.828),
       row("Quest Item", 0.814, x=0.715, w=0.054, h=0.016),
       row("ash itself.", 0.796, w=0.067),
       row("The only speculation that remains to be made comes from an", 0.762),
       row("1880", 0.712, x=0.099, w=0.020, h=0.013),
-      row("An investigative report that", 0.613, x=0.717, w=0.148, h=0.021),
+      row("A field report that", 0.613, x=0.717, w=0.148, h=0.021),
       row("someone left behind in a hurry.", 0.589, x=0.715, w=0.170, h=0.021),
       RETURN_GLYPH,
       row("Destroy", 0.075, x=0.761, w=0.043, h=0.022),
@@ -126,45 +127,45 @@ FRAMES = [
                   and "left behind in a hurry" not in got)),
 
     # --- the world-object newspaper ----------------------------------
-    # Snezhnaya Vestnik, opened at the paper on a bench rather than from
+    # The world newspaper, opened at the paper on a bench rather than from
     # the inventory: same column (left edge 0.266), same title slot, same
     # rules — but the exit hint says 'Leave', not 'Return'. Measured off
     # rec_20260812_201648 at 1080p; a session sat on this page for 20
     # seconds and read nothing before 'leave' joined the hint words.
     ("the newspaper article with a Leave hint",
-     [centered("Snezhnaya Vestnik", 0.924, w=0.163),
-      row("As everyone knows, a caterpillar spins a cocoon within a leaf and",
+     [centered("The Northerly Courier", 0.924, w=0.163),
+      row("As everyone knows, a lantern keeper trims the wick within a glass",
           0.843, h=0.031),
-      row("transforms into an ominous moth; the spawn of a frog lies in the muck,",
+      row("hood and coaxes out a steady flame; the spark of a flint lies in the",
           0.810),
-      row("eventually sprouting legs to become a leaping, swimming frog. Ancient",
+      row("striker's pouch, eventually catching cloth to become a bright, roaring",
           0.778, h=0.031),
-      row("fae legends even held that when a person died, was buried, and rotted",
+      row("stove. Old dockside sayings even held that when a lamp guttered, was",
           0.747, h=0.031),
-      row("away, their spine would transform into a snake.", 0.713, h=0.031,
+      row("trimmed, and relit, its smoke would settle into fog.", 0.713, h=0.031,
           w=0.311),
       row("1/3", 0.066, x=0.488, w=0.022, h=0.023),
       row("Leave", 0.076, x=0.903, w=0.032, h=0.018),
       UID],
-     lambda got: ("Snezhnaya Vestnik." in got and "caterpillar" in got
-                  and "into a snake." in got and "1/3" not in got)),
+     lambda got: ("The Northerly Courier." in got and "lantern keeper" in got
+                  and "into fog." in got and "1/3" not in got)),
 
     # --- things that are not articles --------------------------------
     # A menu: same title-over-column shape, same Return hint, but two rows
     # sharing a margin is a list, not a page.
     ("a menu with a Return hint",
      [centered("Character Archive", 0.924),
-      row("Kachina", 0.859, w=0.10),
-      row("A young Natlan girl of the Children of Echoes tribe who", 0.825),
+      row("Marisel", 0.859, w=0.10),
+      row("A young lighthouse keeper of the outer shoals who", 0.825),
       row("Obtained", 0.700, x=0.86, w=0.06),          # off in a side column
       ] + CHROME,
      None),
     ("no Return hint at all", [TITLE] + BODY + [UID], None),
     # centered prose with no column edge: a card, not an article
     ("centered card with no left-aligned column",
-     [TITLE, centered("A gigantic beast appeared on the Western side.", 0.859,
+     [TITLE, centered("A gigantic beast surfaced on the western side.", 0.859,
                       w=0.30),
-      centered("It devoured the tribespeople of Tenochtzitoc.", 0.825, w=0.30)]
+      centered("It swallowed the boats of Tezquanotl.", 0.825, w=0.30)]
      + CHROME,
      None),
     ("a digit-heavy stat panel",

@@ -20,22 +20,22 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import live                                    # noqa: E402
 
+# A paraphrase in the notice's register, carrying every marker the matcher
+# looks for — the real notice's wording stays out of the repo, and the
+# matcher never needed it: it matches markers, not the wall of text.
 TITLE = "WARNING: READ BEFORE PLAYING"
 BODY = (
-    "A very small percentage of individuals may experience epileptic seizures "
-    "when exposed to certain visual images, including certain light patterns "
-    "of flashing lights in video games. Playing video games may induce an "
-    "epileptic seizure in these individuals. Certain conditions may induce "
-    "previously undetected epileptic symptoms even in persons who have no "
-    "prior history of seizures or epilepsy. If you, or anyone in your family, "
-    "have any history of prior seizures or epilepsy, consult your physician "
-    "prior to playing."
+    "For a small number of players, exposure to flashing imagery or certain "
+    "light patterns on a screen can bring on epileptic seizures, and can do "
+    "so even in players with no prior history of epilepsy or any epileptic "
+    "symptoms. If you, or anyone in your family, has ever experienced a "
+    "seizure, consult your physician before you play."
 )
 BODY2 = (
-    "In addition to the above symptoms, if you have a headache, dizziness, "
-    "nausea, similar symptoms of motion sickness, or if you feel a discomfort "
-    "or pain in any body part whilst playing, IMMEDIATELY stop playing. If "
-    "the condition persists, seek medical attention."
+    "Beyond the above, should you notice a headache, dizziness, nausea, any "
+    "feeling like motion sickness, or a discomfort or pain anywhere in your "
+    "body while playing, IMMEDIATELY stop playing. If the condition "
+    "persists, seek medical attention."
 )
 
 SKIP = [
@@ -44,10 +44,10 @@ SKIP = [
     BODY2,                               # second paragraph on its own
     # the font's l/I confusion inside a word, which fix_ocr_text only repairs
     # for standalone letters — a single marker must not be load-bearing
-    "WARNlNG: READ BEFORE PLAYlNG. A very small percentage of individuals "
-    "may experience epileptic seizures.",
-    "WARNING: READ BEFORE PLAYING. A very small percentage of lndlvlduals "
-    "may experience epileptlc selzures.",
+    "WARNlNG: READ BEFORE PLAYlNG. For a small number of players, flashing "
+    "imagery can bring on epileptic seizures.",
+    "WARNING: READ BEFORE PLAYING. For a small number of pIayers, flashlng "
+    "lmagery can brlng on epileptlc selzures.",
 ]
 
 KEEP = [
