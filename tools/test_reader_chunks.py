@@ -15,17 +15,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import live                                    # noqa: E402
 
-PAGE = ("Along with Divinity: Prologue. "
-        "When our perceptions are unfettered by archons and churches, we "
-        "shall learn that the people of Mondstadt preserved their culture. "
-        "The surplus grain produced became their source of brews, and the "
-        "brews further nourished their easygoing temperament. "
-        "But I do not intend to make my readers think that we could do "
-        "without archons. "
+# Invented prose in the shape of an in-game book page: a "Title: Part"
+# heading the panel welds a period onto, then long sentences with one
+# short one between them. No game text ships in this repo.
+PAGE = ("Notes from the Salt Terrace: Prologue. "
+        "When the harbor bell is silent and the ledgers are shut, we "
+        "shall find that the potters of the terrace kept their craft alive. "
+        "The surplus clay dug from the flats became their trade in lamps, "
+        "and the lamps in turn lit their easygoing evenings. "
+        "But I do not intend to make my readers think that they could do "
+        "without the river. "
         "The answer would be no. "
-        "Mondstadt is an inland city and would have struggled to provide "
-        "for itself if not for the grace of Barbatos. "
-        "It was the power of Barbatos that changed everything.")
+        "The terrace is a dry shelf of rock and would have struggled to "
+        "provide for itself if not for the barges on the water. "
+        "It was the river trade that changed everything.")
 
 
 def main():
@@ -41,7 +44,7 @@ def main():
     # the title row gets its period appended upstream, so the first
     # sentence — and with it the first synth — is the short title alone
     check("first chunk is the first sentence alone",
-          chunks[0] == "Along with Divinity: Prologue.")
+          chunks[0] == "Notes from the Salt Terrace: Prologue.")
     check("nothing lost or reordered", " ".join(chunks) == PAGE)
     check("later chunks pack several sentences", len(chunks) < 7)
     check("every chunk ends on a sentence boundary",
