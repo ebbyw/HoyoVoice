@@ -52,10 +52,11 @@ class Genshin(Profile):
     label = "Genshin Impact"
     PLAYER_NAME = "Traveler"
     READER_LABEL = "readable"
-    # Only screens whose geometry has been checked against real frames.
-    # Choice prompts did not occur in the calibration capture; they stay off
-    # rather than guessed at, because a wrong band does not fail quietly —
-    # it narrates menus. See CALIBRATE below.
+    # Only screens whose geometry has been checked against real frames —
+    # a wrong band does not fail quietly, it narrates menus. Every screen
+    # here is calibrated, choices included (CHOICES below carries its own
+    # measurement history); "lore" is Star Rail's card, which Genshin
+    # doesn't draw.
     SCREENS = frozenset({"dialogue", "narration", "loading", "quickread"})
 
     # Box chrome that is never speech. 'Confirm' and 'Auto' both sit inside

@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# anchor templates are reference pixels — never normalize
+*.png binary
