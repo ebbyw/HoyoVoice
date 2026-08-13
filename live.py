@@ -434,7 +434,28 @@ def save_shot(eid):
 
 
 def add_event(action, cls, speaker=None, text="", voice=None, speed=None,
-              can_replay=False, shot=False):
+              can_replay=False, shot=False, extend=False):
+    """Append a log event — or, with `extend`, GROW the one just written.
+
+    A line is handled twice by design: the first finished sentence goes
+    through, then the typewriter's remainder follows as an extension. For a
+    line that gets spoken those are two real events, because two pieces of
+    audio were played. For a line that gets SKIPPED they are one fact
+    written twice — "we saw this and stayed quiet" — and they filled the log
+    with pairs whose only difference was the tail of the sentence
+    (2026-08-12 18:10-18:21: 44 of 77 events were a skip and its own
+    growth). With `extend`, a skip whose text simply grew rewrites the row
+    it grew from, so the log keeps one row per line carrying the FULLEST
+    text. Same action and same speaker required, and the old text has to be
+    a prefix of the new one — anything else is a different fact.
+    """
+    if extend and events:
+        prev = events[-1]
+        pn, nn = normalize_text(prev["text"]), normalize_text(text)
+        if (prev["action"] == action and prev["speaker"] == speaker
+                and pn and nn.startswith(pn)):
+            prev["text"] = text[:160]
+            return prev["id"]
     event_seq["n"] += 1
     said = tts_text(text)[:160]
     events.append({
@@ -2006,12 +2027,17 @@ def main():
     last_unknown_logged = None
     last_notice_logged = None
     last_fused_logged = None    # last two-rows-in-one-box read written down
+    choice_ignored_logged = None  # last prompt dropped for want of a speaker
     choice_prev = ""            # last frame's options (settle check)
     choice_logged = None        # last prompt handled — RAW words, not a norm
     pending_choice = None       # lone option waiting for the line below it
     # long ago: an option held before we have ever spoken shouldn't wait
     speech_busy_t = time.monotonic() - 60.0
-    last_spoken_norm = None     # suppresses repeat-logs for the live line
+    # the line the loop last DEALT with — spoken, or skipped as voiced.
+    # Suppresses repeat-logs for the line still on screen; named for
+    # handling rather than speaking because a deliberate silence is just as
+    # much a decision, and its repeats are just as uninteresting.
+    last_handled_norm = None
     fired_norm = None           # line already pushed through the gate once
     unstable_count = 0
     miss_streak = 0             # consecutive frames the detector lost the line
@@ -2459,7 +2485,7 @@ def main():
                 audio, speed, _ = speech.synth(text, voice, base_speed)
                 speech.play(audio, qr=True)
                 stats["spoken"] += 1
-                last_spoken_norm = normalize_text(text)   # suppress its repeats
+                last_handled_norm = normalize_text(text)   # suppress its repeats
                 kind = ("chat" if spk else
                         "chat notice" if chat is not None
                         else screens.READER_LABEL)
@@ -2495,6 +2521,22 @@ def main():
             # sighting. Handled before the branches below so a prompt is
             # logged even when the line under it is skipped.
             opts = state["choices"]
+            # A prompt the profile REFUSED is invisible otherwise, and a
+            # missing read is the hardest thing to diagnose from a log —
+            # there is nothing in it to notice. Genshin drops a prompt that
+            # has no nameplate beside it (the teleport map lists its
+            # waypoints in the same column at the same left edge and has
+            # none), so a genuine prompt over an empty dialogue box is
+            # dropped with it. Reported once per distinct prompt: a map on
+            # screen would otherwise write a row per frame.
+            if not opts:
+                shown = " · ".join(b["text"]
+                                   for b in screens.choice_blocks(blocks))
+                snorm = normalize_text(shown)
+                if snorm and not same_line(snorm, choice_ignored_logged):
+                    choice_ignored_logged = snorm
+                    add_event("choice prompt (ignored — no speaker)", "choice",
+                              None, shown, shot=True)
             opts_raw = " ".join(opts)
             opts_norm = normalize_text(opts_raw)
             settled = bool(opts_norm) and opts_norm == choice_prev
@@ -2622,7 +2664,7 @@ def main():
                 speech.play(audio)          # not qr: a late VO should cut it
                 stats["spoken"] += 1
                 choice_logged = text
-                last_spoken_norm = normalize_text(text)
+                last_handled_norm = normalize_text(text)
                 # into the dedupe window: picking an option usually makes
                 # the game say it back as a dialogue line, which would
                 # otherwise be read a second time. Each option enters
@@ -2872,7 +2914,17 @@ def main():
                 # on screen (or the one we just spoke) is noise: it answers
                 # no question and buries the real log.
                 # Window persists via spoken_cache.json.
-                if not (same_line(new_norm, last_spoken_norm)
+                #
+                # The prefix test carries its own weight: the line handled a
+                # moment ago is still being typed, so what comes back is not
+                # a re-read of it but a LONGER version, and past about 25
+                # extra characters the similarity ratio falls under the
+                # cutoff (0.89 for one 105-character line that grew by 26 —
+                # 2026-08-12 18:20:00). Growth of the line on screen is the
+                # same non-answer as a re-read of it.
+                if not (same_line(new_norm, last_handled_norm)
+                        or (last_handled_norm
+                            and new_norm.startswith(last_handled_norm))
                         or same_line(new_norm, last_dup_logged)):
                     add_event("repeat (deduped)" if screen_kind == "spoken"
                               else f"repeat (deduped) · {screen_kind}",
@@ -3016,7 +3068,12 @@ def main():
                 if screen_kind != "spoken":
                     skip_label += f" · {screen_kind}"
                 add_event(skip_label, "skip", state["speaker"],
-                          state["dialogue"], shot=True)
+                          state["dialogue"], shot=True, extend=True)
+                # the line has been HANDLED, silently but deliberately, so
+                # the next read of it is not an interesting repeat — before
+                # this, every voiced skip was followed by a "repeat
+                # (deduped)" row for its own line
+                last_handled_norm = new_norm
                 print(f"[voiced — skipping mid+{mid_up:.1f} side+{side_up:.1f}] "
                       f"{state['dialogue'][:60]}", flush=True)
                 continue
@@ -3024,7 +3081,7 @@ def main():
             speech.play(spec.get("audio"))
             speed = spec.get("speed")
             stats["spoken"] += 1
-            last_spoken_norm = new_norm
+            last_handled_norm = new_norm
             yield_event_id = add_event(
                 screen_kind, "spoken", state["speaker"], speak_text,
                 voice, speed, can_replay=True, shot=True)
