@@ -474,25 +474,41 @@ lost_frames = {"n": 0}            # frames the OCR daemon couldn't read at all
 gate = ChangeGate()
 
 
+# Shot ids on disk, oldest first — seeded from one glob on first use, then
+# maintained in-process so the per-shot prune is O(1) instead of a
+# directory walk + ~300 stat() calls on the loop thread per logged event.
+shot_ids = None
+
+
 def save_shot(eid):
     """Downscaled screenshot of the current frame for the dashboard log,
     plus the raw OCR blocks (shots/<id>.json) for layout debugging —
     open /shots/<id>.json in the browser to see what the engine saw."""
+    global shot_ids
     try:
         from PIL import Image
         img = Image.open(FRAME)
+        # draft with the ASPECT-CORRECT target: (854, 854) would be a
+        # silent no-op (1080//2 < 854 vetoes the scale), (854, 480) picks
+        # the 1/2 DCT decode. Measured 21 → 9 ms for the same-size output;
+        # the thumbnail below still does the final fit.
+        img.draft("RGB", (854, 480))
         img.thumbnail((854, 854))       # ~480p, legible and small (~60 KB)
         SHOTS.mkdir(parents=True, exist_ok=True)
+        if shot_ids is None:
+            shot_ids = deque(p.stem for p in sorted(
+                SHOTS.glob("*.jpg"), key=lambda p: p.stat().st_mtime))
         img.save(SHOTS / f"{eid}.jpg", quality=68)
         if latest_ocr["blocks"] is not None:
             (SHOTS / f"{eid}.json").write_text(json.dumps(
                 latest_ocr["blocks"], indent=1), encoding="utf-8")
-        for p in sorted(SHOTS.glob("*.jpg"),
-                        key=lambda p: p.stat().st_mtime)[:-SHOTS_KEEP]:
-            p.unlink()
+        shot_ids.append(str(eid))
+        while len(shot_ids) > SHOTS_KEEP:
+            old = shot_ids.popleft()
             # the block dump rides with its frame — pruning only the JPEG
             # left the JSONs accumulating across every session ever run
-            p.with_suffix(".json").unlink(missing_ok=True)
+            (SHOTS / f"{old}.jpg").unlink(missing_ok=True)
+            (SHOTS / f"{old}.json").unlink(missing_ok=True)
         return True
     except Exception:
         return False
@@ -2485,7 +2501,8 @@ def main():
                         # re-arm (the change gate's MAX_SKIP_RUN medicine)
                         anchor_state["crop_run"] = 0
                     else:
-                        crop = crop_frame(FRAME, roi, CROP)
+                        crop = crop_frame(FRAME, roi, CROP,
+                                          data=gate.last_bytes)
                 blocks = ocr.recognize(CROP if crop else FRAME)
                 if blocks is None:      # daemon died; it respawned itself
                     continue
@@ -2532,14 +2549,18 @@ def main():
             if fresh_read and anchor_state["enabled"]:
                 _bp = anchor_pack(screens.name)
                 if _bp.pending:
-                    _gray = gate.last_gray
-                    if _gray is None:
+                    # decode only on TRUSTED frames — maybe_bootstrap
+                    # checks trust before gray, so passing None on the
+                    # (majority) untrusted frames keeps the hold-reset
+                    # exact and skips a ~5ms decode per frame
+                    _trusted = screens.trusts_dialogue(blocks)
+                    _gray = gate.last_gray if _trusted else None
+                    if _trusted and _gray is None:
                         try:
                             _gray = decode_half(FRAME)
                         except Exception:
                             _gray = None
-                    msg = _bp.maybe_bootstrap(
-                        _gray, screens.trusts_dialogue(blocks))
+                    msg = _bp.maybe_bootstrap(_gray, _trusted)
                     if msg:
                         print(f"[anchors] {screens.name}: {msg}", flush=True)
 
