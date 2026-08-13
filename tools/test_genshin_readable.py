@@ -51,7 +51,7 @@ CHROME = [RETURN, UID]
 BODY = [row("A gigantic beast that surfaced on the western side of the harbor", 0.859),
         row("five hundred years ago, trailed by other deepwater creatures. Its", 0.825),
         row("body was like that of a mountain, and it swallowed the boats of", 0.795),
-        row("Tezquanotl.", 0.762, w=0.092, h=0.026, conf=0.50),
+        row("Brinegarth.", 0.762, w=0.092, h=0.026, conf=0.50),
         row("An out-of-control engine said to be one of the old foundry's that", 0.733),
         row("once dragged down part of the pier. Lacking any pilot, its", 0.698)]
 
@@ -67,9 +67,9 @@ FRAMES = [
      + " ".join(b["text"] for b in BODY)),
 
     # The weak row is the point of the lower confidence floor: at the 0.8
-    # default "Tezquanotl." vanished from the middle of a sentence.
+    # default "Brinegarth." vanished from the middle of a sentence.
     ("a weak proper noun is still read", article(),
-     lambda got: "Tezquanotl." in got),
+     lambda got: "Brinegarth." in got),
 
     # --- scrolling ---------------------------------------------------
     # A row sliding under the upper rule (cy=0.896): its visible box reaches
@@ -165,7 +165,7 @@ FRAMES = [
     ("centered card with no left-aligned column",
      [TITLE, centered("A gigantic beast surfaced on the western side.", 0.859,
                       w=0.30),
-      centered("It swallowed the boats of Tezquanotl.", 0.825, w=0.30)]
+      centered("It swallowed the boats of Brinegarth.", 0.825, w=0.30)]
      + CHROME,
      None),
     ("a digit-heavy stat panel",

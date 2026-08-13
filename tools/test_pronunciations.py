@@ -30,8 +30,8 @@ CASES = [
     # is already in voices.json, so --write carries a correction through
     ("Mavuika lit the fire.", "Mah-wee-kah lit the fire."),
     # Invented terms both engines read with the flat a of "fat"
-    ("The Fatui hold the Northland Bank.",
-     "The Fah-too-ee hold the Northland Bank."),
+    ("The Fatui guard the northern boathouse.",
+     "The Fah-too-ee guard the northern boathouse."),
     ("A Fatuus stood guard.", "A Fah-too-oose stood guard."),
     # a plural needs its own entry — substitution is word-bounded, so a
     # \bWayob\b rule never reaches inside "Wayobs"
@@ -53,7 +53,7 @@ CASES = [
     ("Uhmm... maybe.", "Um... maybe."),
     ("Ugh, this is heavy.", "Ug, this is heavy."),
     # "Urgh" is ˈɜɹɡ — "erg", a word, not a groan
-    ("Urgh… It all happened so fast.", "Ug… It all happened so fast."),
+    ("Urgh… It all blew over so fast.", "Ug… It all blew over so fast."),
     ("Urrgh, my head.", "Ug, my head."),
     ("Aaah, that feels better.", "Ah, that feels better."),
     # "Pfft" is ˈft on its own, which is roughly the right noise. The "pfff"

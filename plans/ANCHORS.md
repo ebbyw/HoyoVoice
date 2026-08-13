@@ -219,11 +219,17 @@ byte-identity was the wrong bar), the Windows `ocr_ms` half passed in the
   strip (0–0.10), dialogue (0.10–0.21), plate (0.204–0.28), comms plate
   band, choices (0.22–0.66 ceiling). Both are "the bottom two-thirds",
   which is where the ~35–40% detector-cut expectation comes from.
-- The crop is written as PNG (`captures/live_crop.png`,
-  `compress_level=1`): the frame is already one JPEG generation old, and
+- The crop is written as GRAYSCALE PNG (`captures/live_crop.png`,
+  `compress_level=0`): the frame is already one JPEG generation old, and
   a second lossy pass softens exactly the small glyphs the crop exists
-  to read. `crop_frame()` re-normalizes the returned rect from the
-  PIXEL crop, so `remap_box()` is exact under `int()` edge rounding —
+  to read — while both recognizers read from luminance, so shipping RGB
+  paid encode and daemon-side decode for channels nobody used, and PNG
+  is lossless at every level, so the stored (level-0) form is
+  byte-identical pixels minus ~11ms/frame of deflate work. The crop is
+  also cut from the change gate's own bytes (`gate.last_bytes`), so the
+  gate, the anchors and the crop judge the SAME frame even while ffmpeg
+  rewrites the file. `crop_frame()` re-normalizes the returned rect from
+  the PIXEL crop, so `remap_box()` is exact under `int()` edge rounding —
   pinned in `tools/test_anchors.py`.
 - Anchor matching moved BEFORE the OCR call (it has to be, to pay for
   cropping) and keys off the STICKY game profile, not the fresh

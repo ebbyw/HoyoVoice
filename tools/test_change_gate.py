@@ -227,6 +227,8 @@ def run():
     assert not g9.unchanged(frame, blank), \
         "nothing bright to compare must fail open to OCR"
 
+    import shutil
+    shutil.rmtree(tmp, ignore_errors=True)
     print("test_change_gate: all invariants hold")
 
 

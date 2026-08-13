@@ -37,9 +37,9 @@ CASES = [
     # the plate flickered out while the line was still typing: the window
     # entry has no speaker, but it is plainly the same line
     ("grew with the plate missing",
-     w((None, "I truly was held back by something.")), "Leyla",
-     "I truly was held back by something. A jammed rudder, it turns out.",
-     n("I truly was held back by something.")),
+     w((None, "I truly was held up by the weather.")), "Leyla",
+     "I truly was held up by the weather. A jammed rudder, it turns out.",
+     n("I truly was held up by the weather.")),
 
     # --- the bug: a short line from ANOTHER speaker is not a prefix ---
     # Paimon's "And then?" made Leyla's answer look like a continuation
@@ -67,8 +67,8 @@ CASES = [
     ("punctuation jitter", w(("Leyla", "It's a tidal phenomenon.")),
      "Leyla", "It's a tidal phenomenon", "dup"),
     ("trivial tail is jitter, not growth",
-     w(("Leyla", "That is quite enough of that")), "Leyla",
-     "That is quite enough of that.", "dup"),
+     w(("Leyla", "That is quite enough rowing for today")), "Leyla",
+     "That is quite enough rowing for today.", "dup"),
 
     # --- new ---
     ("unrelated line", w(("Paimon", "This is the spot")), "Leyla",
@@ -85,24 +85,24 @@ CASES = [
     # variant ping-ponged and the same line was spoken four times in
     # fifteen seconds.
     ("ghost splice mid-line is a dup",
-     w(("Paimon", "Wow, it's so breezy! Just rowing from one side to the"
-        " other would probably leave Paimon out of breath…")), "Paimon",
-     "Wow, it s so breezy! Just rowing from one side to the other would"
-     " probably leave Paimon Wow, its so breezy Just Rowin out of breath…",
+     w(("Paimon", "Ha, what a crossing! The old ferry pitched all night and"
+        " nearly threw our lanterns into the harbor…")), "Paimon",
+     "Ha, wha t a crossing! The old ferry pitched all night and nearly"
+     " threw our lanterns Ha, what a crossing The old fe into the harbor…",
      "dup"),
     ("ghost splice with different jitter is still a dup",
-     w(("Paimon", "Wow, it's so breezy! Just rowing from one side to the"
-        " other would probably leave Paimon out of breath…")), "Paimon",
-     "Wow, it's so breezy! Just rowing from one side to the other would"
-     " probably leave Paimon Wow, it's so breezy! just rowin out of"
-     " breath…", "dup"),
+     w(("Paimon", "Ha, what a crossing! The old ferry pitched all night and"
+        " nearly threw our lanterns into the harbor…")), "Paimon",
+     "Ha, what a crossing! The old ferry pitched all night and nearly"
+     " threw our lanterns Ha, what a crossing! the old fe into the"
+     " harbor…", "dup"),
     # a genuinely new line that shares phrases with the recent one is NOT
     # a splice: the recent line does not survive in order and in full
     ("shared phrasing is not a splice",
-     w(("Paimon", "Wow, it's so breezy! Just rowing from one side to the"
-        " other would probably leave Paimon out of breath…")), "Paimon",
-     "Just rowing from one side of the breakwater to the other would leave"
-     " anyone out of breath, honestly.", "new"),
+     w(("Paimon", "Ha, what a crossing! The old ferry pitched all night and"
+        " nearly threw our lanterns into the harbor…")), "Paimon",
+     "The old ferry pitched about near the breakwater all night,"
+     " honestly.", "new"),
 ]
 
 
