@@ -56,15 +56,23 @@ HP_RADIUS, HP_GAIN, HP_OFFSET = 12, 3.0, 40
 
 
 def _flatten_background(data):
-    """Bytes of an image → grayscale ndarray with the background removed."""
+    """Bytes of an image → grayscale ndarray with the background removed.
+
+    In-place arithmetic on one float32 buffer: the expression form
+    allocated five full-frame float32 intermediates (~40 MB per 1080p
+    frame at 6 fps); `out=` reuses the first copy for all of them. Same
+    values to the bit — float32 ops in the same order."""
     from PIL import Image, ImageFilter
     import numpy as np
     with Image.open(io.BytesIO(data)) as img:
         g = img.convert("L")
         bg = g.filter(ImageFilter.GaussianBlur(HP_RADIUS))
-        a = (np.asarray(g, dtype=np.float32)
-             - np.asarray(bg, dtype=np.float32))
-    return np.clip(a * HP_GAIN + HP_OFFSET, 0, 255).astype(np.uint8)
+        a = np.asarray(g, dtype=np.float32)      # dtype conversion = a copy
+        np.subtract(a, np.asarray(bg, dtype=np.float32), out=a)
+    np.multiply(a, HP_GAIN, out=a)
+    np.add(a, HP_OFFSET, out=a)
+    np.clip(a, 0, 255, out=a)
+    return a.astype(np.uint8)
 
 
 def _complete_image(data):
