@@ -1,10 +1,10 @@
 """Pins the two things a Genshin frame draws that are NOT speech: the role
 line under a nameplate, and a menu's button hints.
 
-Both were read aloud. Blanche's title arrived from Vision in two pieces
-("Shopkeeper," + "Mondstadt General Goods"), and a piece of a centered line
+Both were read aloud. A shopkeeper's title arrived from Vision in two
+pieces ("Shopkeeper," + the store name), and a piece of a centered line
 is not itself centered, so the per-box axis test cleared neither and the
-title was spoken as the opening words of "Please have a look around." The
+title was spoken as the opening words of the dialogue under it. The
 Convert screen has no such tell at all: its "Conversion Material" banner
 sits in the plate band and the item grid under it reads as dialogue rows,
 leaving only the bottom-right hints ("Item Details", "Convert", "Leave") to
@@ -40,12 +40,12 @@ LINE = block("Please have a look around.", 0.500, 0.167, w=0.20, h=0.031)
 # (name, frame, expected speaker, expected dialogue)
 FRAMES = [
     ("title read whole",
-     [PLATE, block("Shopkeeper, Mondstadt General Goods", 0.498, 0.198,
+     [PLATE, block("Shopkeeper, Harborside General Goods", 0.498, 0.198,
                    w=0.19, h=0.019), LINE] + CHROME,
      "Blanche", "Please have a look around."),
     ("title split by Vision",
      [PLATE, block("Shopkeeper,", 0.430, 0.198, w=0.055, h=0.019),
-      block("Mondstadt General Goods", 0.530, 0.198, w=0.125, h=0.019),
+      block("Harborside General Goods", 0.530, 0.198, w=0.125, h=0.019),
       LINE] + CHROME,
      "Blanche", "Please have a look around."),
     # no role line at all: the line under the plate is still the line
@@ -54,10 +54,10 @@ FRAMES = [
     # a two-row line: the row under the role line is NOT swallowed with it
     ("title above a two-row line",
      [PLATE, block("Shopkeeper,", 0.430, 0.198, w=0.055, h=0.019),
-      block("Mondstadt General Goods", 0.530, 0.198, w=0.125, h=0.019),
-      block("Hey there! We have quality goods", 0.500, 0.170, w=0.24),
+      block("Harborside General Goods", 0.530, 0.198, w=0.125, h=0.019),
+      block("Hey there! We have quality rope", 0.500, 0.170, w=0.24),
       block("at honest prices!", 0.500, 0.140, w=0.14)] + CHROME,
-     "Blanche", "Hey there! We have quality goods at honest prices!"),
+     "Blanche", "Hey there! We have quality rope at honest prices!"),
     # --- world dialogue: a companion talking while you walk ---------------
     # No box, no Auto/Confirm, full HUD on screen, and the nameplate drawn
     # LOWER than the boxed layout's. Measured off captures\shots\98.json
@@ -70,12 +70,12 @@ FRAMES = [
     # as an unknown speaker, because there is no chrome here either.
     ("world dialogue (no box, no chrome)",
      [block("Paimon", 0.5003, 0.2097, w=0.0557, h=0.0324),
-      block("These floaty lil' guys... They won't jump us out of nowhere, "
-            "will they?", 0.5008, 0.1718, w=0.4505, h=0.0306),
+      block("These bobbing lil' buoys... They won't tip us over out of "
+            "nowhere, will they?", 0.5008, 0.1718, w=0.4505, h=0.0306),
       block("Lv.90", 0.4198, 0.0819, w=0.025, h=0.0194),
       block("Chat", 0.0807, 0.0597, w=0.024, h=0.0231),
       block("UID: 100000000", 0.9221, 0.0153, w=0.0974, h=0.0269)],
-     "Paimon", "These floaty lil' guys... They won't jump us out of "
+     "Paimon", "These bobbing lil' buoys... They won't tip us over out of "
      "nowhere, will they?"),
     # The line sits 0.0370 below the plate's baseline against a
     # SUBTITLE_MAX_DROP of 0.0360, is centred on the plate to 0.0005, and on
@@ -94,8 +94,8 @@ FRAMES = [
     ("convert menu",
      [block("Conversion Material", 0.466, 0.273, w=0.096, h=0.020),
       block("Change", 0.898, 0.273, w=0.045, h=0.020),
-      block("Shadow of…", 0.082, 0.180, w=0.055, h=0.018),
-      block("Dragon Lo…", 0.145, 0.180, w=0.055, h=0.018),
+      block("Shard of…", 0.082, 0.180, w=0.055, h=0.018),
+      block("Driftwood…", 0.145, 0.180, w=0.055, h=0.018),
       block("9/1", 0.551, 0.177, w=0.020, h=0.016),
       block("1/1", 0.610, 0.177, w=0.020, h=0.016),
       block("Item Details", 0.752, 0.079, w=0.065, h=0.018),
@@ -126,7 +126,7 @@ CHOICE_ICON_CASES = [
 def choice_frame(option_text):
     return [
         block("Paimon", 0.5, 0.212, w=0.057, h=0.028),
-        block("Looks like you get what you pay for, huh!",
+        block("Looks like we get what we haul in, huh!",
               0.5, 0.155, w=0.45, h=0.033),
         {"text": option_text, "confidence": 1.0,
          "x": 0.669, "y": 0.25, "w": 0.15, "h": 0.028},
