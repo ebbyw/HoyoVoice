@@ -158,9 +158,9 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
                                             // box's text pixels that may move
     "anchors": true,                        // match game-chrome templates
                                             // (log + ROI evidence)
-    "anchor_roi": false,                    // crop OCR to the matched screen's
-                                            // ROI (off until the Windows
-                                            // ocr_ms win is measured)
+    "anchor_roi": true,                     // crop OCR to the matched screen's
+                                            // ROI (measured ~42% off Windows
+                                            // ocr_ms; false = full frames)
     "late_yield": true,                     // stop talking if game VO starts
     "dashboard_bind": "127.0.0.1"           // "0.0.0.0" to reach the dashboard
   }                                         // from other machines you trust —
