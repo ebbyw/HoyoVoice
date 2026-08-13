@@ -336,6 +336,7 @@ voice_import = {"state": "", "voice": None, "msg": ""}
 # start paused — resume from the dashboard (replays auto-resume)
 observing = {"on": os.environ.get("HOYOVOICE_AUTORESUME") == "1"}
 stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
+         "fused_reads": 0,
          "synth_ms": deque(maxlen=100), "ocr_ms": deque(maxlen=200),
          "anchor_ms": deque(maxlen=200), "started": time.time()}
 
@@ -478,6 +479,7 @@ def metrics():
                           if stats["anchor_ms"] else 0),
         "roi_crops": anchor_state["crops"],
         "lost_frames": lost_frames["n"],
+        "fused_reads": stats["fused_reads"],
         "lines_per_min": round(stats["spoken"] / mins, 1),
     }
 
@@ -2303,6 +2305,29 @@ def main():
             # which game's layout to read this frame with (sticky; only
             # switches on sustained chrome from another game)
             screens = game.observe(blocks)
+
+            # A read that fused two dialogue rows into one box is not this
+            # line — it is the two rows woven together (see
+            # profiles.base.fused_rows). Drop the frame the way a lost one
+            # is dropped: the clean read alternates with it on the same
+            # motionless screen, usually within a second, and a dropped
+            # frame costs nothing but that wait. Deliberately NOT a partial
+            # rescue — there is no honest way to unweave the box, and the
+            # text it produced was spoken forty times as if it were the
+            # game's own. Never on a REPLAY: those blocks came from a read
+            # already judged here.
+            if fresh_read and screens.fused_rows(blocks):
+                lost_frames["n"] += 1
+                stats["fused_reads"] += 1
+                latest_ocr["blocks"] = []       # never replay a fused read
+                if stats["fused_reads"] % 12 == 1:
+                    # visible in the log, and rate-limited: the alternation
+                    # runs for as long as the player leaves the line up
+                    add_event("OCR fused two rows — frame dropped", "yield",
+                              None, " · ".join(b["text"] for b in blocks
+                                               if screens.is_dialogue_seed(b)),
+                              shot=True)
+                continue
 
             # --- Reading-mode screens (Quick Read books, info/profile
             # screens, message/group-chat panels): incremental reading ---

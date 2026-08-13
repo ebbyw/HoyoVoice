@@ -82,6 +82,14 @@ class Genshin(Profile):
     # (0.194/0.164/0.134), while fragments of one row agree to ~0.001
     LINE_H = 0.027
 
+    # Two rows fused into one observation (see base.fused_rows). A real
+    # Genshin dialogue row measures 0.031-0.034, and the tallest single row
+    # in 6673 recorded blocks was 0.051 — a slightly loose box around one
+    # line, still plainly one line. Every fusion measured 0.055 or more, and
+    # the two-row fusions this was written for all measured 0.067 exactly.
+    # 0.054 sits in the gap with room on both sides.
+    FUSED_ROW_H = 0.054
+
     # Nameplate. Genshin draws it at two heights, and they are separate
     # clusters rather than a spread:
     #
