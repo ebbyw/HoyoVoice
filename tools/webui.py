@@ -699,8 +699,22 @@ def start_webui(shared, port=DASHBOARD_PORT):
         "dashboard_bind", "127.0.0.1")
 
     # fail LOUDLY if the port is taken (usually an orphaned instance) —
-    # otherwise the serving thread dies silently and the app runs headless
+    # otherwise the serving thread dies silently and the app runs headless.
+    #
+    # SO_REUSEADDR because that is what the real server does (werkzeug sets
+    # it), and without it the probe answers a DIFFERENT question than the
+    # one that matters. A dashboard tab left open holds established
+    # connections; when the app exits, those sockets sit in TIME_WAIT for a
+    # minute or two, and a plain bind() to the listening address fails with
+    # EADDRINUSE even though nothing is listening. Restarting promptly with
+    # the dashboard open — the normal way to restart after a fix — killed
+    # the new instance at startup with "another HoyoVoice instance is still
+    # running" while no such instance existed (2026-08-12, twice).
+    # SO_REUSEADDR steps over the TIME_WAIT remains and still refuses a port
+    # some other process is really LISTENing on, which is the case this
+    # check was written for.
     probe = socket.socket()
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     try:
         probe.bind((bind if bind != "0.0.0.0" else "", port))
         probe.close()
