@@ -101,7 +101,7 @@ def _ncc(window, tmpl):
     return float(scores[idx]), (int(idx[1]), int(idx[0]))
 
 
-def crop_frame(path, roi, out_path):
+def crop_frame(path, roi, out_path, scale=1):
     """Write the ROI of a full-res frame to out_path and return the crop
     rect (cx0, cy0, cw, ch) in full-frame Vision space — the exact rect
     remap_box() needs — or None when the frame can't be read whole (torn
@@ -112,7 +112,17 @@ def crop_frame(path, roi, out_path):
     second pass softens exactly the small glyphs the crop exists to read.
     compress_level=1 keeps the encode a few ms. The returned rect is
     re-normalized from the PIXEL rect, so remap stays exact under the
-    int() rounding of the crop edges."""
+    int() rounding of the crop edges.
+
+    `scale` enlarges what is written. Both recognizers work from a fixed
+    internal resolution, and a 1080p capture spends its pixels on the game
+    world — a Genshin dialogue row is ~33px tall — so handing them a bigger
+    image is the cheapest accuracy lever there is: no new engine, no new
+    dependency, one resize. It costs nothing in remapping, because the
+    daemon normalizes to the image it was handed and the returned rect
+    describes the CROP, not its pixels. Lanczos rather than bicubic:
+    stroke edges are what separates an "l" from an "I", and bicubic softens
+    them. Measured by tools/ocr_bench.py."""
     try:
         data = Path(path).read_bytes()
     except OSError:
@@ -126,8 +136,11 @@ def crop_frame(path, roi, out_path):
         x0, y0, x1, y1 = _to_px(roi, W, H)
         if x1 - x0 < 8 or y1 - y0 < 8:
             return None
-        img.crop((x0, y0, x1, y1)).save(out_path, format="PNG",
-                                        compress_level=1)
+        crop = img.crop((x0, y0, x1, y1))
+        if scale != 1:
+            crop = crop.resize((crop.width * scale, crop.height * scale),
+                               Image.Resampling.LANCZOS)
+        crop.save(out_path, format="PNG", compress_level=1)
     except Exception:
         return None
     return (x0 / W, (H - y1) / H, (x1 - x0) / W, (y1 - y0) / H)
