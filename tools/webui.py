@@ -20,6 +20,39 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 from profiles import PROFILES, profile_choices
 
 VERSION = "0.11.0"
+
+
+def _build_id():
+    """VERSION plus the git commit it is actually running from —
+    "0.11.0 (6cbf22b)", with "-dirty" when tracked files differ from it.
+
+    VERSION only changes at release time, so a mid-cycle session
+    otherwise reports the PREVIOUS release's number: the 2026-08-13
+    Windows log said 0.10.4 while running ~40 commits past it, and the
+    log couldn't say which fixes were actually in play. Git is how both
+    machines deploy (fix in repo, push, pull), so it's present; anything
+    going wrong falls back to the bare version. -uno on the dirty check:
+    tracked modifications only — untracked local files (voices.json is
+    gitignored anyway, but notes and scratch aren't) don't mean the CODE
+    differs from the sha."""
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    kw = {"cwd": root, "capture_output": True, "text": True, "timeout": 5}
+    if sys.platform == "win32":
+        kw["creationflags"] = 0x08000000            # CREATE_NO_WINDOW
+    try:
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                             **kw).stdout.strip()
+        if not sha:
+            return VERSION
+        dirty = subprocess.run(["git", "status", "--porcelain", "-uno"],
+                               **kw).stdout.strip()
+        return f"{VERSION} ({sha}{'-dirty' if dirty else ''})"
+    except Exception:
+        return VERSION
+
+
+BUILD = _build_id()
 # single source of truth (hoyovoice.py reads it); env override lets
 # tools/replay.py run beside a live instance without a port collision
 DASHBOARD_PORT = int(os.environ.get("HOYOVOICE_PORT", "8470"))
@@ -432,11 +465,11 @@ def start_webui(shared, port=DASHBOARD_PORT):
 
     @app.get("/")
     def index():
-        return PAGE.replace("__VERSION__", VERSION)
+        return PAGE.replace("__VERSION__", BUILD)
 
     @app.get("/voices")
     def voices_page():
-        return VOICES_PAGE.replace("__VERSION__", VERSION)
+        return VOICES_PAGE.replace("__VERSION__", BUILD)
 
     @app.get("/shots/<path:name>")
     def shot(name):
@@ -472,7 +505,7 @@ def start_webui(shared, port=DASHBOARD_PORT):
         the text is searchable and complete."""
         m = shared["metrics_fn"]()
         out = [
-            f"HoyoVoice {VERSION} session log",
+            f"HoyoVoice {BUILD} session log",
             f"generated   {datetime.now().isoformat(timespec='seconds')}",
             f"platform    {platform.platform()}  python {platform.python_version()}",
             f"observing   {shared['observing']['on']}   recording "
