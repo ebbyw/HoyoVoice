@@ -150,11 +150,13 @@ python hoyovoice.py log
   anchors self-calibrated at `auto=1.00` and zero lost frames.
   `anchor_roi` now defaults ON; `false` in settings restores full
   frames.
-- Next session here, check the startup log for the 2-D gray trial's
-  verdict: `[ocrd_win] gray input verified` (stack copy dropped) or
-  `gray input differs` (kept). Either is fine — it self-decides — but the
-  verdict is worth knowing, and a `differs` on identical-looking text
-  would be interesting.
+- ~~Check the startup log for the 2-D gray trial's verdict~~ **Done
+  2026-08-13** (09:56 session, hoyovoice-20260813-095613.log): `gray
+  input verified identical on 3 frames — dropping the RGB stack copy`,
+  on DirectML with `rec_en.onnx`. This box reads the 2-D gray array
+  identically, so the per-frame stack copy is gone here. The trial
+  still re-runs every session by design — a rapidocr upgrade that
+  changes the answer flips it back to the stack on its own.
 
 - `Player.playing` still reads sounddevice's module-level stream
   (`sd.get_stream().active`), and `play()` still goes through `sd.play` — now
