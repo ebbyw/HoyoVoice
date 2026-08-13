@@ -145,6 +145,11 @@ python hoyovoice.py log
   still owed: replay a scroll-heavy recording here with `anchor_roi: true`
   and compare `ocr_ms` on vs off. The setting stays off by default until
   this is done.
+- Next session here, check the startup log for the 2-D gray trial's
+  verdict: `[ocrd_win] gray input verified` (stack copy dropped) or
+  `gray input differs` (kept). Either is fine — it self-decides — but the
+  verdict is worth knowing, and a `differs` on identical-looking text
+  would be interesting.
 
 - `Player.playing` still reads sounddevice's module-level stream
   (`sd.get_stream().active`), and `play()` still goes through `sd.play` — now

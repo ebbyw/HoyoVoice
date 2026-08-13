@@ -68,6 +68,16 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   pass, twice per line; and the Windows OCR daemon's background
   flattening does its arithmetic in-place (bit-identical, ~32 MB of
   float32 intermediates per 1080p frame no longer allocated).
+
+  The Windows daemon also stops stacking the gray frame into RGB — once
+  it has proven that safe on YOUR machine. Whether RapidOCR reads a 2-D
+  gray array identically to the 3-channel stack varies by version, so
+  the first three texty frames of a session are read both ways: results
+  byte-identical → the ~6 MB stack copy is dropped for the session
+  (`[ocrd_win] gray input verified` in the log); any difference or
+  error → the stack stays, permanently, and the caller always sees the
+  stacked result while the trial runs. The decision logic is pinned by
+  `tools/test_gray_input.py`.
 - **`ocr_ms` includes the ROI crop's cost.** The Windows on-vs-off
   measurement that gates `anchor_roi` defaulting on compares `ocr_ms` —
   which excluded the crop's own decode + PNG encode, i.e. the cost side

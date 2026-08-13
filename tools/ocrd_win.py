@@ -151,6 +151,17 @@ class RapidEngine:
         self.np = np
         self.mode = "cpu"
         self.empty_run = 0        # consecutive frames both passes read nothing
+        # 2-D gray input: the flattened frame is one gray plane stacked
+        # into RGB purely because that shape is known-good. Whether THIS
+        # machine's RapidOCR reads the bare 2-D array identically is
+        # checked on the first GRAY_TRIALS texty frames (double OCR cost
+        # on just those frames): byte-identical results flip gray_ok True
+        # and the ~6 MB stack copy is dropped for the session; any
+        # difference or error locks the stack in. Stacked is always the
+        # answer handed back while undecided — the trial can only ever
+        # remove a copy, never change what the caller sees.
+        self.gray_ok = None
+        self.gray_trials = 0
         kw = _rec_override()
         if kw:
             print(f"[ocrd_win] rec model: "
@@ -167,6 +178,46 @@ class RapidEngine:
                       file=sys.stderr, flush=True)
         self.ocr = RapidOCR(**kw)
 
+    # Texty frames the 2-D gray result must match the stacked result on,
+    # identically, before the stack copy is dropped. Three, not one: a
+    # single frame can't tell "identical path" from "identical by luck on
+    # easy text".
+    GRAY_TRIALS = 3
+
+    def _detect(self, flat):
+        """One detector pass over the flattened frame — through the 2-D
+        gray array once this machine's engine has proven it reads that
+        identically, through the 3-channel stack until then (and forever,
+        on the first disagreement)."""
+        np = self.np
+        if self.gray_ok is True:
+            result, _ = self.ocr(flat)
+            return result
+        result, _ = self.ocr(np.stack([flat] * 3, axis=-1))
+        if self.gray_ok is None and result:
+            try:
+                gray, _ = self.ocr(flat)
+            except Exception:
+                gray = None
+            same = (gray is not None and len(gray) == len(result)
+                    and all(t1 == t2 and abs(s1 - s2) < 1e-6
+                            and np.array_equal(np.asarray(b1),
+                                               np.asarray(b2))
+                            for (b1, t1, s1), (b2, t2, s2)
+                            in zip(gray, result)))
+            if same:
+                self.gray_trials += 1
+                if self.gray_trials >= self.GRAY_TRIALS:
+                    self.gray_ok = True
+                    print("[ocrd_win] gray input verified identical on "
+                          f"{self.GRAY_TRIALS} frames — dropping the RGB "
+                          "stack copy", file=sys.stderr, flush=True)
+            else:
+                self.gray_ok = False
+                print("[ocrd_win] gray input differs — keeping the RGB "
+                      "stack", file=sys.stderr, flush=True)
+        return result
+
     def recognize(self, path):
         data = read_frame_bytes(path)
         if data is None:
@@ -175,7 +226,7 @@ class RapidEngine:
             W, H = img.size
         # RapidOCR takes an ndarray directly, so no re-encode round trip
         flat = _flatten_background(data)
-        result, _ = self.ocr(self.np.stack([flat] * 3, axis=-1))
+        result = self._detect(flat)
         if not result:
             # Safety net for screens the flattening filter hurts — but not
             # on every frame. Textless frames arrive in long runs (loading,
