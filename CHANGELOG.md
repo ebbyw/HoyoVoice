@@ -9,6 +9,23 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **The Windows engine no longer runs RapidOCR's per-row angle
+  classifier — which was intermittently reading rows upside-down.**
+  Session shots from 2026-08-13 caught `golden glow of "friendship."`
+  coming back as `ajuspuerd. do Mons uapios` at conf 0.6, on a frame
+  whose neighbors read the same row upright at 0.96 — the classifier
+  (cls, running on DirectML) had flipped it 180°. Game UI text is
+  always drawn upright, so cls can only ever hurt here, and this is the
+  strongest lead yet on the long-open book-page bug (`hum`, `Ium`,
+  `Culld.` rows spoken from static pages — same one-row-garbage class).
+  Every engine call now passes `use_cls=False` and the cls DirectML
+  session is no longer requested; an engine too old to accept the
+  keyword keeps its old behavior instead of killing the daemon. Also
+  hardened the gray-input trial against engines that report scores as
+  strings (newer rapidocr does) — that comparison sat outside its
+  try-block and a bare subtraction was an uncaught daemon-killing
+  TypeError.
+
 - **`Onigiri` → "oh-nee-GHEE-ree", `Tumaini` → "too-MY-nee".** The rice
   ball is wrong on both engines and worst on Windows: misaki keeps the hard
   g but clips the third vowel (`ˌOniɡˈɪɹi`, "oh-nee-GIH-ree") while espeak
