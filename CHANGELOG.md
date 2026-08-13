@@ -62,6 +62,11 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   rather than Python lists (~80 MB of pointers saved), and a posting list
   longer than 3000 is skipped as a trigram that names nothing.
 
+  A repair is logged once per LINE, not once per stabilized read of it —
+  the line on screen stabilizes repeatedly as OCR jitters and every variant
+  snaps to the same place, which on the first session with a real map
+  printed eight identical repairs for a line that was spoken once.
+
   **`python tools/textmap.py <map.json> --nickname <name>` scores a dump
   against the lines this install has actually read**, which is the only way
   to tell a current dump from a stale one before trusting it. On the dumps
