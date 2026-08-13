@@ -1011,6 +1011,37 @@ def sentences(text):
     return out or [text]
 
 
+def reader_chunks(text, target=240):
+    """A readable page cut into sentence groups the pump can speak as it
+    synthesizes, instead of synthesizing the whole page before any sound.
+
+    A full inventory page is ~340 words; synthesized as one utterance the
+    voice starts only after every sentence of it has run through Kokoro —
+    several seconds of dead air on this Mac, more on Windows, and exactly
+    the silence that reads as "it isn't going to read this" (a session sat
+    3s on rec_20260812_201800 before the first word, and the user's hand
+    was already on the scroll wheel). The first chunk is one sentence, so
+    the first sound costs one sentence's synth; later chunks pack to
+    ~240 chars — small enough that the synth-ahead in the pump finishes
+    well inside the previous chunk's playback, big enough that a page
+    stays a handful of clips rather than twenty.
+
+    Boundaries are sentence ends (the sentences() split Kokoro already
+    gets), so a chunk handoff lands where a pause belongs anyway; the
+    pump's synth-ahead is what keeps that pause from stretching."""
+    sents = sentences(text)
+    chunks, cur, size = [], [], 0
+    for s in sents:
+        if cur and (not chunks or size + len(s) > target):
+            chunks.append(" ".join(cur))
+            cur, size = [], 0
+        cur.append(s)
+        size += len(s) + 1
+    if cur:
+        chunks.append(" ".join(cur))
+    return chunks
+
+
 def tts_text(text):
     """The whole TTS-side transform of a line, flattened back to one string
     for logs: respellings, and stage directions with a sound file shown as
@@ -2119,6 +2150,13 @@ def main():
     reader_prev = set()                 # last frame's panel rows (settle check)
     reader_closed = True                # panel-closed handling already done
     read_queue = deque()
+    # The item being spoken off read_queue, unpacked into sentence chunks
+    # (reader_chunks). One queue item stays one logged event, one spoken
+    # count and one dedupe entry — the chunks only govern how much text
+    # each synth call waits on before there is sound.
+    read_active = None                  # {chunks, spk, voice, speed, kind,
+                                        #  text, logged}
+    read_next = None                    # (audio, speed) synthesized ahead
     chat_senders = []                   # session canon: OCR jitters the tiny
                                         # sender labels (Ashveil/Ashvell/Ashval)
 
@@ -2523,6 +2561,12 @@ def main():
                     reader_closed = True
                     dropped = len(read_queue)
                     read_queue.clear()
+                    # the item mid-speech goes too: its unspoken chunks and
+                    # any audio synthesized ahead belong to the closed panel
+                    if read_active is not None:
+                        dropped += 1
+                    read_active = None
+                    read_next = None
                     if speech.qr_playing:
                         print(f"[reader panel closed — stopping mid-read, "
                               f"{dropped} queued dropped]", flush=True)
@@ -2543,21 +2587,47 @@ def main():
                     # later frame is compared AGAINST.
                     reader_prev = set()
 
-            # pump the reading queue when the voice is idle
-            if read_queue and not speech.playing:
+            # pump the reading queue. An item is spoken in sentence chunks
+            # (reader_chunks): the first chunk goes to the synthesizer
+            # alone, so the voice starts after one sentence's synth rather
+            # than a whole page's, and the NEXT chunk synthesizes while the
+            # current one is still sounding, so a handoff costs a loop
+            # iteration, not a synth. Event, spoken count and dedupe all
+            # stay per ITEM — the chunks are a synthesis schedule, not new
+            # lines.
+            if read_queue and read_active is None:
                 spk, text = read_queue.popleft()
                 voice, base_speed = pick_voice(spk)
-                audio, speed, _ = speech.synth(text, voice, base_speed)
+                read_active = {
+                    "chunks": deque(reader_chunks(text)), "spk": spk,
+                    "voice": voice, "speed": base_speed, "text": text,
+                    "kind": ("chat" if spk else
+                             "chat notice" if chat is not None
+                             else screens.READER_LABEL),
+                    "logged": False}
+            if read_active is not None and read_next is None:
+                if read_active["chunks"]:
+                    chunk = read_active["chunks"].popleft()
+                    audio, speed, _ = speech.synth(
+                        chunk, read_active["voice"], read_active["speed"])
+                    if audio is not None and len(audio):
+                        read_next = (audio, speed)
+                elif not speech.qr_playing:
+                    read_active = None      # last chunk has finished sounding
+            if read_next is not None and not speech.playing:
+                audio, speed = read_next
+                read_next = None
                 speech.play(audio, qr=True)
-                stats["spoken"] += 1
-                last_handled_norm = normalize_text(text)   # suppress its repeats
-                kind = ("chat" if spk else
-                        "chat notice" if chat is not None
-                        else screens.READER_LABEL)
-                add_event(kind, "spoken", spk, text, voice, speed,
-                          can_replay=True, shot=True)
-                print(f"[{kind}{' ' + spk if spk else ''} → {voice}] "
-                      f"{text[:70]}", flush=True)
+                if not read_active["logged"]:
+                    read_active["logged"] = True
+                    stats["spoken"] += 1
+                    spk, text = read_active["spk"], read_active["text"]
+                    kind, voice = read_active["kind"], read_active["voice"]
+                    last_handled_norm = normalize_text(text)  # suppress repeats
+                    add_event(kind, "spoken", spk, text, voice, speed,
+                              can_replay=True, shot=True)
+                    print(f"[{kind}{' ' + spk if spk else ''} → {voice}] "
+                          f"{text[:70]}", flush=True)
             if qr is not None or chat is not None:
                 continue
 
