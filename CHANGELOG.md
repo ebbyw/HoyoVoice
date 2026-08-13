@@ -8,6 +8,34 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
 
 ### Added
 
+- **Snapping a read line to the game's own text (`settings.textmap`).**
+  The recognizer's everyday errors are small and local — `Ves.` for `Yes.`,
+  `Choosel"mission budget"` for `Choose "mission budget"`, a full stop that
+  never arrived — and each one costs twice: the synthesizer says the wrong
+  thing, and dedupe sees a line it has never seen and reads it again. Point
+  `settings.textmap` at a file of the game's dialogue strings and a settled
+  line is matched back to the one it came from before the log, dedupe,
+  casting or synthesis sees it, which fixes both at once: a repaired line
+  MATCHES the next read of itself, so the jitter dies at the source rather
+  than being absorbed downstream.
+
+  A match must score 0.82 and beat the runner-up by 0.05, or the read is
+  kept exactly as it is. Measured on the recorded sessions — 377 distinct
+  lines as the map, 164 real misreads of them as queries — that repaired
+  113 to exactly the right line, refused 51, and snapped **none** to a
+  wrong line. The refusals include the fused-rows catastrophe (0.57 against
+  its own line): the top match is right there and is still refused, because
+  nothing about accepting 0.57 generalizes to a map three orders of
+  magnitude larger, and a confident wrong sentence is a worse failure than
+  an obviously garbled one.
+
+  Lookup is a length-bucketed trigram index over the rarest two dozen
+  trigrams of the query, then a real comparison of the top 40 — 11 ms
+  against a 100k-line map (66 ms for the naive version), paid once per
+  spoken line rather than once per frame. Plain text, a JSON array, or a
+  JSON object of id → line. **No such file ships here**: the games' text is
+  HoYoverse's. Unset, or unreadable, and nothing changes.
+
 - **`tools/ocr_bench.py` — the OCR is measurable now.** Every reader fix so
   far has been signature-by-signature (fused rows, a bullet glyph welded to
   a word, garbled re-reads) because there was no way to ask whether the
