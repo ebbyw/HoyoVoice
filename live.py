@@ -65,6 +65,36 @@ if not VOICES_PATH.exists():                      # first run: seed from example
     shutil.copy(ROOT / "voices.example.json", VOICES_PATH)
 VOICES = json.loads(VOICES_PATH.read_text())
 
+
+def save_voices():
+    """Write voices.json, keeping settings added by hand since we loaded it.
+
+    The app rewrites this file whenever casting changes — an auto-cast, a
+    dashboard reassignment, an installed voice pack — from its in-memory
+    copy, which is the file as it was at STARTUP. Editing it by hand during
+    a session therefore lasted only until the next auto-cast, silently:
+    settings.textmap and settings.player_name were added at 20:03 on
+    2026-08-12, wiped by the session that had been running since 19:50, and
+    the restart that was supposed to pick them up read a file that no
+    longer had them.
+
+    Re-reading first and keeping any settings key we do not have makes a
+    hand edit survive. Only additions, and only under `settings`: a key the
+    app knows about is the app's to write (the dashboard's device pickers
+    and toggles live there too), and casting is rewritten wholesale by
+    design.
+    """
+    try:
+        on_disk = json.loads(VOICES_PATH.read_text()).get("settings", {})
+    except (OSError, ValueError):
+        on_disk = {}
+    settings = VOICES.setdefault("settings", {})
+    for k, v in on_disk.items():
+        if k not in settings:
+            settings[k] = v
+    VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+
+
 # Installed voice packs (dashboard "Add voice file"). The canonical copy of
 # every one lives here, so casting survives the original download being
 # deleted, and a replay's throwaway STATE dir starts with none of them.
@@ -1248,7 +1278,7 @@ def auto_cast(speaker, gender):
                          if c["voice"] == v) for v in pool}
         voice = min(pool, key=counts.get)
     VOICES["characters"][speaker] = {"voice": voice, "speed": 1.0, "auto": True}
-    VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+    save_voices()
     print(f"[auto-cast] {speaker} → {voice} ({gender} guess)", flush=True)
     return voice
 
@@ -1295,7 +1325,7 @@ def register_custom_voices(speech):
             dropped = True
             print(f"[voice] dropped {voice_id}: {exc}", flush=True)
     if dropped:
-        VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+        save_voices()
 
 
 def install_voice(speech, src, name=None, key=None, source=None):
@@ -1332,7 +1362,7 @@ def install_voice(speech, src, name=None, key=None, source=None):
         # posix separators: voices.json is portable between the two platforms
         "file": dest.relative_to(STATE).as_posix(),
         "source": source or Path(src).name}
-    VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+    save_voices()
     print(f"[voice] installed {voice_id} from {Path(src).name}", flush=True)
     return voice_id, audio
 
@@ -1771,7 +1801,7 @@ def handle_commands(speech, recent_lines):
             VOICES["characters"].setdefault(char, {})["voice"] = voice
             VOICES["characters"][char].setdefault("speed", 1.0)
             VOICES["characters"][char].pop("auto", None)   # now user-chosen
-            VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+            save_voices()
             lexicon_stale["flag"] = True
             print(f"[cast] {char} → {voice}", flush=True)
             for e in reversed(events):
@@ -1797,7 +1827,7 @@ def handle_commands(speech, recent_lines):
                 av.append(char)
             if not muted and char in av:
                 av.remove(char)
-            VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+            save_voices()
             print(f"[mute] {char} = {muted}", flush=True)
         elif cmd[0] == "record":
             record_request["want"] = cmd[1]
@@ -1809,8 +1839,7 @@ def handle_commands(speech, recent_lines):
                 p.mkdir(parents=True, exist_ok=True)
                 REC_DIR["path"] = p
                 VOICES.setdefault("settings", {})["recordings_dir"] = cmd[1]
-                VOICES_PATH.write_text(
-                    json.dumps(VOICES, indent=2, ensure_ascii=False))
+                save_voices()
                 print(f"[recordings dir] {p}", flush=True)
             except OSError as e:
                 add_event(f"bad recordings dir: {e}", "yield", None, cmd[1])
@@ -1820,7 +1849,7 @@ def handle_commands(speech, recent_lines):
             if char in VOICES.get("always_voiced", []):
                 VOICES["always_voiced"].remove(char)
             unknown_speakers.discard(char)
-            VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+            save_voices()
             if UNKNOWN_LOG.exists():
                 UNKNOWN_LOG.write_text("\n".join(
                     n for n in UNKNOWN_LOG.read_text().splitlines()
@@ -1888,8 +1917,7 @@ def handle_commands(speech, recent_lines):
                 speech.tts.forget_voice(voice_id)
                 (STATE / pack["file"]).unlink(missing_ok=True)
                 release_voice(voice_id)
-                VOICES_PATH.write_text(
-                    json.dumps(VOICES, indent=2, ensure_ascii=False))
+                save_voices()
                 print(f"[voice] removed {voice_id}", flush=True)
                 voice_import.update(state="ok", voice=None,
                                     msg=f"removed {voice_id}")
@@ -1914,7 +1942,7 @@ def handle_commands(speech, recent_lines):
         elif cmd[0] == "game":
             p = game.set_setting(cmd[1])
             VOICES.setdefault("settings", {})["game"] = cmd[1]
-            VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+            save_voices()
             print(f"[game] {cmd[1]} (reading as {p.label})", flush=True)
         elif cmd[0] == "observe":
             observing["on"] = cmd[1]
@@ -2138,8 +2166,7 @@ def main():
                 if out is not None:
                     DEVICES["output"] = out
                     VOICES.setdefault("settings", {})["output_device"] = out
-                    VOICES_PATH.write_text(
-                        json.dumps(VOICES, indent=2, ensure_ascii=False))
+                    save_voices()
                     print(f"[devices] output={out or 'system default'}",
                           flush=True)
                 capture = {k: v for k, v in want.items() if v}
@@ -2151,8 +2178,7 @@ def main():
                     VOICES.setdefault("settings", {}).update(
                         video_device=DEVICES["video"],
                         audio_device=DEVICES["audio"])
-                    VOICES_PATH.write_text(
-                        json.dumps(VOICES, indent=2, ensure_ascii=False))
+                    save_voices()
                     print(f"[devices] video={DEVICES['video']} "
                           f"audio={DEVICES['audio']}", flush=True)
                     with video_lock:    # waits out an in-flight swap
