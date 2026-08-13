@@ -95,7 +95,7 @@ FIXES = {
     # ends on a schwa, and "Stoo-zhuh" (stˈuʒˈʌ) buys the same stress for
     # the right vowel.
     "Stuzha": "Stoozha",
-    # An Easybreeze Holiday Resort NPC — 28 lines in the 6.x TextMap, and on
+    # An Easybreeze Holiday Resort NPC — a minor speaking role, and on
     # neither playable roster. Both engines read the ai as /eɪ/: tˈumAni,
     # "too-MAY-nee". The user's own spelling is exactly right and is kept as
     # written: "Too-mai-knee" is tˈumˈInˈi on both, and the silent k costs

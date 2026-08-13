@@ -159,13 +159,13 @@ def run():
     #     union is nearly the whole screen. One more glyph of the typewriter
     #     must still open the gate: judged as a single averaged region it
     #     did not, the blocks replayed stale, and the line was spoken
-    #     mid-word ("…friends with the great sh").
+    #     mid-word ("…friends with the harbor pi").
     #     live.py hands the gate the line's own blocks (classify's "boxes"),
     #     so that is what this walks the typewriter through.
     g8 = ChangeGate()
-    typing = ["I know that you are friends with the great",
-              "I know that you are friends with the great sh",
-              "I know that you are friends with the great shaman"]
+    typing = ["I know that you are friends with the harbor",
+              "I know that you are friends with the harbor pi",
+              "I know that you are friends with the harbor pilot"]
     make_frame(frame, text=typing[0], daylight=True, chrome=True)
     g8.unchanged(frame, BLOCKS)                           # baseline
     make_frame(frame, text=typing[0], daylight=True, chrome=True, noise_seed=3)

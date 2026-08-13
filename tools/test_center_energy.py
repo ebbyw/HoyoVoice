@@ -39,7 +39,7 @@ check(True, 27.3, 16.0, 0.52, "Freminet — 11.3dB burst, side way over the cap"
 
 # --- LIVE: lines we spoke that were genuinely unvoiced. These must stay
 # spoken, or the fix trades a talk-over for a silence, which is worse.
-check(False, 1.5, 1.1, 0.00, "Freminet 'Alright, it's a deal' — no burst")
+check(False, 1.5, 1.1, 0.00, "an unvoiced Freminet line — no burst")
 check(False, 2.2, 2.5, 0.01, "the same Paimon line as replayed — flat")
 check(False, 11.8, 6.6, 0.03, "5.2dB burst: real, but under the decisive cut "
                               "and over the flat cap — stays spoken")

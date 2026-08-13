@@ -46,46 +46,46 @@ def main():
     # the typewriter's remainder rewrites the row it grew from
     bad += check(
         "a skip that grew keeps one row, with the whole line",
-        rows((SKIP, "Odette", "Funny - I had the same idea.", True),
-             (SKIP, "Odette", "Funny - I had the same idea. In that case, "
-              "let me pay.", True)),
-        [(SKIP, "Odette", "Funny - I had the same idea. In that case, "
-          "let me pay.")])
+        rows((SKIP, "Odette", "Funny - I had the same plan.", True),
+             (SKIP, "Odette", "Funny - I had the same plan. In that case, "
+              "let me row.", True)),
+        [(SKIP, "Odette", "Funny - I had the same plan. In that case, "
+          "let me row.")])
 
     # OCR jitter inside the part already logged is not a growth
     bad += check(
         "a re-read that is not a prefix adds its own row",
-        rows((SKIP, "Odette", "Yes. Well, that's one option.", True),
-             (SKIP, "Odette", "Ves. Well, that's one option, but.", True)),
-        [(SKIP, "Odette", "Yes. Well, that's one option."),
-         (SKIP, "Odette", "Ves. Well, that's one option, but.")])
+        rows((SKIP, "Odette", "Yes. Well, that's one route.", True),
+             (SKIP, "Odette", "Ves. Well, that's one route, but.", True)),
+        [(SKIP, "Odette", "Yes. Well, that's one route."),
+         (SKIP, "Odette", "Ves. Well, that's one route, but.")])
 
     # a different speaker is a different fact even if the text continues
     bad += check(
         "a different speaker never grows the previous row",
-        rows((SKIP, "Odette", "Let's book this train.", True),
-             (SKIP, "Alyosha", "Let's book this train. Regulations say.",
+        rows((SKIP, "Odette", "Let's charter this barge.", True),
+             (SKIP, "Alyosha", "Let's charter this barge. Regulations say.",
               True)),
-        [(SKIP, "Odette", "Let's book this train."),
-         (SKIP, "Alyosha", "Let's book this train. Regulations say.")])
+        [(SKIP, "Odette", "Let's charter this barge."),
+         (SKIP, "Alyosha", "Let's charter this barge. Regulations say.")])
 
     # and so is a different action — a skip must not swallow a spoken row
     bad += check(
         "a different action never grows the previous row",
         rows((SKIP, "Odette", "That should do it.", True),
-             ("spoken", "Odette", "That should do it. The train will go.",
+             ("spoken", "Odette", "That should do it. The barge will go.",
               True)),
         [(SKIP, "Odette", "That should do it."),
-         ("spoken", "Odette", "That should do it. The train will go.")])
+         ("spoken", "Odette", "That should do it. The barge will go.")])
 
     # without the flag nothing is ever rewritten (spoken lines are two real
     # events — two pieces of audio were played)
     bad += check(
         "extend is opt-in",
         rows((SKIP, "Odette", "You flatter me.", False),
-             (SKIP, "Odette", "You flatter me. It's only because.", False)),
+             (SKIP, "Odette", "You flatter me. It's only practice.", False)),
         [(SKIP, "Odette", "You flatter me."),
-         (SKIP, "Odette", "You flatter me. It's only because.")])
+         (SKIP, "Odette", "You flatter me. It's only practice.")])
 
     # an empty previous row has no prefix to match, and must not be grown
     bad += check(
