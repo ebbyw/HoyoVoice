@@ -45,10 +45,14 @@ Add entries under **Unreleased** as you work; move them into a dated version sec
   `Kuutar`, not `KuuMoon Maidentar`), and an entry still holding a runtime
   placeholder is dropped rather than indexed subtly wrong.
 
-  Maps are per game and load on first use of that game, which for the
-  current dumps is ~9 s and 600-770 MB resident (398k usable lines for
-  Genshin, 315k for Star Rail) — not a price to pay at startup for a game
-  the session may never read. Lookup is a length-bucketed trigram index
+  Maps are per game and load on first use of that game, on a background
+  thread. For the current dumps that is ~9 s and 600-770 MB resident (398k
+  usable lines for Genshin, 315k for Star Rail) — not a price to pay at
+  startup for a game the session may never read, and not one the capture
+  loop can pay inline either: indexing where the first line of the session
+  is being read would stop the loop dead at the one moment it cannot
+  afford to be away. Until a map is ready, snapping is off and lines are
+  read exactly as they are without one. Lookup is a length-bucketed trigram index
   over the rarest two dozen trigrams of the query, then a real comparison
   of the top 40: 20 ms against a 400k-line dump, paid once per spoken line
   rather than once per frame. Three things keep that affordable at dump
