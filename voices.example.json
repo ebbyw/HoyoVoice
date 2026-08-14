@@ -366,7 +366,8 @@
     "change_gate_frac": 0.01,
     "anchors": true,
     "anchor_roi": true,
-    "late_yield": true
+    "late_yield": true,
+    "gate_prior": {}
   },
   "defaults": {
     "female": "af_nova",

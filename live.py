@@ -232,6 +232,41 @@ PRIOR_WINDOW = 8
 # and waiting longer leaves the opening of every session on the old bar.
 FIRM_GATE_MIN_SPOKEN = 3      # lines seen unvoiced before the prior is trusted
 VAD_FIRM_HITS = 6             # ~192ms of confident speech
+# Both priors above are BUILT FROM the VAD's own verdicts, which makes them
+# unreachable for a character the VAD cannot hear. Paimon and Sparxie are
+# processed high-register squeaks — Silero is trained on human speech and
+# scores them at or near 0.00 — so the game voices them, we talk over them,
+# the talk-over is recorded as an unvoiced observation, and the record that
+# would have earned them a softer gate never accumulates. It gets worse with
+# use: enough of those observations arm the FIRM gate, which then also
+# refuses to cut our playback when their VO does start. Naming a speaker
+# here breaks that loop by hand.
+#
+# What the name buys is corroboration for the centre-energy layer, and
+# nothing else. That layer already measures a real event — a mid-channel
+# burst 7dB over the pre-line baseline and 5dB over the side channel,
+# coincident with the line — and it was the layer that caught the Paimon
+# line that went out at mid+17.3 side+5.2. It is held back only by a
+# corroboration test (faint speechiness, or a voiced record) that these
+# characters can never satisfy. The VAD thresholds themselves stay at full
+# strength: dropping them to the soft floor for a character who is unvoiced
+# for hundreds of lines at a time would silence exactly the lines this app
+# exists to fill in, since an unvoiced line in a loud scene clears 0.12 as
+# readily as a voiced one.
+#
+# In code rather than only in voices.json because voices.json is gitignored
+# and the Windows box tracks this repo — and because these two are the same
+# characters in every save. settings.gate_prior extends and overrides it.
+MODEL_DEAF = {"Paimon", "Sparxie"}
+# settings.gate_prior: speaker -> one of
+#   "model_deaf" — as above: grant the centre-energy layer its corroboration
+#   "voiced"     — the game always voices them; arm the soft gate from line
+#                  one instead of waiting for three observations
+#   "unvoiced"   — the game never voices them; hold the firm gate so a blip
+#                  can't cut our reading of their lines
+# A hand-set prior wins over the observed record in both directions, so an
+# entry here is also the way to undo a record that went wrong.
+GATE_PRIORS = ("model_deaf", "voiced", "unvoiced")
 # settings.late_yield: false stops HoyoVoice cutting its own playback when
 # it thinks the game has started talking over it. Worth having as a switch
 # rather than only a threshold: in a scene with no voice acting at all,
@@ -685,15 +720,78 @@ def center_energy_voiced(mid_up, side_up, vad_peak):
     return side_up <= ENERGY_SIDE_FLAT and vad_peak >= 0.15
 
 
+def center_burst_corroborated(speaker, vad_peak):
+    """May a centre-channel burst decide this line on its own?
+
+    Only WITH corroboration: faint speechiness (the model heard
+    something), a usually-voiced record, or a hand-set prior. Energy alone
+    is not enough no matter how long it lasts — a sustained-burst arm used
+    to stand in for corroboration, and on a loud scene it read the SCENE as
+    voiceover: the Snezhnaya train (61dB ambience, 2026-08-13 09:56 log)
+    silenced four unvoiced NPC lines at peak 0.00, mid+13.7 to +27.3, every
+    burst 'decisive' and sustained, because engine rumble sustains forever.
+    Each false skip also RECORDED a voiced observation for a just-met
+    speaker, feeding the prior that makes the next skip easier — a spiral
+    for exactly the characters the game never voices. Without corroboration
+    the line is spoken: a rare talk-over beats a skipped line. (The brief
+    dialogue-advance click that once silenced "I was a disappointment." is
+    covered the same way: no corroboration → spoken.)
+
+    A named prior is corroboration of the same kind arrived at another way.
+    A character whose voice the model demonstrably cannot score has no
+    route to an observed record — every mis-hear is filed as evidence
+    AGAINST them — so for those characters the record is supplied by name
+    and the exception stays reserved, as before, for characters known to
+    have a voice.
+    """
+    return (vad_peak >= 0.15 or model_deaf(speaker)
+            or usually_voiced(speaker))
+
+
+def gate_prior(speaker):
+    """A hand-set prior for this speaker, or None to judge them on record.
+
+    settings.gate_prior wins over the built-in MODEL_DEAF list, so a name in
+    both can still be turned off with "" (or any value not in GATE_PRIORS).
+    """
+    if not speaker:
+        return None
+    named = VOICES.get("settings", {}).get("gate_prior", {}).get(speaker)
+    if named is not None:
+        return named if named in GATE_PRIORS else None
+    return "model_deaf" if speaker in MODEL_DEAF else None
+
+
+def model_deaf(speaker):
+    """True if the VAD cannot be expected to hear this character's voice.
+
+    Every hand-set prior implies it: a speaker declared voiced or unvoiced is
+    one whose record we have stopped reading off the VAD.
+    """
+    return gate_prior(speaker) is not None
+
+
 def usually_voiced(speaker):
     """True once a speaker has a consistent record of the game voicing them."""
+    prior = gate_prior(speaker)
+    if prior in ("voiced", "unvoiced"):
+        return prior == "voiced"
     v, s = voiced_history.get(speaker, (0, 0))
     return v >= SOFT_GATE_MIN_VOICED and v >= SOFT_GATE_RATIO * (v + s)
 
 
 def never_voiced(speaker):
     """True once a speaker has a consistent record of the game NOT voicing
-    them — every line so far has been ours to read."""
+    them — every line so far has been ours to read.
+
+    A model-deaf speaker never arms this by record, however long their run of
+    unvoiced observations: the observations are the VAD's failure to hear
+    them, not the game's silence, and holding the firm gate on that evidence
+    would keep us reading over the VO we just failed to detect.
+    """
+    prior = gate_prior(speaker)
+    if prior is not None:
+        return prior == "unvoiced"
     v, s = voiced_history.get(speaker, (0, 0))
     return v == 0 and s >= FIRM_GATE_MIN_SPOKEN
 
@@ -3391,32 +3489,14 @@ def main():
             # which is the exact case this layer exists for.
             decisive = mid_up - side_up >= ENERGY_DECISIVE_OVER_SIDE
             if not voiced and center_energy_voiced(mid_up, side_up, vad_peak):
-                # Believed only WITH corroboration: faint speechiness
-                # (the model heard something) or a usually-voiced record
-                # (this character's VO is known to be model-deaf — the
-                # Paimon case this layer exists for). Energy alone is not
-                # enough no matter how long it lasts: a sustained-burst arm
-                # used to stand in for corroboration, and on a loud scene
-                # it read the SCENE as voiceover — the Snezhnaya train
-                # (61dB ambience, 2026-08-13 09:56 log) silenced four
-                # unvoiced NPC lines at peak 0.00, mid+13.7 to +27.3, every
-                # burst 'decisive' and sustained, because engine rumble
-                # sustains forever. Each false skip also RECORDED a voiced
-                # observation for a just-met speaker, feeding the prior
-                # that makes the next skip easier — a spiral for exactly
-                # the characters the game never voices. Without
-                # corroboration the line is spoken: a rare talk-over beats
-                # a skipped line, and the exception stays reserved for
-                # characters actually OBSERVED voiced. (The brief
-                # dialogue-advance click that once silenced "I was a
-                # disappointment." is also covered: no corroboration →
-                # spoken, sustain no longer consulted.)
-                if vad_peak >= 0.15 or usually_voiced(state["speaker"]):
+                deaf = model_deaf(state["speaker"])
+                if center_burst_corroborated(state["speaker"], vad_peak):
                     voiced = True
                     print(f"[voiced — center energy] mid+{mid_up:.1f}dB "
                           f"side+{side_up:.1f}dB peak={vad_peak:.2f} "
                           f"sustain={sustain:.2f}s"
-                          f"{' decisive' if decisive else ''}", flush=True)
+                          f"{' decisive' if decisive else ''}"
+                          f"{' model-deaf prior' if deaf else ''}", flush=True)
                 else:
                     print(f"[center burst without speech or voiced record "
                           f"— speaking] mid+{mid_up:.1f}dB "

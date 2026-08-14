@@ -109,6 +109,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 - **Two-tier VAD gate** — a strong speech spike *or* ~¼s of sustained moderate speech marks a line as voiced; short soft lines ("Which king?") are caught.
 - **Center-energy detector** — game VO is mixed to the stereo center; a mid-channel burst with flat sides (plus a minimum speechiness) catches robot/vocoder voices the speech model can't recognize.
 - **Per-speaker voiced prior** — once a character has consistently turned out to be voiced, much weaker audio evidence is enough to stay quiet for them. Some voiceover is quiet enough to sit below any threshold that could be used safely, and for a character with a real voice, silence is the better error. Self-correcting: lines HoyoVoice does speak for them count against the prior.
+- **Named gate priors** — the prior above is built out of the VAD's own verdicts, which puts it out of reach of a character the VAD cannot hear. Paimon and Sparxie are processed high-register voices that a speech model trained on human speech scores at or near zero, so their voiced lines get talked over, each talk-over is filed as another unvoiced observation, and the record that would have softened the gate never arrives. Both are named in the app as **model-deaf**: the center-energy detector, which measures a real center-channel burst rather than speechiness, is allowed to call their lines voiced on its own. Their VAD thresholds are untouched — Paimon spends hundreds of lines unvoiced, and lowering the bar for those would silence exactly what the app is for. `settings.gate_prior` extends the list and adds two stronger declarations, `"voiced"` (always voiced: soft gate from the first line) and `"unvoiced"` (never voiced: hold the firm gate so a blip can't cut their lines short).
 - **Late-VO yield** — if voiceover starts while HoyoVoice is talking, it shuts up instantly, judging the evidence at the same sensitivity that decided to speak: for a character the game has voiced before, the faintest hint is enough. `settings.late_yield: false` turns it off, for a quest with no voice acting in it where every yield is by definition a false one.
 - **Sliding dedupe window** — a line counts as a repeat only against the line spoken immediately before it, and only when the same character said both (fuzzy-matched, so OCR jitter like "l"/"I" can't re-trigger it). Anyone else speaking in between makes it a fresh line, so a character can say the same words twice in a scene, and two characters can echo each other word for word, and both get read. Replaying a quest re-voices everything. The window survives a restart for 10 minutes, so a crash mid-scene doesn't re-read the line still on screen — and **Clear** in the dashboard empties it along with the log, for when you restart *into* the same content and want it read as new. The line already on screen is never re-read by that: it has already fired, and Clear can't make the app start talking at you.
 - **OCR repair** — the game font's I/l confusion, dropped apostrophes ("youre" → "you're") and decorative glyphs are all fixed before synthesis.
@@ -172,6 +173,11 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
                                             // ROI (measured ~42% off Windows
                                             // ocr_ms; false = full frames)
     "late_yield": true,                     // stop talking if game VO starts
+    "gate_prior": {                         // override the learned voiced
+      "Sparxie": "model_deaf",              // prior by name: model_deaf lets
+      "Furina": "voiced",                   // the center-energy detector
+      "Reporting Furb": "unvoiced"          // decide alone, voiced/unvoiced
+    },                                      // declare it outright
     "dashboard_bind": "127.0.0.1"           // "0.0.0.0" to reach the dashboard
   }                                         // from other machines you trust —
                                             // it has no authentication
@@ -195,7 +201,7 @@ Casting is per character, and every character is one entry in `voices.json`. The
 }
 ```
 
-`defaults` sets the fallback voices — `narrator` is used for true narration, lore cards, loading-screen blurbs and system notices, and `female`/`male` seed auto-casting. `always_voiced` is the muted list. `settings.overlay_speaker` and `settings.choice_speaker` name the character that floating host bubbles and spoken choice prompts are cast as, so those get voices the same way everyone else does.
+`defaults` sets the fallback voices — `narrator` is used for true narration, lore cards, loading-screen blurbs and system notices, and `female`/`male` seed auto-casting. `always_voiced` is the muted list; `settings.gate_prior` is the softer version of it, for a character the detector *usually* misses rather than always. `settings.overlay_speaker` and `settings.choice_speaker` name the character that floating host bubbles and spoken choice prompts are cast as, so those get voices the same way everyone else does.
 
 > Edit the file with the app **stopped** (`./hoyovoice.sh stop` / `python hoyovoice.py stop`). It is read once at startup and written back on every casting change, so hand-edits made while it's running are overwritten.
 
