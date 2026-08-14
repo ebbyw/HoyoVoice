@@ -82,6 +82,14 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   hesitation — and `Aww` is `ˈɔwə`, "AW-uh", where the sound is one
   vowel.
 
+  `Chasca` is the flat-a tell's false positive, and the only entry in
+  this whole sweep to be withdrawn after shipping: the name is Quechua
+  and `ʧˈæskə` **is** "CHASS-kuh". Every respelling measured worse than
+  the default — doubling the s turns the ch into a /ʃ/ (`ʃˈæskə`), a
+  capital inside the chunk spells it out (`sˌiˈAʧ əskˈæ`), and opening
+  the a is a different name. It is in `RETIRED` as well as `CLEARED`, so
+  `--write` takes it back out of any `voices.json` that already has it.
+
   Four at this floor have no spelling that survives both engines and say
   so in the file: `Tenryou` ("Ten-ryoh" is `tˈɛnɹˈIO`, the /aɪ/ of
   "rye"), `Jueyun`, `Deshret` (whose sh collapses to an s the moment the
