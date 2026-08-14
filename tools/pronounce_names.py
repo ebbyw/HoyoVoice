@@ -209,11 +209,6 @@ FIXES = {
     # "Kaedehara".)
     "Yumemizuki": "Yoo-meh-mee-zoo-kee",
     # --- Genshin: everywhere else ---
-    # ʧˈæskə on both — the a is right, the ending is not. "Chaz-kuh" is
-    # ʧˈæzkˈʌ, the user's reading. NOT "ChAz-kuh" as glossed: a capital
-    # inside a chunk makes the g2p spell it out, sˌiˈAʧ ˈæzkˈʌ —
-    # "C-H-ay az-kuh".
-    "Chasca": "Chaz-kuh",
     "Chiori": "Chee-oh-ree",
     "Citlali": "Seet-lah-lee",
     # klˈɔɹɪnd on both, "KLOR-ind", where the duellist is French and said
@@ -1138,6 +1133,11 @@ RETIRED = {
     "Sangonomiya Kokomi": "Sahn-go-no-mee-yah Ko-ko-mee",
     "Shikanoin Heizou": "Shee-kah-no-een Hay-zoh",
     "Yumemizuki Mizuki": "Yoo-meh-mee-zoo-kee Mee-zoo-kee",
+    # withdrawn rather than superseded: the flat-a tell was wrong about
+    # "Chasca" and the name needs no entry at all (see CLEARED below). It
+    # shipped for one revision, so it has to be retired by name or --write
+    # would leave it in every voices.json that already took it.
+    "Chasca": "Chaz-kuh",
 }
 
 # Checked against both engines and deliberately given NO entry, because the
@@ -1160,6 +1160,13 @@ CLEARED = {
     "Siobhan", "Bennett", "Argenti", "Lesley", "Diona", "Rin", "Thoma",
     "Gorou", "Kairagi", "Yoimiya", "Wanmin", "Yunli", "Yukong", "Lyney",
     "Ororon", "Styxia", "Xavier", "Cocolia", "Varka", "Guang", "Wispae",
+    # Chasca is the flat-a tell's false positive: the name is Quechua and
+    # ʧˈæskə IS "CHASS-kuh". It carried an entry for one revision and lost
+    # it, because every respelling is worse than the default — doubling
+    # the s turns the ch into a /ʃ/ ("Chasska" is ʃˈæskə), a capital
+    # inside the chunk spells it out (sˌiˈAʧ əskˈæ), and opening the a
+    # ("Chahsska", ʧˈɑskə) is a different name.
+    "Chasca",
     "wispae", "Mary-Ann", "Gallagher", "Odette", "Hanu", "Aeon", "Aeons",
     # laughter and hesitation: already read as themselves
     "Hehe", "hehe", "Heh", "heh", "Hehehe", "Hahaha", "hahaha", "Hahahaha",
