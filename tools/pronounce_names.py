@@ -130,15 +130,71 @@ FIXES = {
     "Zhongli": "Jong-lee",
     "Zibai": "Zuh-bye",
     # --- Genshin: Japanese ---
-    "Kaedehara Kazuha": "Kah-eh-deh-hah-rah Kah-zoo-hah",
+    # A full-name key only fires on the full name, and dialogue rarely uses
+    # one: tools/textmap_words.py counted "Ayaka" alone 258 times in the
+    # dumps against the 20-odd for "Kamisato Ayaka", "Kazuha" 255, "Arataki"
+    # 571. Every one of those reads wrong today. Keyed on the parts, the same
+    # move the "Yae" entry records — and where BOTH parts have an entry the
+    # full-name key is dead config and is retired below (a shorter key sorts
+    # first and wins the substitution).
+    # ˌæɹətˈæki on both — "a-ra-TACK-ee", the English flat a twice over.
+    "Arataki": "Ah-rah-tah-kee",
+    # the initial a is swallowed into the /aɪ/ of "eye" on both engines:
+    # Iˈɑkə, "eye-AH-kuh". "Ah-yah-kah" is ˈɑjˈɑkˈɑ.
+    "Ayaka": "Ah-yah-kah",
+    # same, plus a flapped t: IˈɑɾO, "eye-AH-doh". "Ah-yah-toh" is ˈɑjˈɑtˈO.
+    "Ayato": "Ah-yah-toh",
+    # hˈIzu, "HY-zoo". "Hay-zoh" is hˈAzˈO on both — the spelling the
+    # retired "Shikanoin Heizou" entry already used for this half.
+    "Heizou": "Hay-zoh",
+    # kˌidɪhˈɑɹɹə, "kee-di-HAH-ruh", with espeak's doubled rhotic on top.
+    # "Kah-ed-eh-hah-rah" is kˈɑˈɛdˈAhˈɑɹˈɑ on both. The third syllable is
+    # the one this file can't spell: Japanese "de" is /de/, and a chunk
+    # written "deh" is /deɪ/ to BOTH engines ("Kah-eh-deh-hah-rah", the old
+    # full-name spelling, is kˈɑˈAdˈAhˈɑɹˈɑ — "kah-AY-day-hah-rah", TWO of
+    # them). "Kah-ed-dess-hah-rah" lands the vowel (kˈɑˈɛddˈɛshˈɑɹˈɑ) by
+    # inventing an /s/ the name doesn't have, and "Kah-ed-heh-hah-rah"
+    # sounds both h's. One wrong vowel, and it is the second-to-last.
+    "Kaedehara": "Kah-ed-eh-hah-rah",
+    # ˈɪɾO on both — "IT-oh", with the t flapped to a d. "Ee-toh" is ˈitˈO.
+    # The clan name has its own entry ("Arataki") above.
+    "Itto": "Ee-toh",
     "Kaeya": "Kay-ya",
-    "Kamisato Ayaka": "Kah-mee-sah-toh Ah-yah-kah",
-    "Kamisato Ayato": "Kah-mee-sah-toh Ah-yah-toh",
-    "Kujou Sara": "Koo-joh Sah-rah",
+    # kˌæmɪsˈɑɾO — flat a, and the t flapped to a d. Alphabetically ahead of
+    # the full-name keys, so those are retired rather than shadowed.
+    "Kamisato": "Kah-mee-sah-toh",
+    # kˈæzjuhə on both, "KAZ-yoo-huh". The surname has its own entry now, so
+    # the two halves of the full name are respelled one after the other.
+    "Kazuha": "Kah-zoo-hah",
+    # kəkˈOmi — the first syllable reduced to a schwa, "kuh-KOH-mee".
+    # "Ko-ko-mee" is kˈOkˈOmˈi on both.
+    "Kokomi": "Ko-ko-mee",
+    # kjˈuʤu, "KYOO-joo" — an English u in both syllables. "Koo-joh" is
+    # kˈuʤˈO on both.
+    "Kujou": "Koo-joh",
     "Kuki Shinobu": "Koo-kee Shee-noh-boo",
-    "Sangonomiya Kokomi": "Sahn-go-no-mee-yah Ko-ko-mee",
+    # mɪzˈuki, "mih-ZOO-kee". "Mee-zoo-kee" is mˈizˈukˈi on both.
+    "Mizuki": "Mee-zoo-kee",
+    # sˈæŋɡənˌɑmɪjə — the flat a of "fat", then two syllables swallowed:
+    # "SANG-uh-nah-mi-yuh". "Sahn-go-no-mee-yah" is sˈɑŋɡˌOnˈOmˈijˈɑ.
+    "Sangonomiya": "Sahn-go-no-mee-yah",
+    # sˈɛɹə, "SEH-ruh". "Sah-rah" is sˌɑɹˈɑ / sˈɑɹˈɑ. Case-insensitive like
+    # every entry here, which is deliberate: the only Sara either game
+    # writes is the Tenryou Commissioner.
+    "Sara": "Sah-rah",
     "Sayu": "Sah-yoo",
-    "Shikanoin Heizou": "Shee-kah-no-een Hay-zoh",
+    # ʃˈɪkənˌYn — the "oin" read as the /ɔɪ/ of "coin", "SHIK-uh-noyn",
+    # where the name ends on a plain "in". "Shee-kah-no-in" is ʃˈikˈɑnˈOˈɪn
+    # on both engines. The last chunk is the user's ear: "-een" (ʃ…ˈOˈin)
+    # was the first spelling here and closes on the vowel of "seen", which
+    # is a syllable longer than the name has. Their literal "She-ka-no-in"
+    # is the same four sounds and was NOT taken — misaki reads it ʃˌikˌɑn-
+    # against espeak's ʃikˈɑn-, a stress split of the kind "Ah-shah" was
+    # rejected for; "Shee-kah-" pins the same vowels on both.
+    "Shikanoin": "Shee-kah-no-in",
+    # ʃˈɪnəbˌu, "SHIN-uh-boo". "Shee-noh-boo" is ʃˈinˈObˈu on both. Sorts
+    # after "Kuki Shinobu", so that entry still reads as itself.
+    "Shinobu": "Shee-noh-boo",
     # keyed on the surname alone: dialogue says "Yae" and "Miss Yae" more
     # often than the full name, and the old "Yae Miko" key left those reading
     # jˈi, "Yee". Word-bounded substitution covers "Yae Miko" too, and "Miko"
@@ -147,18 +203,38 @@ FIXES = {
     # engines ("ya-EYE"), the same trap as "eh" in the header, mirrored.
     # "Yah-eh" is jˌɑˈA / jˈɑːˈeɪ — "yah-ay", both vowels land.
     "Yae": "Yah-eh",
-    "Yumemizuki Mizuki": "Yoo-meh-mee-zoo-kee Mee-zoo-kee",
+    # jˌumɪmɪzˈuki, "yoo-mih-mih-ZOO-kee" — the two middle vowels clipped.
+    # "Yoo-meh-mee-zoo-kee" is jˈumˈɛmˈizˈukˈi on both. (A mid-word "meh" is
+    # /mɛ/ to both engines; it is "deh" that comes out /deɪ/ — see
+    # "Kaedehara".)
+    "Yumemizuki": "Yoo-meh-mee-zoo-kee",
     # --- Genshin: everywhere else ---
+    # ʧˈæskə on both — the flat a. "Chahss-kah" is ʧˈɑskˈɑ; "Chahs-kah"
+    # voices the s to a z (ʧˈɑzkˈɑ).
+    "Chasca": "Chahss-kah",
     "Chiori": "Chee-oh-ree",
     "Citlali": "Seet-lah-lee",
+    # klˈɔɹɪnd on both, "KLOR-ind", where the duellist is French and said
+    # "klo-RAHND". "Klo-rahnd" is klˈOɹˈɑnd on both, and is the user's own
+    # gloss.
+    "Clorinde": "Klo-rahnd",
     "Dehya": "Deh-yah",
     # both engines apply English short vowels end to end: dˈɪlʌk, "DILL-uck",
     # where the name is "dee-LUKE". "Dee-luke" is dˈilˈuk / dˈiːlˈuːk on the
     # two engines — both vowels land.
     "Diluc": "Dee-luke",
+    # kˈɑlA on both — the "ei" read as /eɪ/, "KAH-lay", where the name ends
+    # on the vowel of "see". "Coll-ee" is kˈɑlˈi.
+    "Collei": "Coll-ee",
+    # dˈʊɹɹɪn on both — espeak's doubled rhotic, and the u of "put".
+    # "Doo-rin" is dˈuɹˈɪn.
+    "Durin": "Doo-rin",
     "Escoffier": "Ess-koff-yay",
     "Faruzan": "Fah-roo-zahn",
     "Freminet": "Frem-ee-nay",
+    # the engines disagree: misaki kəʧˈinə is right, espeak kˈæʧInə is
+    # "KATCH-eye-nuh". "Kah-chee-nah" is kˈɑʧˈinˈɑ on both.
+    "Kachina": "Kah-chee-nah",
     "Kaveh": "Kah-veh",
     "Kinich": "Kee-neech",
     "Lauma": "Lau-mah",
@@ -167,13 +243,30 @@ FIXES = {
     # the vowels but kept the v (mˈɑvˈuikˈɑ, "mah-voo-EE-kah") — an extra
     # syllable the name doesn't have. "Mah-wee-kah" is mˈɑwˈikˈɑ /
     # mˈɑːwˈiːkˈɑː.
+    # lInˈɛt on both — "lye-NET", the /aɪ/ of "eye" for a plain i.
+    # "Lih-net" is lˈɪnˈɛt.
+    "Lynette": "Lih-net",
     "Mavuika": "Mah-wee-kah",
     "Mualani": "Moo-ah-lah-nee",
     # both engines apply English spelling rules end to end: nˈæhɪdə,
     # "NAH-hid-uh", a flat first a and a schwa where the name ends open.
     # "Nah-hee-dah" is nˈɑhˈidˈɑ / nˈɑːhˈiːdˈɑː.
     "Nahida": "Nah-hee-dah",
+    # fjʊɹɹˈinə — a /fj/ where the name opens on a plain "foo", and espeak's
+    # doubled rhotic behind it. "Foo-ree-nah" is fˈuɹˈinˈɑ on both.
+    "Furina": "Foo-ree-nah",
+    # nˈæʃə, the flat a again. "Nahshah" is nˈɑʃə on both. Hyphenated it
+    # splits them ("Nah-shah" is misaki nˌæʃˈɑ against espeak nˈɑʃˈɑ) —
+    # a one-syllable first chunk keeps misaki's flat a, which is why
+    # "Navia" below is chunked "Nahv-" and not "Nah-".
+    "Nasha": "Nahshah",
+    # nˈæviə, "NAV-ee-uh". "Nahv-ee-ah" is nˈɑvˈiˈɑ on both.
+    "Navia": "Nahv-ee-ah",
     "Nilou": "Nee-loo",
+    # nˈOl on both — one syllable, "nole", where the name has two.
+    # "No-elle" is nˈOˈɛl; "No-ell" is the same phones with the second
+    # chunk unstressed on misaki only (nˈOˌɛl).
+    "Noelle": "No-elle",
     # the raw name is sˈIʤwɪn on both, "SIJE-win": the ge is already soft,
     # and what is wrong is the first vowel (/aɪ/) and the clipped last one.
     # "See-guh-win" over-corrected — sˈiɡˈʌwˈɪn hardened the g back and
@@ -181,34 +274,101 @@ FIXES = {
     # sˈiʤwˈin / sˈiːʤwˈiːn. NOT "Siege-ween" or "Seege-ween", which are the
     # same phones but split the stress on the second chunk (misaki wˌin
     # against espeak wˈiːn).
+    # sˈændɹOn on both — "SAN-drohn", the final e silent, where the
+    # Harbinger's name is Italian: "san-DROH-nay". "San-droh-nay" is
+    # sˌændɹˈOnˈA on both.
+    "Sandrone": "San-droh-nay",
     "Sigewinne": "Seej-ween",
     "Wriothesley": "Rees-lee",
+    # tɪɡnˈɑɹɹi — the doubled rhotic again. "Tig-nah-ree" is tˈɪɡnˈɑɹˈi.
+    "Tighnari": "Tig-nah-ree",
     "Xilonen": "Shee-loh-nen",
     # --- Star Rail: pinyin ---
     "Bailu": "Bye-loo",
     "Feixiao": "Fay-shyow",
-    "Fu Xuan": "Foo Shoo-en",
+    # "Shoo-en" splits the stress on the second half (misaki fˈu ʃˌuˈɛn
+    # against espeak fˈu ʃˈuˈɛn); "Shu-en" is fˈu ʃˈuˈɛn on both. Same
+    # spelling as the "Xuan" entry below, which is the user's.
+    "Fu Xuan": "Foo Shu-en",
     "Guinaifen": "Gway-nye-fen",
     "Hanya": "Hahn-yah",
     "Huohuo": "Hoo-aw-hoo-aw",
     "Jiaoqiu": "Jyow-chyoh",
-    "Jing Yuan": "Jing Yoo-en",
+    # identical phones either way (ʤˈɪŋ jˈuˈɛn on both) — respelled only so
+    # one sound has one spelling, matching the "Yuan" entry below.
+    "Jing Yuan": "Jing Yu-en",
     "Jingliu": "Jing-lyoh",
     "Luocha": "Loo-aw-chah",
     "Qingque": "Ching-chueh",
-    "Ruan Mei": "Rwahn May",
+    # keyed on the surname alone, like "Yae": dialogue says "Ruan" 613 times
+    # across the dumps and the full name a fraction of that, and every bare
+    # one read ɹjˈuæn ("RYOO-an"). "Mei" on its own is already mˈA on both
+    # engines and needs no entry, so the full-name key is retired below.
+    "Ruan": "Rwahn",
     "Sushang": "Soo-shahng",
     "Tingyun": "Ting-yoon",
+    # kʃˈuæn — a spelled-out K in front of the x, then the flat a of "fat".
+    # "Shu-en" is ʃˈuˈɛn on both, and is the user's spelling: "Shoo-en" is
+    # the same two sounds but splits the stress (misaki ʃˌuˈɛn against
+    # espeak ʃˈuˈɛn), so "Fu Xuan" above was respelled to match. Sorts after
+    # that key, so the full name still reads as one name.
+    "Xuan": "Shu-en",
     "Xueyi": "Shoo-eh-yee",
     "Yanqing": "Yen-ching",
+    # juˈɑn / jˈuən — the engines don't even agree with each other, and
+    # neither says "yoo-EN". "Yu-en" is jˈuˈɛn on both, and is the user's
+    # spelling; "Yoo-en" is the identical phones, so "Jing Yuan" above was
+    # respelled to the same halves rather than kept in two spellings for one
+    # sound. Sorts after that key, so the general is still read as one name.
+    "Yuan": "Yu-en",
     # --- Star Rail: everywhere else ---
+    # A `split`, not a both-engines fault, and the entry that settled how
+    # this file treats one. misaki says ˈækəɹˌɑn — which is exactly the
+    # dictionary reading, /ˈækərɒn/, "ACK-uh-ron" — while espeak says
+    # ˈAkɹɑn, "AY-kron", a syllable short. macOS has been right all along.
+    # So the respelling reproduces the engine that HAS it right rather than
+    # inventing a third reading: "Ack-uh-ron" is ˈækˈʌɹˈɑn on both.
+    # "Ah-keron" (ˈɑkˈɛɹɑn, "ah-KEH-ron") was shipped for one revision as an
+    # ear's preference and pulled for parity — it moves the stress to the
+    # second syllable and the first vowel to the a of "father", which is a
+    # third reading again. Measured runners-up for the dictionary one:
+    # "Acke-ron" (ˈækɪɹˈɑn, an /ɪ/ for the schwa), "Ackeron" (the exact
+    # vowels, ˈækəɹɹən, but a doubled rhotic) and "Ack-er-on" (ˈækˈɜɹˈɔn,
+    # the "er" of "her").
+    "Acheron": "Ack-uh-ron",
     "Aglaea": "Ah-glay-uh",
     "Anaxa": "Ah-nak-sah",
     "Asta": "Ass-tuh",
     "Castorice": "Castor-ess",
+    # klˈɑɹɹə — the vowels are right and the r is doubled. "Klah-rah" is
+    # klˈɑɹˈɑ on both.
+    # sˈɜɹsᵻz — the final s voiced. "Sur-sees" is sˌɜɹsˈiz / sˈɜɹsˈiz.
+    "Cerces": "Sur-sees",
+    "Clara": "Klah-rah",
     "Gepard": "Ghep-ard",
+    # hˈɜɹɾə on both — the vowel is right and the t is flapped to a d,
+    # "HER-duh". "Hurr-tah" is hˈɜɹtˈɑ on both: a real t and an open final a.
+    # NOT "Her-tah", which is the same phones with the stress on the second
+    # chunk (hɜɹtˈɑ, "her-TAH") — the name is stressed on the first.
+    "Herta": "Hurr-tah",
     "Himeko": "Hee-meh-koh",
+    # kˈæfkə — the flat a of "fat", where the name (and the author) is
+    # "KAHF-kuh". "Kahf-kuh" is kˈɑfkˈʌ on both.
+    "Kafka": "Kahf-kuh",
+    # ɹˈæpə. "Rahp-ah" is ɹˈɑpˈɑ on both — chunked "Rahp-" for the reason
+    # the "Nasha" entry records.
+    # mˈIdA on both — "MY-day", where the gloss is "mai-dee". The user's
+    # spelling ships as written: "Mai-dee" is mˈIdˈi on both. ("My-dee" is
+    # the same phones with the stress off the first chunk, mˌIdˈi / mIdˈi.)
+    "Mydei": "Mai-dee",
+    "Rappa": "Rahp-ah",
     "Seele": "See-luh",
+    # svˈæɹɑɡ, "SVAR-og". "Svah-rog" is svˈɑɹˈɑɡ on both.
+    "Svarog": "Svah-rog",
+    # tɹˈIæn on both — "TRY-an". "Tree-ann" is tɹˈiˈæn on both; the user's
+    # "Tree-anne" is the same two sounds but splits the stress on the second
+    # chunk (misaki tɹˈiˌæn against espeak tɹˈiˈæn), so the silent e goes.
+    "Trianne": "Tree-ann",
 }
 
 # Lore terms — not people, so no roster lists them and the coverage report
@@ -313,6 +473,576 @@ TERMS = {
     # --- places. Wrong the same way names are: English spelling rules over
     # pinyin and romaji. They are proper nouns, so --custom-words pins them
     # in the OCR vocabulary too.
+    #
+    # The block that follows came out of tools/textmap_words.py rather than
+    # out of somebody's ear: these are the commonest words in the two dumps
+    # that miss the phonemizer's lexicon, with the count the scan reported.
+    # They are nations, regions and peoples — said constantly, on no roster,
+    # and so never fixed before. The readings below are measured on both
+    # engines like every other entry here; what has NOT happened yet is the
+    # listen, so the rejected alternatives are recorded with their phonemes
+    # for anyone who disagrees by ear.
+    #
+    # Two the scan raised and the ear then cleared, measured and left OUT
+    # because an entry would change nothing: "Fragmentum" (1,305) is already
+    # fɹæɡmˈɛntəm on both engines, "frag-MEN-tum", and "Amphoreus" (1,485) is
+    # already æmfˈɔɹiəs, "am-FOR-ee-us" — both the reading asked for. The
+    # scan lists them because the phonemizer's lexicon has neither and every
+    # letter-rules guess is a candidate; a guess can still come out right.
+    #
+    # Ten more cleared the same way on the fourth pass, listed with the
+    # reading both engines already give so nobody re-checks them: "Sparxie"
+    # spˈɑɹksi and "Sparxicle" spˈɑɹksɪkᵊl (the x is the /ks/ of "spark",
+    # not a pinyin one), "Sampo" sˈæmpO, "Graphia" ɡɹˈæfiə, "Aino" ˈAnO,
+    # "Hyacine" hˈIəsˌin, "Maison" mˈAsən, "Natasha" nətˈæʃə, "Jahoda"
+    # ʤæhˈOdə, "Zagreus" zˈæɡɹiəs, "Alhaitham" əlhˈAθæm. All are `oov` —
+    # both engines guess, and both guess the same — so there is no platform
+    # split hiding behind any of them either.
+    # 3,126: zˈIənʒˌu on both — the pinyin x read as /z/ AND the zh as /ʒ/,
+    # the two faults this file opens with, in one word. "Shyen-joh" is
+    # ʃˈIənʤˈO, the "Shy-" onset the shipped Xiao/Xianyun/Xiangling entries
+    # already use. "Shen-joh" (ʃˈɛnʤˈO) drops the glide for a plain /ɛ/ and
+    # is the one to swap in if the /aɪ/ of "Shy-" doesn't convince.
+    "Xianzhou": "Shyen-joh",
+    # 1,385: ljˈuəfˌu, "LYOO-uh-foo". "Loo-aw-foo" is lˈuˈɔfˈu on both — the
+    # same two syllables the shipped "Luocha" → "Loo-aw-chah" is built from.
+    # "Lwaw-foo" is spelled out as letters (ˈɛlwˈɔfˈu, "L-waw-foo"), the
+    # initial-cluster trap in this file's header.
+    "Luofu": "Loo-aw-foo",
+    # 256: jˈAɑkɪŋ, "yay-AH-king". "Yow-ching" is jˈWʧˈɪŋ on both, the
+    # reading the shipped "Yanqing" → "Yen-ching" and "Yaoyao" → "Yow-yow"
+    # are built from.
+    "Yaoqing": "Yow-ching",
+    # 2,228: pˈɛnəkəni — every vowel after the first reduced to a schwa,
+    # "PEN-uh-kuh-nee", where the third syllable is the stressed "coh".
+    # "Penna-coh-nee" is pˈɛnəkˈOnˈi on both. NOT "Pen-uh-coh-nee", which is
+    # the same phones with a stress on every chunk (pˈɛnˈʌkˈOnˈi).
+    "Penacony": "Penna-coh-nee",
+    # 1,370: bᵻlˈɑbɑɡ, "buh-LAH-bahg" — the stress on the middle syllable and
+    # the first one swallowed. "Bell-oh-bog" is bˈɛlˌObˈɔɡ / bˈɛlˈObˈɑɡ: the
+    # engines differ only in the cot/caught vowel and which chunk takes the
+    # secondary stress, and both say "BELL-oh-bog".
+    "Belobog": "Bell-oh-bog",
+    # 2,354: mˈɔndstæt, "MOND-stat" — the d sounded and the flat a of "fat",
+    # where the German is "MONT-shtat". "Mohntshtaht" is mˈOntʃtɑt on both.
+    # Hyphenated it is worse, not better: "Mohnt-shtaht" puts a second stress
+    # on a name that has one (mˈOntʃtˈɑt), and any chunk STARTING "sht" is
+    # spelled out — "Mohnt-shtot" is mˈOntˌɛsˈAʧtˈɑt, "mohnt-ES-AITCH-tot".
+    "Mondstadt": "Mohntshtaht",
+    # 2,369: fˈɔntAn, "FON-tayn", where the nation is French and said
+    # "fon-TEN". "Fon-ten" is fˌɑntˈɛn / fˈɑntˈɛn.
+    "Fontaine": "Fon-ten",
+    # 1,939: sˈuməɹɹˌu — the vowels are close, but "meru" doubles the rhotic
+    # (ɹɹ), the trill "Narukami" was respelled to lose. "Soo-meh-roo" is
+    # sˈumˈɛɹˈu on both. (A chunk-final "eh" is /eɪ/ per this file's header —
+    # but only at the END of a word: mid-word "meh" is ɛ on both engines.)
+    "Sumeru": "Soo-meh-roo",
+    # 1,425: ɪnæzˈumə, "in-AZ-oo-muh" — English spelling rules end to end.
+    # "Ee-nah-zoo-mah" is ˈinˈɑzˈumˈɑ on both.
+    "Inazuma": "Ee-nah-zoo-mah",
+    # 1,367: nˈætlən, the flat a twice. "Naht-lahn" is nˈɑtlˈɑn on both.
+    "Natlan": "Naht-lahn",
+    # 1,555: ˈækAdmˌɪjə, "AK-ay-d-mee-yuh" — the second syllable read as /eɪ/
+    # and the third dropped altogether. "Ah-kah-dem-ee-yah" is ˈɑkˈɑdˈɛmˈijˈɑ
+    # on both. NOT "Ah-kah-deh-mee-yah": a chunk-final "eh" is /eɪ/ (ˈɑkˈɑdˈA-
+    # , "ah-kah-DAY-mee-yah"), the trap in this file's header.
+    "Akademiya": "Ah-kah-dem-ee-yah",
+    # 498: ˌæɹənˈɑɹɹə — flat a and the doubled rhotic. "Ahrah-nah-rah" is
+    # ˈɑɹənˈɑɹˈɑ on both. The fully hyphenated "Ah-rah-nah-rah" SPLITS the
+    # engines (misaki nˈæ against espeak nˈɑ) and "Ah-rah-nar-ah" keeps the
+    # doubled r it was meant to remove.
+    "Aranara": "Ahrah-nah-rah",
+    # 1,485, and the ear-gloss is the user's: "Stella-ron". stˈɛlæɹən on
+    # both, "STELL-a-ron" with the flat a of "fat" where the name has a
+    # schwa. The user's spelling is NOT what ships: "Stella-ron" is
+    # stˈɛləɹˌɑn to misaki but stˈɛləɹɹˈɑn to espeak — the doubled rhotic
+    # again, on Windows only. "Stell-uh-ron" is stˈɛlˌʌɹˈɑn / stˈɛlˈʌɹˈɑn:
+    # same segments on both engines, one r, and the schwa the gloss asks for.
+    "Stellaron": "Stell-uh-ron",
+    # 963: fˈAnɑn, "FAY-non", where the gloss is "Fai-non". The user's
+    # spelling is exactly right and ships as written — "Fai-non" is fˈInˈɑn
+    # on both. ("Fy-non" and "Fye-non" are the same phones; the spelling
+    # closest to the name wins.)
+    "Phainon": "Fai-non",
+    # The third pass down the same list. Places and lore first:
+    # 507 in the Genshin dump: wˈæɾətsˌumi — the flat a of "fat" and a t
+    # flapped to a d. "Wah-tah-tsoo-mee" is wˈɑtˈɑtsˈumˈi on both.
+    "Watatsumi": "Wah-tah-tsoo-mee",
+    # 380: ɹˈɪɾu, "RIT-oo", the same flap. "Ree-toh" is ɹˈitˈO.
+    "Ritou": "Ree-toh",
+    # 359: jæʃˈiəɹO. "Yah-shee-roh" is jˈɑʃˈiɹˈO on both.
+    "Yashiro": "Yah-shee-roh",
+    # 384: kˈɪŋs — the pinyin q read as /k/ AND the final e dropped, so the
+    # village comes out "kings". "Ching-tsuh" is ʧˈɪŋtsˈu on both.
+    "Qingce": "Ching-tsuh",
+    # 492: ˈɑɹɹu, the doubled rhotic. "Ahroo" is ˈɑɹu on both — unhyphenated,
+    # because "Ah-roo" splits the stress (misaki ˌɑɹˈu against espeak ˈɑɹˈu),
+    # the split "Ah-shah" was rejected for above.
+    "Aaru": "Ahroo",
+    # 501: pˈæɹi. "Pah-ree" is pˈɑɹˈi on both.
+    "Pari": "Pah-ree",
+    # 392: the engines disagree — misaki ɑkˈɑʃə, espeak ækˈæʃə ("a-KASH-uh").
+    # "Ah-kah-shah" is ˈɑkˈɑʃˈɑ on both, which is misaki's reading with the
+    # final vowel opened.
+    "Akasha": "Ah-kah-shah",
+    # 504: kˈæməɹɹəz — the doubled rhotic on a word that is just "camera"
+    # with a K. Respelled to the ordinary word, the move "Katheryne" →
+    # "Katherine" and "Reignbow" → "Rainbow" already make; the plural needs
+    # its own entry because substitution is word-bounded.
+    "Kamera": "Camera",
+    "Kameras": "Cameras",
+    #
+    # 721 in the Star Rail dump: kˈɛfAl on both — "KEF-ayl", two syllables
+    # where the Greek has three. "Keff-uh-lee" is kˈɛfˈʌlˈi on both. The
+    # user's gloss "kef-a-lee" is the same reading and was nearly kept: it
+    # differs only in which schwa the two engines write for the middle
+    # vowel (misaki ɐ, espeak ə), which no ear will find, but "Keff-" pins
+    # one symbol on both and costs nothing.
+    "Kephale": "Keff-uh-lee",
+    # 443 in the Genshin dump: mˈɛɹəpˌId, "MER-uh-pyde". "Meh-ro-peed" is
+    # mˈɛɹˈOpˈid on both, and is the user's gloss as written.
+    "Meropide": "Meh-ro-peed",
+    # 652 across the two: the engines don't agree with each other — misaki
+    # ˌɪmpəɹˈɑɾəɹ, espeak ɪmpˈɜɹAɾəɹ ("im-PER-ay-der", an /eɪ/ and a flapped
+    # t). "Em-per-ah-tor" is ˈɛmpɜɹˌɑtˈɔɹ / ˈɛmpɜɹˈɑtˈɔɹ — the same segments
+    # on both, differing only in whether the third chunk takes primary or
+    # secondary stress. That is a split of the kind this file usually
+    # rejects, and it is accepted here because the alternative that lands
+    # identically, "Emper-ah-tor", does it by doubling the rhotic
+    # (ˈɛmpəɹɹˈɑtˈɔɹ) — an audible trill against an inaudible stress mark.
+    "Imperator": "Em-per-ah-tor",
+    #
+    # Fourth pass, down to the 200-a-dump line. Liyue and Inazuma first:
+    # 250: kˈɪksɪŋ on both — the pinyin q read as /k/ and the x as /ks/, so
+    # the Liyue government comes out "KIK-sing". "Chee-shing" is ʧˈiʃˈɪŋ.
+    "Qixing": "Chee-shing",
+    # 253: wˈæŋɡʃu, the flat a. "Wahng-shoo" is wˈɑŋʃˈu on both.
+    "Wangshu": "Wahng-shoo",
+    # 218: fˈAjʌn — the ei read as /eɪ/ and the un clipped.
+    # "Fay-yoon" is fˈAjˈun on both.
+    "Feiyun": "Fay-yoon",
+    # 275: tˈɛməɹɹi, espeak's doubled rhotic. "Tem-ah-ree" is tˈɛmˈɑɹˈi on
+    # both; "Teh-mah-ree" is tˈAmˈɑɹˈi, the chunk-final "eh" trap again.
+    "Temari": "Tem-ah-ree",
+    # 264: sˈæŋɡO. "Sahn-go" is sˈɑŋɡˈO on both.
+    "Sango": "Sahn-go",
+    # 212: kˈænʤu. "Kahn-joh" is kˈɑnʤˈO on both.
+    "Kanjou": "Kahn-joh",
+    # 215: ˌɑnɪkəbjˈuɾO — a /bju/ where the beetle has "boo", and the t
+    # flapped. "Oh-nee-kah-boo-toh" is ˈOnˈikˈɑbˈutˈO on both.
+    "Onikabuto": "Oh-nee-kah-boo-toh",
+    # Sumeru:
+    # 223: hˈænɪjjə. "Hah-nee-yah" is hˈɑnˈijˈɑ on both.
+    "Haniyyah": "Hah-nee-yah",
+    # 211: sˈæbzəɹɹˌʌz — flat a and a doubled rhotic. "Sahb-zuh-rooz" is
+    # sˈɑbzˈʌɹˈuz on both; "Sahb-zeh-rooz" puts an /eɪ/ in the middle.
+    "Sabzeruz": "Sahb-zuh-rooz",
+    # 203: jˌæsnəpˈɑɾi — flat a and a flapped t. "Yahs-nahp-ah-tee" is
+    # jˈɑznˈɑpˈɑtˈi on both. Chunked "-nahp-" and not "-nah-", for the
+    # reason the "Nasha" entry above records.
+    "Yasnapati": "Yahs-nahp-ah-tee",
+    # 259 entries in the Genshin dump, 255 of them dialogue-shaped, and the
+    # reading was `kˌAˈAʧvˈæɹɛnə` on both engines — the "Kh" spelled out as
+    # LETTERS, "KAY-AY-CH-varena". The worst reading the scan turned up.
+    #
+    # It is also the one word here with no voiced line to match: the user
+    # reports the term appears only in unvoiced dialogue, which is exactly
+    # the text this app exists to read — so HoyoVoice is the only voice that
+    # ever says it, and the respelling answers to the source rather than to
+    # a VO. Wikipedia gives the Avestan as xᵛarənah-: a labialized voiceless
+    # velar fricative, which English has no letter for and every g2p here
+    # refuses. /kw/ is the ordinary English stand-in for it (the same one
+    # that turns Khwarezm into "Kwarezm"), and it keeps the schwa the
+    # Avestan spelling has. "Kwah-ruh-nah" is kwˈɑɹˈʌnˈɑ on both.
+    #
+    # Measured and available to swap in: "Ka-var-na" (kˈɑvˈɑɹnˈɑ,
+    # "kah-VAR-nah") drops the schwa and one syllable, and "Kwar-uh-nah"
+    # (kwˈɔɹˈʌnˈɑ) opens the first vowel to the "or" of "war". The two
+    # spellings that keep the h — "Khwah-ruh-nah", "Hwah-ruh-nah" — are
+    # spelled out letter by letter (ˌAˈAʧw…, ˈAʧw…), the initial-cluster
+    # trap this file's header warns about.
+    "Khvarena": "Kwah-ruh-nah",
+    # 919, and both engines say ənˈimO — "uh-NEE-moh", where the element is
+    # "AN-uh-moh". Cryo (kɹˈIO), Dendro (dˈɛndɹO) and Geo (ʤˈiO) were
+    # checked at the same time and are already right.
+    "Anemo": "Ann-uh-moh",
+    # 525: both engines read the abbreviation as a WORD — ˈW ˈi, "ow-ee".
+    # Expanded rather than spelled, since that is what it stands for.
+    "AoE": "area of effect",
+    # 1,314: misaki spells it out (ˌɑɹˌiˈɛs), espeak says ɹˈɛz. Players say
+    # "rez", so espeak has this one right and the entry gives it to both.
+    "RES": "rez",
+    # 894: fAvˈOniəs — "fay-VOH-nee-us", the first vowel English.
+    "Favonius": "Fah-voh-nee-us",
+    # 826: kɹˈɛmnOz — the final s voiced to a z.
+    "Kremnos": "Krem-noss",
+    # 693: mˈɛɹʧəsˌi — "MERCH-uh-see" for a French word. The user's gloss
+    # ships as written: "Ma-ray-shaussay" is mˈɑɹˈAʃˈɔsA on both. (An
+    # earlier "Mar-uh-shoh-say" doubled the rhotic, mˈɑɹɹˈʌ-.)
+    "Marechaussee": "Ma-ray-shaussay",
+    # 1,633 between them: mˈAŋkɪn — "MAY-nkin", where the word is the
+    # mannequin. The feminine form needs its own entry.
+    "Manekin": "Man-uh-kin",
+    "Manekina": "Man-uh-kee-nah",
+    # 172: bɑɹbˈɑɾOz — a flapped t and a voiced final s.
+    "Barbatos": "bar-bah-toss",
+    # 168: dˈʌnjɑɹzˌæd — "DUN-yar-zad", English vowels throughout.
+    "Dunyarzad": "doon-yar-zahd",
+    # 197: ɪnˈæzjumən — the nation is "Ee-nah-zoo-mah" above, and the
+    # demonym has to follow it.
+    "Inazuman": "Ee-nah-zoo-mun",
+    # 194: fɔntˈAniən. Keyed to match the "Fontaine" entry above, which is
+    # the French "Fon-ten".
+    "Fontainian": "Fon-ten-ee-un",
+    # The seventh pass took the ear-only cases in a batch. All eight are
+    # invented or foreign words both engines guess at identically, so the
+    # gloss IS the answer — and three of the eight could not ship as the
+    # user spelled them, all three for the same reason this file's header
+    # gives: a chunk-final "eh" is /eɪ/.
+    # 1,238: ˈɑkhəmə — "OCK-huh-muh", the h sounded. "ah-kem-ah" is
+    # ˈɑkˈɛmˈɑ on both; the gloss "ah-keh-ma" is ˈɑkˈAmˈɑ, "ah-KAY-mah".
+    "Okhema": "ah-kem-ah",
+    # 931: kɹˈɪsOz — "KRIS-ohz". "cry-sohss" is kɹˈIsˈOs on both; "cry-sohs"
+    # as glossed voices the final s to a z (kɹˈIsˈOz), which is the fault
+    # the entry exists to remove.
+    "Chrysos": "cry-sohss",
+    # 178: kjˈulˈɪpɑθ — "kyoo-LIP-oth", the q read as /kj/. "kle-poth" is
+    # klˈipˈɑθ on both and ships as glossed.
+    "Qlipoth": "kle-poth",
+    # 505: sˈɔɹʌʃ — "SOR-ush". "So-roosh" is sˌOɹˈuʃ on both, as glossed.
+    "Sorush": "So-roosh",
+    # 187: ʃˈɛvɹus — "SHEV-roos". "Shev-ress" is ʃˈɛvɹˈɛs on both; the
+    # glossed "Shev-rehss" is ʃˈɛvɹˈAs, "shev-RAYSS".
+    "Chevreuse": "Shev-ress",
+    # 1,603: hˈɛŋ, the e of "bed", where the pinyin is the u of "hung".
+    "Heng": "Hung",
+    # 857: plˌAnɑɹkˈAdiə — "PLAY-nar-kay-dee-uh". "Plan-ar-kadia" is
+    # plˈænˈɑɹkˈAdiə on both, as glossed.
+    "Planarcadia": "Plan-ar-kadia",
+    # 89, and the one this batch had to look up rather than hear:
+    # Wikipedia gives the Nahuatl as /tiˈsosik/, where both engines say
+    # tɪzˈɑsɪk — "tih-ZAH-sik", a z for the s and both i's English.
+    # "tee-soh-seek" is tˌisˈOsˈik / tˈisˈOsˈik: the same segments in the
+    # same order as the source, differing only in which chunk each engine
+    # marks. 80 of the 89 are "Tizocic II", which the numeral entry above
+    # finishes as "tee-soh-seek Two".
+    "Tizocic": "tee-soh-seek",
+    #
+    # Measured against their glosses and left OUT, because the engines
+    # already say exactly that: "Bronya" bɹˈɑnjə ("brawn-ya"), "Columbina"
+    # kˌɑləmbˈinə, "Luka" lˈukə, "Aurum" ˈɔɹəm, "Clockie" klˈɑki and
+    # "Raiden" ɹˈAdən ("RAY-den" — the glossed "Rai-den" is the same phones
+    # on both engines).
+    # Eighth pass, clearing the last of the 200-a-dump floor. Liyue and
+    # Inazuma again:
+    # 220: ɡˈIʌn — "GUY-un" for 孤云. "Goo-yoon" is ɡˈujˈun on both.
+    "Guyun": "Goo-yoon",
+    # 292: ɡjˈuhjuə. "Goohwah" is ɡˈuhwə on both — unhyphenated, because a
+    # chunk STARTING "hw" is spelled out (ˈAʧw, "AITCH-w").
+    "Guhua": "Goohwah",
+    # 218: ʧˈɛnɪˌu. "Chen-yoo" is ʧˈɛnjˈu on both.
+    "Chenyu": "Chen-yoo",
+    # 298: kˌɪʧɪbˈWʃi — "kich-ih-BOW-shee".
+    "Kichiboushi": "Kee-chee-boh-shee",
+    # 234: jˈWkI — "YOW-kye" for the Japanese 妖怪.
+    "youkai": "yoh-kye",
+    # Sumeru and Natlan:
+    # 225: kjˌusənˈɑli — a /kj/ onset the name does not have.
+    "Kusanali": "Koo-sah-nah-lee",
+    # 237: kˈɑənɹˌiə — the ae swallowed. "Kay-en-ree-ah" is kˈAˈɛnɹˈiˈɑ.
+    "Khaenri'ah": "Kay-en-ree-ah",
+    # 206: lˈæwəʧˌɜɹl, the flat a of "fat" on a hilichurl variant.
+    "Lawachurl": "Lah-wah-churl",
+    # 277: pɹˈæmæd, the flat a twice over.
+    "Pramad": "Prah-mahd",
+    # 379: sˈɪkɹAn — "SICK-rain", where the Liyue bird is a cy-crane.
+    # "sigh-crane" is sˌIkɹˈAn / sˈIkɹˈAn.
+    "cycrane": "sigh-crane",
+    # 273: dədˈOkO — the first syllable reduced to a schwa.
+    "Dodoco": "Doh-doh-koh",
+    # Star Rail:
+    # 286: bˈɑɹθəlˌOz — the final s voiced to a z.
+    "Bartholos": "Bar-thoh-loss",
+    # 244: ˈɔɹmOz — the same voiced ending.
+    "Ormos": "Or-moss",
+    # 233: ˈIəɹntum — "EAR-ntoom", the compound fused.
+    "Irontomb": "Eye-urn-toom",
+    #
+    # Four at this floor have no spelling that survives both engines and
+    # are left alone: "Tenryou" (447) — "Ten-ryoh" is tˈɛnɹˈIO, the /aɪ/ of
+    # "rye", and "Ten-rio" buys a syllable; "Jueyun" (222), where every
+    # spelling of the jue- onset either spells out or lands an /eɪ/;
+    # "Deshret" (324), whose sh collapses to an s the moment the word is
+    # hyphenated (dˈɛsɹˈɛt); and "Aether" (437), which is ˈiθə already —
+    # only the final r is missing, and "Ee-ther" voices the th.
+    # Fontaine, Nod-Krai, and a Star Rail planet:
+    # 306 and 206 — mˈɛlusˌIn(z), "MEL-oo-sine", where the Fontaine species
+    # ends on the vowel of "seen" and a z. "Mel-oo-zeen" is mˈɛlˈuzˈin on
+    # both; the plural needs its own entry, substitution being word-bounded.
+    "Melusine": "Mel-oo-zeen",
+    "Melusines": "Mel-oo-zeens",
+    # 237: ɡˈɑɹdiənɪʤ — the French swallowed into "-ee-uh-nidge".
+    # "Gar-din-nahj" is ɡˈɑɹdˈɪnnˈɑʤ on both.
+    "Gardiennage": "Gar-din-nahj",
+    # 231: snˈɛʒnəɡɹˌæd — the zh is right (it is right in "Snezhnaya" too),
+    # the -grad is the flat a of "fat". "Snezh-noh-grahd" is snˈɛʒnˈOɡɹˈɑd.
+    "Snezhnograd": "Snezh-noh-grahd",
+    # 234: ʤɑɹɹˈɪlOvˌiˈI — a doubled rhotic, and the numeral read as the
+    # LETTERS, "vee-eye". "Ja-rillo Six" is jˈɑɹˈɪlO sˈɪks on both.
+    "Jarilo-VI": "Ja-rillo Six",
+    # 886, and both engines make the same mess of it: the damage-over-time
+    # abbreviation is dˌutˈi / dˈu tˈi — "doo-tee". "dot" is dˈɑt on both.
+    "DoT": "dot",
+    #
+    # Then the ones that are ORDINARY English words, wrong on Windows only —
+    # the `split` class of the scan, and the reason it exists. A split has a
+    # right answer that does not need an ear: one engine has the word in a
+    # human-curated lexicon and the other is guessing, so the respelling
+    # reproduces the lexicon's reading on both platforms rather than
+    # inventing a third (see "Acheron" above, and "calm" below, where the
+    # engine holding the right answer is espeak). Keys are
+    # lowercase like "shaman" above: they are common nouns, --custom-words
+    # should not pin them in the OCR vocabulary, and a capitalised
+    # replacement mid-sentence reads as a name.
+    # 727 in the Star Rail dump: misaki says æmbɹˈOʒiəl, espeak æmbɹˈOsiəl —
+    # "am-BRO-see-ul", the /ʒ/ of "measure" hardened to an s.
+    # "Am-broh-zhul" is æmbɹˈOʒˈʌl on both.
+    "ambrosial": "am-broh-zhul",
+    # 450: misaki kˈAlɪks, espeak kˈælɪks — "KAL-ix" for a word that opens on
+    # the vowel of "cake". "Kay-lix" is kˈAlˈɪks on both.
+    "calyx": "kay-lix",
+    "calyxes": "kay-lixes",
+    # 529 across both: misaki kɹˈɪmzᵊn, espeak kɹˈɪmsən — an s where the word
+    # has a z. "Krim-zun" is kɹˈɪmzˈʌn on both.
+    "crimson": "krim-zun",
+    # 368: misaki ˈɛɹəmˌIt, espeak ɪɹˈɛmIt — "ih-REM-ite", the stress a
+    # syllable late. "Airuh-mite" is ˈɛɹʌmˈIt on both; hyphenating the middle
+    # chunk splits the stress ("Air-uh-mite" is misaki ˈɛɹˌʌmˈIt against
+    # espeak ˈɛɹˈʌmˈIt).
+    "eremite": "airuh-mite",
+    "eremites": "airuh-mites",
+    # 385: misaki ʃˈOɡən, espeak ʃˈɑɡʌn — "SHAH-gun". "Shoh-gun" is ʃˈOɡˈʌn
+    # on both.
+    "shogun": "shoh-gun",
+    # 323: espeak pɹɪmˈɔɹdiəl, "prih-MOR-dee-ul", where the word opens on
+    # the /aɪ/ of "pry". "pry-mordial" is pɹˈImˈɔɹdiəl on both.
+    "primordial": "pry-mordial",
+    # 324: espeak ʃˈɑɡənˌAt — "SHAH-guh-nate", both vowels wrong; the bare
+    # "shogun" has its own entry above. "shoh-guh-nit" is ʃˈOɡˈʌnˈɪt.
+    "shogunate": "shoh-guh-nit",
+    # 296, and the one entry in this file where MACOS is the broken side:
+    # misaki sounds the l (kˈɑlm, "kalm") where espeak has it right at
+    # kˈɑm. "kahm" is kˈɑm on both.
+    "calm": "kahm",
+    # 277: espeak θænˈɑɾOz, "than-AH-tohz" — the stress a syllable late and
+    # the s voiced. "Thanna-toss" is θˈænətˈɔs on both. NOT "Than-uh-toss",
+    # which turns the opening into the voiced th of "the" (ðˌənˈʌtˈɔs).
+    "Thanatos": "Thanna-toss",
+    # 256: espeak pɹɪsmˈæɾɪk, an s where the word has a z.
+    # "priz-matic" is pɹˈɪzmˈæɾɪk on both.
+    "prismatic": "priz-matic",
+    # 256: espeak stˈæɾəs — "STAT-us", the flat a of "fat".
+    # "stay-tus" is stˈAtˈʌs on both.
+    "status": "stay-tus",
+    # 248: espeak mˈædəm — "MAD-um", the English noun rather than the
+    # French address Fontaine uses it as. "muh-dahm" is mˈʌdˈɑm on both.
+    "madame": "muh-dahm",
+    # 212: espeak dᵻvˈɪnəɹ — "duh-VIN-er", where the reader of fortunes is
+    # "di-VINE-er". "di-vyne-er" is dˌɪvˈInˈɜɹ on both.
+    "diviner": "di-vyne-er",
+    #
+    # The fifth pass took this class rather than the names, because a word
+    # that is wrong in ORDINARY dialogue is said far more often than any
+    # proper noun. Wrong on Windows:
+    # 775: espeak sˈɛɹᵻməni — "SER-ih-muh-nee", the third syllable gone.
+    "ceremony": "sair-uh-moh-nee",
+    # 531: espeak spˈisiz — "SPEE-sees", an s where the word has a /ʃ/.
+    "species": "spee-sheez",
+    # 457: espeak ˈɑnvəlˌOp — "ON-vuh-lope".
+    "envelope": "en-vuh-lope",
+    # 729 between them: espeak drops the /ɡ/ altogether — səʤˈɛst,
+    # "suh-JEST". The one pair here where the respelling keeps a stress
+    # split (misaki sˌʌɡ- against espeak sˈʌɡ-); the segments match, and a
+    # missing consonant is worth more than a stress mark.
+    "suggest": "sug-jest",
+    "suggested": "sug-jested",
+    # 427: espeak ˈɑɹɾɪsənʃˌɪp — an s where "artisan" has a z.
+    "artisanship": "ar-tuh-zan-ship",
+    # 3,004 in the Star Rail dump, plus 515 possessives — the second most
+    # common fault in either game after "they're", and the scan hid it for
+    # five passes: all-caps words were skipped wholesale as "read out as
+    # letters", which is true of DMG, ATK and TCG and false here. espeak
+    # tries to SAY it: ˈɪpk, three letters mashed into one syllable, where
+    # misaki spells it out (ˌIpˌisˈi). The company is said aloud by the
+    # characters, so the initialism is what the respelling reproduces.
+    # Keyed on the bare form only: it fires inside the possessive too and
+    # leaves "eye-pee-see's", which is ˌIpˈisˈiz — the identical phones an
+    # "IPC's" entry would have produced (cf. the "Yae" entry above).
+    "IPC": "eye-pee-see",
+    # 718 between the capitalised and lowercase forms: espeak səlˈɛstjᵊl,
+    # "suh-LEST-yul", where the ti is the /tʃ/ of "church".
+    "celestial": "suh-les-chul",
+    # 345: espeak ɛkskwˈɪsɪt — an s for the z.
+    "exquisite": "ex-kwiz-it",
+    # 311: espeak fˈAsd — the -ced ending voiced to a d.
+    "faced": "fayst",
+    # 298: espeak ɹᵻsˈɪstəns — an s for the z again.
+    "resistance": "rih-zis-tunce",
+    # 270: espeak pɹˈOɾəɡənˌɪst — "PRO-tuh-guh-nist", stress on the first
+    # syllable and a flapped t.
+    "protagonist": "pruh-tag-uh-nist",
+    #
+    # And four where MACOS is the broken side, fixed the same way — the
+    # engine holding the right answer is espeak, and the respelling
+    # reproduces it on both:
+    # 411: misaki skˈiz — "skeez", where the plural of sky is skˈIz.
+    "skies": "skyze",
+    # 370: misaki IdˈOlən — "eye-DOH-lun", the stress a syllable late.
+    "Eidolon": "Eye-duh-lon",
+    # 292: misaki ˈɑbztəkᵊlz — "obz-tuh-kulz", a z where the word has an s.
+    "obstacles": "ob-stuh-kulz",
+    # 269: misaki dəskˈIz — "dis-KYZE", a hard k where the word has a g.
+    # Spelled "-guyze" because "-gyze" is read as a /ʤ/ (dˈɪsʤˈIz).
+    "disguise": "dis-guyze",
+    #
+    # Sixth pass, same class, deeper. A word family needs one entry per
+    # form — substitution is word-bounded — so the -s and -ed forms are
+    # here beside their stems.
+    # 764 across the family: espeak reads the s as an s where "absorb" has
+    # a z (əbsˈɔɹb). Unhyphenated: "ab-zorb" splits the first vowel
+    # (misaki ˌɑb- against espeak ˈæb-), where "abzorb" is əbzˈɔɹb on both
+    # — misaki's own reading, exactly.
+    "absorb": "abzorb",
+    "absorbs": "abzorbs",
+    "absorbed": "abzorbed",
+    "absorbing": "abzorbing",
+    # 447: espeak ʤˈænəs — "JAN-us" for the two-faced god. "Jay-nuss" is
+    # ʤˈAnˈʌs on both; "Jay-nus" reads the last chunk as "nooz" on misaki.
+    "Janus": "Jay-nuss",
+    # 375 between them, and the stems were fixed a pass earlier: espeak
+    # drops the /ɡ/ here too, and in "suggesting" BOTH engines do.
+    "suggests": "sug-jests",
+    "suggesting": "sug-jesting",
+    # 379 between them: espeak pɹˈɛɹ is right for the petition and misaki
+    # pɹˈAəɹ is the one who prays — the games mean the petition.
+    "prayer": "prair",
+    "prayers": "prairs",
+    # 211, the singular of an entry made last pass: misaki ˈɑbztəkᵊl.
+    "obstacle": "ob-stuh-kul",
+    # 251 between them: espeak mˈiɾɪˌɔɹIt — "MEE-tih-or-ite".
+    "meteorite": "mee-tee-oh-rite",
+    "meteorites": "mee-tee-oh-rites",
+    # 185: espeak ˈOʃənˌɪd — "OH-shun-id", the ce read as a /ʃ/, where the
+    # Genshin water spirit is "oh-SEE-uh-nid".
+    "Oceanid": "oh-see-uh-nid",
+    # 180: espeak nIˈiv — "nye-EEV". "nah-eev" is nˈɑˈiv on both;
+    # "nah-eve" splits the first vowel the way "ab-zorb" does.
+    "naive": "nah-eev",
+    # 176: espeak fInˈænʃᵊl — "fye-NAN-shul".
+    "financial": "fuh-nan-shul",
+    # 163: espeak θˈʌɹOli — "thuh-ROH-lee".
+    "thoroughly": "thur-uh-lee",
+    # 159: espeak ˌɪntəfˈɪɹ — the first r dropped. ("interference" has the
+    # same fault and no fix: every spelling of the "-ence" tail adds a
+    # vowel after the s, ˌɪntəɹfˈɪɹɛnsˈɛ.)
+    "interfere": "inter-feer",
+    # 157: espeak vˈɪp — said as a word, "vip", where it is three letters.
+    "VIP": "vee-eye-pee",
+    # Roman numerals, and neither engine reads one: misaki spells the
+    # letters (vˌiˌIˈI for VII, ˌIˈɛks for IX) and espeak announces the
+    # system — ɹˌOmən sˈɛvən, "ROMAN SEVEN", ɹˌOmən ɪlˈɛvən for XI. 1,664
+    # of them across the two dumps, in chapter titles and place names.
+    # These are the ONLY entries here that must be exact-case: matching is
+    # case-insensitive by default and the Genshin dump has 13 "Xi" and 15
+    # "Ix", which would become "Eleven" and "Nine". They go in
+    # pronunciations_exact below with "Gaming".
+    # II and III can be keyed bare: neither is an English word. I, V and X
+    # cannot. "I" is the PRONOUN — 278,936 of them in the dialogue-shaped
+    # lines against roughly 340 numerals — so it is keyed only in the
+    # containers the games actually number, measured off the dumps: "Act I"
+    # (95), "Part I" (67), "Zone I" (53), "Phase I" (48), "Mode I" (48),
+    # "Room I" (16), "Chapter I" (8), "Volume I" (2). "Part I" is pˈɑɹt ˌI,
+    # "part EYE", where "Part One" is pˈɑɹt wˈʌn. Nine of those lines are
+    # prose rather than a title ("Act I" followed by a lowercase word), and
+    # they will now read "Act One" — the price of the other 330.
+    #
+    # V and X are left alone entirely: 501 between them, mostly not
+    # numerals at all, and a bare key would reach into "X-ray", "X-Axis"
+    # and "V-shaped" (12 such lines). Their containers can be keyed the
+    # same way as I if anyone wants them.
+    "II": "Two",
+    "III": "Three",
+    "Act I": "Act One",
+    "Part I": "Part One",
+    "Zone I": "Zone One",
+    "Phase I": "Phase One",
+    "Mode I": "Mode One",
+    "Room I": "Room One",
+    "Chapter I": "Chapter One",
+    "Volume I": "Volume One",
+    "IV": "Four",
+    "VI": "Six",
+    "VII": "Seven",
+    "VIII": "Eight",
+    "IX": "Nine",
+    "XI": "Eleven",
+    # 156: espeak ɹᵻsˈɪʤuᵊl — an s for the z again.
+    "residual": "rih-zij-oo-ul",
+    # 154: espeak stɹˈæɾAʤəmz — "STRAT-ay-jemz".
+    "Stratagems": "strat-uh-jemz",
+    # 153: espeak pɹˌiɹˈɛkwɪsˌɪt — s for z, and the last vowel full.
+    "prerequisite": "pre-rek-wiz-it",
+    # 149: espeak blˈæzɑɹ — "BLAZ-ar" for what astronomy says "BLAY-zar".
+    "Blazar": "Blay-zar",
+    # 143: espeak nˈuz — "nooz", where the Star Rail term is Greek νοῦς and
+    # ends on an s. Respelled to the ordinary word that sounds like it.
+    "Nous": "noose",
+    # 121: espeak dˈɑɹʃən — the second vowel reduced to a schwa.
+    "Darshan": "Dar-shahn",
+    # 120: misaki reads the contraction wˌʌtɹˌA, "what-ray". espeak's
+    # wˌʌɾəɹ is not a mistake at all — "wutter" is what the contraction
+    # sounds like in speech — so this reproduces it rather than expanding
+    # to "what are", which is the formal reading nobody says. "wuttr" is
+    # wˈʌɾəɹ on both.
+    "What're": "wuttr",
+    #
+    # Four more where macOS is the broken side:
+    # 145: misaki hˈæntsəm inserts a /t/; espeak sounds the d. "han-sum"
+    # is the silent-d reading both ways.
+    "handsome": "han-sum",
+    # 139: misaki hˈæmpstəɹ — an inserted p, "HAMP-ster".
+    "Hamster": "Ham-ster",
+    # 137: misaki hˈʌzbᵊnd — a z where the word has an s.
+    "husband": "huss-bund",
+    # 123: misaki ɑɹkˈAnə — "ar-KAY-nuh".
+    "Arcana": "ar-kah-nuh",
+    #
+    # 186: espeak pɹˈisiəns — "PREE-see-uhns". "presh-inz" is pɹˈɛʃˈɪnts on
+    # both. The tail is the compromise: every spelling of "-ence"/"-ense"
+    # adds a vowel after the s (pɹˈɛʃʌnsˈi), and "-inz" buys a /t/ before
+    # the s instead, which is the smaller wrong. The user's own "preh-ssh-inz"
+    # is not the spelling that ships: a chunk of bare consonants is read as
+    # LETTERS, pɹˈAˌɛsˌɛsˈAʧˈɪnts — "pray-S-S-AITCH-ints".
+    "Prescience": "presh-inz",
+    # 155: espeak ˌɪntəfˈɪɹəns drops the first r. "in-ter-fear-anss" is
+    # ɪntˈɜɹfˈɪɹˈæns on both — the user's gloss with its last two chunks
+    # joined, because a chunk written "ss" is read as "ESS-ESS"
+    # (…ənˌɛsˈɛs), the same letter-spelling trap as above.
+    "interference": "in-ter-fear-anss",
+    #
+    # "paths" (860) is the one an earlier pass could not fix and is left alone:
+    # espeak says pˈæθs where the plural is pˈæðz, and no respelling gets
+    # the voiced th back — "pathz" keeps the θ on both engines, which would
+    # trade Windows' wrong s for macOS's right ð and gain nothing.
+    # 3,336 across the two dumps, and the most common word in either that
+    # Windows says wrong: espeak reads the contraction ðAəɹ, "THAY-er",
+    # in running text as well as alone ("They're coming." is ðAəɹ kˈʌmɪŋ).
+    # misaki says ðˌɛɹ and is right. Respelled to the ordinary homophone,
+    # which is ðˈɛɹ on both — the log, dedupe and casting keep "they're".
+    "they're": "There",
+    # 530: vˌɪdiədhˈɑɹɹə — doubled rhotic again, and the dh read as its own
+    # syllable. "Vid-yah-dah-rah" is vˈɪdjˌɑdˌɑɹˈɑ / vˈɪdjˈɑdˈɑɹˈɑ, one r.
+    "Vidyadhara": "Vid-yah-dah-rah",
     # lˈɪju / lˈɪjuː, "LIH-yoo" — the i is the i of "lit" and the ue is a
     # dropped vowel. "Lee-wey" is lˈiwˈA / lˈiːwˈA. Spelled "-wey" and not
     # "-way", which reads the same phones but splits the stress (misaki
@@ -382,6 +1112,66 @@ RETIRED = {
     # in voices.json it is dead config — the "Yae" substitution fires first
     # and the full-name key can never match again.
     "Yae Miko": "Yah-eh Mee-koh",
+    # superseded the same way, and for the same reason: "Ruan", "Kamisato",
+    # "Ayaka" and "Ayato" all have entries of their own now, dialogue uses
+    # them far more often than the full names, and a shorter key sorts first
+    # — so these three could never match again anyway.
+    "Ruan Mei": "Rwahn May",
+    "Kamisato Ayaka": "Kah-mee-sah-toh Ah-yah-kah",
+    "Kamisato Ayato": "Kah-mee-sah-toh Ah-yah-toh",
+    # the rest of the full-name keys, retired as their halves got entries.
+    # "Kuki Shinobu" is the one that stays: "Kuki" alone is already kˈuki on
+    # both engines and needs no entry, so nothing sorts ahead of it.
+    "Kaedehara Kazuha": "Kah-eh-deh-hah-rah Kah-zoo-hah",
+    "Kujou Sara": "Koo-joh Sah-rah",
+    "Sangonomiya Kokomi": "Sahn-go-no-mee-yah Ko-ko-mee",
+    "Shikanoin Heizou": "Shee-kah-no-een Hay-zoh",
+    "Yumemizuki Mizuki": "Yoo-meh-mee-zoo-kee Mee-zoo-kee",
+}
+
+# Checked against both engines and deliberately given NO entry, because the
+# reading is already right (or, for the last group, because no respelling
+# survives both engines — each one's reason is in a comment beside the
+# entries above). tools/textmap_words.py reads this set and stops reporting
+# them: without it every scan re-lists the same 80-odd words a person has
+# already ruled on, and the floor of the candidate list never falls.
+CLEARED = {
+    # read correctly as they stand
+    "Amphoreus", "Fragmentum", "Trailblaze", "Silvermane", "Coreflame",
+    "Dreamville", "Dragonspine", "Windblume", "Windtrace", "Scalegorge",
+    "Ashveil", "Phantasmoon", "Mechanicus", "Teyvat", "Ley", "Mei", "Mei's",
+    "Yang", "Sparxie", "Sparxicle", "Sampo", "Graphia", "Aino", "Hyacine",
+    "Maison", "Natasha", "Jahoda", "Zagreus", "Alhaitham", "Bronya",
+    "Columbina", "Luka", "Aurum", "Clockie", "Clockie's", "Raiden",
+    "Millelith", "adepti", "adeptus", "Adeptus", "Hilichurl", "hilichurl",
+    "hilichurls", "Nod-Krai", "Invokation", "Ningguang", "Miko", "Klee",
+    "Cyno", "Geo", "Cryo", "Dendro", "Seelie", "Layla", "Arlan", "Monsieur",
+    "Siobhan", "Bennett", "Argenti", "Lesley", "Diona", "Rin", "Thoma",
+    "Gorou", "Kairagi", "Yoimiya", "Wanmin", "Yunli", "Yukong", "Lyney",
+    "Ororon", "Styxia", "Xavier", "Cocolia", "Varka", "Guang", "Wispae",
+    "wispae", "Mary-Ann", "Gallagher", "Odette", "Hanu", "Aeon", "Aeons",
+    # laughter and hesitation: already read as themselves
+    "Hehe", "hehe", "Heh", "heh", "Hehehe", "Hahaha", "hahaha", "Hahahaha",
+    "Hee-hee", "Hmm", "hmm", "Umm", "Ohh", "Argh", "Agh",
+    # ordinary English where both readings are legitimate
+    "route", "routes", "cosmos", "Cosmos", "restaurant", "Restaurant",
+    "comfortable", "uncomfortable", "yourself", "somewhat", "cursed",
+    "teammates", "objective", "objectives", "corridor", "Corridor",
+    "exploration", "Exploration", "everybody", "somebody", "prosperity",
+    "shan't", "prototype", "Voracity", "President", "president", "Domain",
+    "domain", "domains", "Domains", "Divergent", "Neuvillette", "Whew",
+    "Fungi", "SoulGlad", "phenomenon", "hide-and-seek", "immortal",
+    "illegal", "Planarcadia",
+    # the "final e dropped" tell fires on every 've contraction, and every
+    # one of them is already right (wˈʊdəv is "would-uv")
+    "would've", "must've", "could've", "should've", "who've", "might've",
+    # compounds and fragments the tell misreads: "trashcan" is tɹˈæʃkæn,
+    # which is the word; "th's" is a tokenizer stub off an ordinal; and the
+    # stray ” in "enemies'" is a quote character in the dump, not a reading
+    "trashcan", "trashcans", "th's", "enemies'", "Janus'", "Interastral",
+    # no respelling survives both engines — see the comments above
+    "paths", "Paths", "truths", "townsfolk", "Blouse", "Wardance",
+    "Tenryou", "Jueyun", "Deshret", "Aether", "interfering",
 }
 
 # Names that are also ordinary English words. Matching is case-insensitive by
@@ -389,7 +1179,12 @@ RETIRED = {
 # common word too — "the gaming table" is not the Liyue chef. These match the
 # capitalised spelling only. Any future entry for Jade, Sunday, Hook, Blade,
 # Archer, Robin or March 7th belongs here as well.
-EXACT = ["Gaming"]
+EXACT = ["Gaming", "II", "III", "IV", "VI", "VII", "VIII", "IX", "XI",
+         # the numbered containers too: matching is case-insensitive by
+         # default, and "the act i performed" would otherwise come out
+         # "the Act One performed".
+         "Act I", "Part I", "Zone I", "Phase I", "Mode I", "Room I",
+         "Chapter I", "Volume I"]
 
 # --custom-words tokenizing: keep name words, drop the connective tissue
 PLAIN_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*")
