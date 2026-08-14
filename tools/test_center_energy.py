@@ -14,7 +14,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from live import (center_energy_voiced, ENERGY_MID_BURST,        # noqa: E402
+import live                                                      # noqa: E402
+from live import (center_burst_corroborated,                     # noqa: E402
+                  center_energy_voiced, ENERGY_MID_BURST,
                   ENERGY_MID_OVER_SIDE, ENERGY_SIDE_FLAT,
                   ENERGY_DECISIVE_OVER_SIDE)
 
@@ -63,6 +65,34 @@ check(False, 30.0, 30.0 - ENERGY_MID_OVER_SIDE + 0.1, 0.99,
 # --- the layer must not fire on silence or on nonsense ---
 check(False, 0.0, 0.0, 0.0, "nothing happening")
 check(False, -5.0, -20.0, 0.99, "mid fell; 15dB 'over' side means nothing")
+
+# --- who the burst is allowed to speak for --------------------------------
+# Passing the shape test above is half the decision; the other half is
+# whether anything corroborates it. Energy alone never does — that is what
+# kept the Snezhnaya train from silencing the scene — so a character the
+# model cannot hear has to be named, because they can never earn a record.
+live.voiced_history.clear()
+live.voiced_recent.clear()
+live.VOICES.setdefault("settings", {})["gate_prior"] = {}
+
+
+def corroborated(want, speaker, peak, why):
+    got = center_burst_corroborated(speaker, peak)
+    if got != want:
+        fails.append(f"  {speaker or 'unknown'} peak={peak}: "
+                     f"want {want}, got {got} — {why}")
+
+
+corroborated(False, "Wagner", 0.00, "a stranger and a silent burst: spoken")
+corroborated(True, "Wagner", 0.15, "faint speechiness is corroboration")
+corroborated(True, "Paimon", 0.00, "the built-in model-deaf list stands in "
+                                   "for the record she cannot earn")
+corroborated(True, "Sparxie", 0.00, "...and so does Sparxie's")
+
+live.VOICES["settings"]["gate_prior"] = {"Wagner": "model_deaf",
+                                         "Paimon": ""}
+corroborated(True, "Wagner", 0.00, "settings.gate_prior adds a name")
+corroborated(False, "Paimon", 0.00, "...and takes one off the built-in list")
 
 if fails:
     print(f"FAIL ({len(fails)})")
