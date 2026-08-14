@@ -322,6 +322,20 @@ voiced_history = {}
 # speaker -> the outcomes themselves, oldest first ("v" voiced, "s" spoken).
 # The window is the source of truth; the counts above are a view of it.
 voiced_recent = {}
+# when anything at all was last heard to be voiced, whoever was speaking:
+# "does this scene have voice acting in it" is a property of the scene
+scene_vo = deque(maxlen=64)
+
+
+def note_scene_vo():
+    scene_vo.append(time.monotonic())
+
+
+def scene_has_vo(window=None):
+    """Has anything been heard to be voiced recently, by any speaker?"""
+    window = SCENE_VO_WINDOW if window is None else window
+    now = time.monotonic()
+    return any(now - t <= window for t in scene_vo)
 
 
 def record_voiced(speaker, was_voiced):
@@ -330,6 +344,8 @@ def record_voiced(speaker, was_voiced):
     w.append("v" if was_voiced else "s")
     voiced_history[speaker] = [sum(1 for c in w if c == "v"),
                                sum(1 for c in w if c == "s")]
+    if was_voiced:
+        note_scene_vo()
 
 
 def seed_window(speaker, v, s):
@@ -366,6 +382,37 @@ ENERGY_SIDE_FLAT = 2.5        # AND side must stay flat — music swells raise
 # this cut 18 of 1107 spoken lines (1.6%) become voiced, and 27 of the 46
 # known-voiced ones are reachable without the VAD agreeing at all.
 ENERGY_DECISIVE_OVER_SIDE = 8.0
+# ...and what that cut is worth for a speaker named model-deaf, where the
+# burst is the ONLY evidence there will ever be. 8.0 is a population split
+# taken across all speakers, and it lands mid-distribution for these two:
+# rec_20260812_083939 read "Wow, it's so majestic! Just flying from one side
+# to the other…" four times over the game's own delivery of it, at 7.1, 6.4,
+# 6.7 and 9.8dB of mid-over-side. Only the 9.8 crossed, so the app skipped
+# the fourth read as voiced and talked over the first three — the same
+# sentence, the same voiceover, seconds apart, is the ground truth that says
+# the cut is inside the population and not beside it. At 6.0 all four land
+# together, and across seventeen session logs the relaxed cut moves six
+# Paimon lines in total (the four above, "They really had to build the
+# railroad over a canyon" at 7.9dB in the same scene — the very next line
+# was yielded to late VO at peak 0.60, so that scene was certainly voicing
+# her — and two lines in sessions with no voice acting in them at all).
+MODEL_DEAF_OVER_SIDE = 6.0
+# Which is what those last two are for. The relaxed cut is allowed only
+# while something in the scene has recently been heard to have a voice —
+# ANY speaker, since voice acting is a property of the scene and not of the
+# character. Both lines the relaxed cut would otherwise have silenced come
+# from sessions where nothing was ever detected as voiced (the Leyla
+# vegetable quest, 2026-08-08): with this guard they stay spoken, and the
+# four in the Snezhnaya station scene — where other speakers were being
+# skipped seconds earlier — still land. Six moved, two of them wrongly,
+# becomes four moved and none wrongly.
+#
+# Ten minutes: long enough to cover a quiet stretch inside a voiced quest
+# (the second Paimon line in rec_20260809 sat 100s after the previous
+# skip), short enough that a voiced cutscene does not license a relaxed cut
+# for the rest of the session. In memory only — a restart inside a voiced
+# scene falls back to the strict cut, which is the safe direction.
+SCENE_VO_WINDOW = 600
 # What "lasts like speech" means for a centre burst: the dialogue-advance
 # click is over in ~0.2s of elevated windows, a one-word VO line holds
 # ~0.5s, and 0.35 sits between them with the overlap-inflation (~0.13s)
@@ -704,20 +751,38 @@ def speech_hits(since, threshold=None):
     return sum(1 for t, p in vad_history if t >= since and p >= threshold)
 
 
-def center_energy_voiced(mid_up, side_up, vad_peak):
+def center_energy_voiced(mid_up, side_up, vad_peak, decisive_over=None):
     """Is this centre-channel burst voiceover rather than a sound effect?
 
     Game VO is mixed to the stereo centre; music and ambience are wide. The
     side-flat cap and the speechiness floor both exist to keep centre-panned
     SFX out — but a burst this lopsided is not an explosion, which is
-    broadband, so above ENERGY_DECISIVE_OVER_SIDE neither applies. Kept as a
-    pure function so tools/test_center_energy.py can pin it.
+    broadband, so above the decisive cut neither applies. Kept as a pure
+    function so tools/test_center_energy.py can pin it.
+
+    decisive_over overrides that cut, which is how a model-deaf speaker in a
+    scene with voice acting in it is judged — see MODEL_DEAF_OVER_SIDE.
     """
+    if decisive_over is None:
+        decisive_over = ENERGY_DECISIVE_OVER_SIDE
     if mid_up < ENERGY_MID_BURST or mid_up - side_up < ENERGY_MID_OVER_SIDE:
         return False
-    if mid_up - side_up >= ENERGY_DECISIVE_OVER_SIDE:
+    if mid_up - side_up >= decisive_over:
         return True
     return side_up <= ENERGY_SIDE_FLAT and vad_peak >= 0.15
+
+
+def decisive_cut(speaker):
+    """The mid-over-side a burst must reach to answer for itself, in dB.
+
+    Relaxed for a speaker the model cannot hear, but only while the scene
+    has recently been heard to voice SOMEBODY: without that guard the looser
+    cut reaches into quests that have no voice acting at all, where every
+    skip is a line lost and the player has nothing else reading it.
+    """
+    if model_deaf(speaker) and scene_has_vo():
+        return MODEL_DEAF_OVER_SIDE
+    return ENERGY_DECISIVE_OVER_SIDE
 
 
 def center_burst_corroborated(speaker, vad_peak):
@@ -2536,6 +2601,10 @@ def main():
                 s, w, pk = vad_evidence(t_play + 0.2, soft=yield_soft)
                 speech.stop()
                 stats["yielded"] += 1
+                # a yield is the scene proving it has voice acting in it, and
+                # it is proof the gate's own verdict missed: the line was
+                # recorded as spoken a moment ago
+                note_scene_vo()
                 if yield_event_id:
                     for e in events:
                         if e["id"] == yield_event_id:
@@ -3487,8 +3556,10 @@ def main():
             # side+5.2 — 12.1dB of centre burst — because her processed
             # squeak scores 0.00 to a speech model built on human speech,
             # which is the exact case this layer exists for.
-            decisive = mid_up - side_up >= ENERGY_DECISIVE_OVER_SIDE
-            if not voiced and center_energy_voiced(mid_up, side_up, vad_peak):
+            cut = decisive_cut(state["speaker"])
+            decisive = mid_up - side_up >= cut
+            if not voiced and center_energy_voiced(mid_up, side_up, vad_peak,
+                                                   cut):
                 deaf = model_deaf(state["speaker"])
                 if center_burst_corroborated(state["speaker"], vad_peak):
                     voiced = True
@@ -3496,7 +3567,8 @@ def main():
                           f"side+{side_up:.1f}dB peak={vad_peak:.2f} "
                           f"sustain={sustain:.2f}s"
                           f"{' decisive' if decisive else ''}"
-                          f"{' model-deaf prior' if deaf else ''}", flush=True)
+                          f"{f' model-deaf cut {cut:.1f}dB' if deaf else ''}",
+                          flush=True)
                 else:
                     print(f"[center burst without speech or voiced record "
                           f"— speaking] mid+{mid_up:.1f}dB "
