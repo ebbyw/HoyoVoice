@@ -209,9 +209,11 @@ FIXES = {
     # "Kaedehara".)
     "Yumemizuki": "Yoo-meh-mee-zoo-kee",
     # --- Genshin: everywhere else ---
-    # ʧˈæskə on both — the flat a. "Chahss-kah" is ʧˈɑskˈɑ; "Chahs-kah"
-    # voices the s to a z (ʧˈɑzkˈɑ).
-    "Chasca": "Chahss-kah",
+    # ʧˈæskə on both — the a is right, the ending is not. "Chaz-kuh" is
+    # ʧˈæzkˈʌ, the user's reading. NOT "ChAz-kuh" as glossed: a capital
+    # inside a chunk makes the g2p spell it out, sˌiˈAʧ ˈæzkˈʌ —
+    # "C-H-ay az-kuh".
+    "Chasca": "Chaz-kuh",
     "Chiori": "Chee-oh-ree",
     "Citlali": "Seet-lah-lee",
     # klˈɔɹɪnd on both, "KLOR-ind", where the duellist is French and said
@@ -342,8 +344,8 @@ FIXES = {
     "Castorice": "Castor-ess",
     # klˈɑɹɹə — the vowels are right and the r is doubled. "Klah-rah" is
     # klˈɑɹˈɑ on both.
-    # sˈɜɹsᵻz — the final s voiced. "Sur-sees" is sˌɜɹsˈiz / sˈɜɹsˈiz.
-    "Cerces": "Sur-sees",
+    # sˈɜɹsᵻz — the last vowel clipped. "Ser-seez" is sˈɜɹsˈiz on both.
+    "Cerces": "Ser-seez",
     "Clara": "Klah-rah",
     "Gepard": "Ghep-ard",
     # hˈɜɹɾə on both — the vowel is right and the t is flapped to a d,
@@ -738,35 +740,44 @@ TERMS = {
     # 220: ɡˈIʌn — "GUY-un" for 孤云. "Goo-yoon" is ɡˈujˈun on both.
     "Guyun": "Goo-yoon",
     # 292: ɡjˈuhjuə. "Goohwah" is ɡˈuhwə on both — unhyphenated, because a
-    # chunk STARTING "hw" is spelled out (ˈAʧw, "AITCH-w").
+    # chunk STARTING "hw" is spelled out: the glossed "Goo-hwa" reads
+    # ɡˈuˌAʧdˌʌbᵊljˌuˈA, "goo-AITCH-DOUBLE-YOU-ay".
     "Guhua": "Goohwah",
     # 218: ʧˈɛnɪˌu. "Chen-yoo" is ʧˈɛnjˈu on both.
     "Chenyu": "Chen-yoo",
     # 298: kˌɪʧɪbˈWʃi — "kich-ih-BOW-shee".
-    "Kichiboushi": "Kee-chee-boh-shee",
+    "Kichiboushi": "Kee-chee-bow-shee",
     # 234: jˈWkI — "YOW-kye" for the Japanese 妖怪.
     "youkai": "yoh-kye",
     # Sumeru and Natlan:
     # 225: kjˌusənˈɑli — a /kj/ onset the name does not have.
-    "Kusanali": "Koo-sah-nah-lee",
-    # 237: kˈɑənɹˌiə — the ae swallowed. "Kay-en-ree-ah" is kˈAˈɛnɹˈiˈɑ.
-    "Khaenri'ah": "Kay-en-ree-ah",
+    "Kusanali": "Koo-sah-na-lee",
+    # 237: kˈɑənɹˌiə — the ae swallowed. "Kon-ree-ah" is kˈɑnɹˈiˈɑ on both,
+    # and is the user's ear; an earlier "Kay-en-ree-ah" (kˈAˈɛnɹˈiˈɑ) put a
+    # syllable in that nobody says.
+    "Khaenri'ah": "Kon-ree-ah",
     # 206: lˈæwəʧˌɜɹl, the flat a of "fat" on a hilichurl variant.
-    "Lawachurl": "Lah-wah-churl",
+    # "Lah-wah-cherl" is lˈɑwˈɑʧˈɜɹl on both. The glossed "La-wa-cherl"
+    # keeps the flat a the entry exists to remove (lˌæwˈɑʧˈɜɹl).
+    "Lawachurl": "Lah-wah-cherl",
     # 277: pɹˈæmæd, the flat a twice over.
     "Pramad": "Prah-mahd",
     # 379: sˈɪkɹAn — "SICK-rain", where the Liyue bird is a cy-crane.
     # "sigh-crane" is sˌIkɹˈAn / sˈIkɹˈAn.
-    "cycrane": "sigh-crane",
+    "cycrane": "sigh-krane",
     # 273: dədˈOkO — the first syllable reduced to a schwa.
-    "Dodoco": "Doh-doh-koh",
+    "Dodoco": "doh-doh-ko",
     # Star Rail:
-    # 286: bˈɑɹθəlˌOz — the final s voiced to a z.
-    "Bartholos": "Bar-thoh-loss",
-    # 244: ˈɔɹmOz — the same voiced ending.
-    "Ormos": "Or-moss",
-    # 233: ˈIəɹntum — "EAR-ntoom", the compound fused.
-    "Irontomb": "Eye-urn-toom",
+    # 286: bˈɑɹθəlˌOz — the middle vowel reduced to a schwa. "bar-thoh-lowz"
+    # is bˈɑɹθˈOlˈOz on both; the glossed "bar-tho-lowz" voices the th to
+    # the ð of "the" (bˈɑɹðˈOlˈOz), so the h keeps its o.
+    "Bartholos": "bar-thoh-lowz",
+    # 244: ˈɔɹmOz — the stress on the first syllable. "Or-moze" is ɔɹmˈOz on
+    # both; the glossed "oh-moz" drops the r altogether (ˈOmˈɑz).
+    "Ormos": "Or-moze",
+    # 233: ˈIəɹntum — "EAR-ntoom", the compound fused. Split into the two
+    # words it is: ˈIəɹn tˈum on both.
+    "Irontomb": "Iron tomb",
     #
     # Four at this floor have no spelling that survives both engines and
     # are left alone: "Tenryou" (447) — "Ten-ryoh" is tˈɛnɹˈIO, the /aɪ/ of
