@@ -94,6 +94,49 @@ live.VOICES["settings"]["gate_prior"] = {"Wagner": "model_deaf",
 corroborated(True, "Wagner", 0.00, "settings.gate_prior adds a name")
 corroborated(False, "Paimon", 0.00, "...and takes one off the built-in list")
 
+# --- the relaxed cut, and the scene guard on it ----------------------------
+# LIVE, rec_20260812_083939: the same sentence read four times over the
+# game's own delivery of it. The app skipped the 9.8dB read as voiced and
+# talked over the other three, which is what says 8.0 is inside this
+# character's population rather than beside it.
+live.VOICES["settings"]["gate_prior"] = {}
+MAJESTIC = [(15.0, 7.9), (16.4, 10.0), (16.5, 9.8), (14.8, 5.0)]
+
+
+def cut_check(want, speaker, why):
+    got = live.decisive_cut(speaker)
+    if got != want:
+        fails.append(f"  decisive_cut({speaker!r}): want {want}, got {got}"
+                     f" — {why}")
+
+
+live.scene_vo.clear()
+cut_check(ENERGY_DECISIVE_OVER_SIDE, "Paimon",
+          "a scene with no voice acting heard in it keeps the strict cut")
+for mid, side in MAJESTIC[:3]:
+    check(False, mid, side, 0.00, f"...so mid+{mid} side+{side} stays spoken")
+
+live.note_scene_vo()                    # somebody in this scene has a voice
+cut_check(live.MODEL_DEAF_OVER_SIDE, "Paimon", "...and then it relaxes")
+cut_check(ENERGY_DECISIVE_OVER_SIDE, "Wagner",
+          "for the named speakers only, never scene-wide")
+for mid, side in MAJESTIC:
+    got = center_energy_voiced(mid, side, 0.00, live.decisive_cut("Paimon"))
+    if not got:
+        fails.append(f"  mid+{mid} side+{side}: the relaxed cut must take "
+                     f"every read of the majestic line ({mid-side:.1f}dB)")
+# and the strict cut still takes only the one the app itself took
+for mid, side in MAJESTIC:
+    want = mid - side >= ENERGY_DECISIVE_OVER_SIDE
+    check(want, mid, side, 0.00,
+          f"strict cut on {mid-side:.1f}dB — what the session actually did")
+
+live.scene_vo.clear()
+live.scene_vo.append(live.time.monotonic() - live.SCENE_VO_WINDOW - 1)
+cut_check(ENERGY_DECISIVE_OVER_SIDE, "Paimon",
+          "voice acting heard longer ago than the window does not license it")
+live.scene_vo.clear()
+
 if fails:
     print(f"FAIL ({len(fails)})")
     print("\n".join(fails))
