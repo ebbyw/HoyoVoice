@@ -9,6 +9,20 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **A hum is no longer read out as letters.** "Mmm" is `ˌɛmˌɛmˈɛm` to
+  both engines — "EM-EM-EM" — where the line is somebody humming; 506 of
+  them across the two dumps, and bare "Mm" is spelled out the same way
+  (espeak `ˌɛmˈɛm`). Both are now respelled to "hmm" (`hmm` / `həm`, a
+  hum either way) in `live._INTERJECTIONS`, beside the `Shh` and `Hmph`
+  repairs that were already there. The affirmative "Mm-hmm" and "Mhm"
+  (`ˌɛmˈɛmhəm`, `ˌɛmˌAʧˈɛm` — "em-AITCH-em") take their own rule ahead
+  of it, and become "uh huh" (`ˈʌ hˈʌ` on both): the obvious
+  "hmm-hmm" would come straight back through the stammer repair as
+  "Hmmuh-hmm", and the space in "uh huh" is what keeps it out of that
+  regex's way. A measurement is left alone — "9mm" is still "9mm".
+  Found by `tools/textmap_words.py`, which flags a vowelless word
+  because espeak spells one out.
+
 - **A restarted session no longer deletes its own first 300
   screenshots.** The shot-prune deque seeds from the previous session's
   files, but event ids restart at 1 — so appending a reused id pushed
@@ -57,6 +71,349 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   claim now holds against a whole-repo sweep, not a per-file diff.
 
 ### Added
+
+- **The 200-a-dump floor cleared, and the scan now remembers what has
+  been ruled on.** Last pass over the tier: `Guyun` (`ɡˈIʌn`, "GUY-un"),
+  `Guhua`, `Chenyu`, `Kichiboushi`, `Kusanali` (a /kj/ onset the name
+  doesn't have), `Khaenri'ah`, `Lawachurl`, `Dodoco`, `youkai`
+  (`jˈWkI`, "YOW-kye"), `Chasca`, `Cerces`, `Bartholos` and `Ormos` (both
+  voicing a final s to a z), `Irontomb`, `Pramad`, `cycrane` (`sˈɪkɹAn`,
+  "SICK-rain"). Two more interjections: `Uhh` is `ˈu` — "oo", not the
+  hesitation — and `Aww` is `ˈɔwə`, "AW-uh", where the sound is one
+  vowel.
+
+  Four at this floor have no spelling that survives both engines and say
+  so in the file: `Tenryou` ("Ten-ryoh" is `tˈɛnɹˈIO`, the /aɪ/ of
+  "rye"), `Jueyun`, `Deshret` (whose sh collapses to an s the moment the
+  word is hyphenated) and `Aether`, which is `ˈiθə` already — only the
+  final r is missing, and "Ee-ther" voices the th.
+
+  The bigger change is `pronounce_names.CLEARED`: 130-odd words checked
+  against both engines and deliberately given no entry, which
+  `tools/textmap_words.py` now reads and stops reporting. Without it
+  every scan re-listed the same judgements — the ✓'d names, the laughter,
+  the legitimate-either-way English, the handful no respelling fixes —
+  and the floor never fell. It also caught a class the tell had been
+  misreading: the "final e dropped" rule fires on every `'ve` contraction
+  (`would've`, `must've`, `could've`, `should've`, `who've` — 2,224
+  between them) and all of them are already right. **245 candidates at
+  200+ before the change, 87 after, 6 of those with any evidence against
+  them.**
+
+- **The rest of the numerals, and the words the acronym fix uncovered.**
+  `II` and `III` can be keyed bare — neither is an English word — but
+  **`I` cannot**: the dialogue-shaped lines hold 278,936 of the pronoun
+  against roughly 340 numerals, so a bare rule would respell "I think,
+  therefore I am". It is keyed only in the containers the games actually
+  number, counted off the dumps: `Act I` (95), `Part I` (67), `Zone I`
+  (53), `Phase I` (48), `Mode I` (48), `Room I` (16), `Chapter I` (8),
+  `Volume I` (2) — "Part I" is `pˈɑɹt ˌI`, "part **EYE**", where "Part
+  One" is `pˈɑɹt wˈʌn`. Nine of those lines are prose rather than a title
+  and will now read "Act One"; that is the price of the other 330. Every
+  numeral key is exact-case, including the containers — "the act i
+  performed" would otherwise come out "the Act One performed". `V` and
+  `X` are left alone and say why: 501 between them, mostly not numerals,
+  and a bare key reaches into "X-ray", "X-Axis" and "V-shaped".
+
+  Raising the acronym skip also surfaced `RES` (1,314 — misaki spells it
+  out, espeak says `ɹˈɛz`, and players say "rez", so espeak wins) and
+  `AoE` (525), which **both** engines read as a word: `ˈW ˈi`, "ow-ee",
+  now expanded to "area of effect".
+
+  Eight more were settled from glosses, and three of the eight could not
+  ship as spelled — all three hitting the chunk-final "eh" this file's
+  header warns about: `Okhema` → `ah-kem-ah` (the glossed "ah-keh-ma" is
+  "ah-KAY-mah"), `Chevreuse` → `Shev-ress` ("Shev-rehss" is
+  "shev-RAYSS"), and `Chrysos` → `cry-sohss`, where the glossed
+  "cry-sohs" voices the final s to the very z the entry removes. Shipped
+  verbatim: `Marechaussee` → `Ma-ray-shaussay`, `Qlipoth` → `kle-poth`,
+  `Sorush` → `So-roosh`, `Heng` → `Hung`, `Planarcadia` →
+  `Plan-ar-kadia`. `Tizocic` came from Wikipedia's Nahuatl /tiˈsosik/
+  against the engines' `tɪzˈɑsɪk` — 80 of its 89 lines are "Tizocic II",
+  which the numeral entry finishes as "tee-soh-seek Two".
+
+  Six glosses were measured and deliberately produced no entry, because
+  both engines already say exactly them: `Bronya` `bɹˈɑnjə`, `Columbina`,
+  `Luka`, `Aurum`, `Clockie` and `Raiden` — whose glossed "Rai-den" is
+  the same phones as the current `ɹˈAdən`. Their readings are recorded so
+  nobody re-checks them.
+
+  Then the terms the same pass found above 150: `Anemo` (919 — `ənˈimO`,
+  "uh-NEE-moh", where the element is "AN-uh-moh"; `Cryo`, `Dendro` and
+  `Geo` were checked alongside and are already right), `Manekin` and
+  `Manekina` (1,633 — `mˈAŋkɪn`, "MAY-nkin", for the mannequin),
+  `Favonius` (894), `Kremnos` (826 — a voiced final s), `Marechaussee`
+  (693 — `mˈɛɹʧəsˌi`, "MERCH-uh-see"), `Inazuman` and `Fontainian`, which
+  now follow their nations, plus `Barbatos` and `Dunyarzad`. The laughter
+  (`Hehe` 3,866, `Heh`, `Hahaha`) was measured and left alone — both
+  engines already read it as laughter.
+
+- **The scanner was hiding a 3,004-occurrence fault, and thirty more
+  words came out from under it.** `tools/textmap_words.py` skipped
+  all-caps words wholesale on the grounds that an acronym is read out as
+  its letters. That is true of `DMG` (`dˌiˌɛmʤˈi`), `ATK` and `TCG` —
+  and false of `IPC`, which espeak tries to *say*: `ˈɪpk`, three letters
+  mashed into one syllable, **3,004 times** in the Star Rail dump, where
+  misaki spells it out. The skip now applies only where both engines
+  agree, so an acronym one engine mangles is reported. `IPC` →
+  `eye-pee-see`, keyed on the bare form because it fires inside the 515
+  possessives too and lands the identical phones. `VIP` (157, espeak
+  says "vip") came out of the same change.
+
+  Then the sixth pass down the same class, with a word family getting
+  one entry per form: `absorb`/`absorbs`/`absorbed`/`absorbing` (764 —
+  espeak's s for a z), `suggests`/`suggesting` (375, and in "suggesting"
+  *both* engines drop the /ɡ/), `prayer`/`prayers` (379 — misaki reads
+  the one who prays where the games mean the petition), `Janus` (447 —
+  "JAN-us"), `meteorite`/`meteorites`, `obstacle`, `Oceanid` (185 —
+  "OH-shun-id"), `naive` ("nye-EEV"), `financial` ("fye-NAN-shul"),
+  `thoroughly`, `interfere` (a dropped r), `residual`, `Stratagems`,
+  `prerequisite`, `Blazar`, `Nous` (Greek νοῦς, said "nooz"), `Darshan`,
+  and `What're` (120), which neither engine reads — misaki "what-ray",
+  espeak "wutter" — expanded to the two words it stands for.
+
+  Four more where macOS is the broken side: `handsome` (misaki inserts a
+  /t/), `Hamster` ("HAMP-ster"), `husband` (a z for the s) and `Arcana`
+  ("ar-KAY-nuh").
+
+  `Prescience`, `interference` and `Pfft` were reported as unfixable and
+  then settled by ear: `presh-inz`, `in-ter-fear-anss` and `puft`. Two of
+  the three arrived as glosses whose literal spelling could not ship — a
+  chunk of bare consonants is read as LETTERS, so "preh-ssh-inz" is
+  `pɹˈAˌɛsˌɛsˈAʧˈɪnts` ("pray-S-S-AITCH-ints") and the "-AN-ss" of
+  "in-ter-fear-AN-ss" comes out "ESS-ESS"; joining the tail keeps the
+  sound. `Pfft` moves to `live._INTERJECTIONS` beside `Shh` and `Mmm`,
+  and knowingly trades macOS's correct bare `ft` for a reading both
+  engines say.
+
+  `What're` was re-decided the same way: espeak's `wˌʌɾəɹ` is not a
+  mistake — "wutter" is what the contraction sounds like — so the entry
+  reproduces it as `wuttr` instead of expanding to the formal "what are".
+
+  **Roman numerals**, which neither engine reads: misaki spells the
+  letters (`vˌiˌIˈI`), espeak announces the system — `ɹˌOmən sˈɛvən`,
+  literally **"ROMAN SEVEN"**, and `ɹˌOmən ɪlˈɛvən` for XI. 1,664 of them
+  across the two dumps in chapter titles and place names. `IV`, `VI`,
+  `VII`, `VIII`, `IX` and `XI` now read as words, and are the only
+  entries in the table that *must* be exact-case: the Genshin dump has 13
+  "Xi" and 15 "Ix", which case-insensitive matching would have turned into
+  "Eleven" and "Nine".
+
+- **Sixteen ordinary English words the two engines disagree about.**
+  Fifth pass, and it took the `split` class rather than the names,
+  because a word that is wrong in *ordinary dialogue* is said far more
+  often than any proper noun. Wrong on Windows: `ceremony` (775 —
+  `sˈɛɹᵻməni`, a syllable gone), `species` (531 — `spˈisiz`,
+  **"SPEE-sees"**), `envelope` (457 — "ON-vuh-lope"), `suggest` and
+  `suggested` (729 between them — espeak drops the **/ɡ/**, "suh-JEST"),
+  `artisanship`, `IPC's` (385 — `ˈɪpk`, three letters mashed into one
+  syllable), `celestial` (718 — "suh-LEST-yul"), `exquisite`, `faced`,
+  `resistance`, `protagonist` (270 — "PRO-tuh-guh-nist").
+
+  Four where **macOS** is the broken side and espeak holds the right
+  answer: `skies` (411 — misaki says `skˈiz`, **"skeez"**), `Eidolon`
+  (370 — "eye-DOH-lun"), `obstacles` (292 — "obz-tuh-kulz") and
+  `disguise` (269 — `dəskˈIz`, "dis-KYZE", a hard k for the g). Same rule
+  as `Acheron`: reproduce the engine that has it right, on both.
+
+  `paths` (860) is the one this pass could not fix and says so in the
+  file: espeak reads `pˈæθs` where the plural is `pˈæðz`, and no
+  respelling gets the voiced th back — "pathz" keeps the θ on both, which
+  would trade Windows' wrong s for macOS's right ð and gain nothing.
+
+- **Thirty more, and the first fault that was wrong on the Mac.** Fourth
+  pass. Liyue and Inazuma: `Qixing` (250 — `kˈɪksɪŋ`, the q as /k/ and
+  the x as /ks/, so the government came out **"KIK-sing"**) →
+  `Chee-shing`, `Wangshu` → `Wahng-shoo`, `Feiyun` → `Fay-yoon`,
+  `Temari` → `Tem-ah-ree`, `Sango` → `Sahn-go`, `Kanjou` → `Kahn-joh`,
+  `Onikabuto` → `Oh-nee-kah-boo-toh`, `Itto` (`ˈɪɾO`, a flapped t) →
+  `Ee-toh`. Sumeru: `Haniyyah`, `Sabzeruz`, `Yasnapati`. Fontaine and
+  Nod-Krai: `Melusine`/`Melusines` (`mˈɛlusˌIn`, "MEL-oo-sine") →
+  `Mel-oo-zeen(s)`, `Gardiennage` → `Gar-din-nahj`, `Snezhnograd` →
+  `Snezh-noh-grahd`, `Lynette` (`lInˈɛt`, "lye-NET") → `Lih-net`,
+  `Noelle` (`nˈOl` — one syllable, "nole") → `No-elle`, `Sandrone` →
+  `San-droh-nay`, `Kachina` (Windows `kˈæʧInə`, "KATCH-eye-nuh") →
+  `Kah-chee-nah`. Star Rail: `Acheron` → `Ack-uh-ron`, `Jarilo-VI`
+  (`ʤɑɹɹˈɪlOvˌiˈI` — the numeral read as the letters "vee-eye") →
+  `Ja-rillo Six`. And `DoT` (886), which both engines read `dˈu tˈi`,
+  **"doo-tee"** → `dot`.
+
+  `Khvarena` is the worst reading the scan turned up — `kˌAˈAʧvˈæɹɛnə`
+  on both engines, the "Kh" spelled out as letters, **"KAY-AY-CH-varena"**
+  — and the only entry here with no voiced line to answer to: the term
+  appears in unvoiced dialogue, which is exactly the text this app
+  exists to read, so HoyoVoice is the only voice that ever says it. 255
+  of its 259 entries are dialogue-shaped. The respelling follows the
+  source instead of a VO: Avestan xᵛarənah-, a labialized velar
+  fricative English has no letter for, gets the ordinary /kw/ stand-in
+  (the one that turns Khwarezm into "Kwarezm") and keeps the schwa —
+  `Kwah-ruh-nah`, `kwˈɑɹˈʌnˈɑ` on both. Every spelling that keeps the h
+  is spelled out letter by letter.
+
+  `Acheron` is the one that set the rule for the `split` class: misaki
+  already said `ˈækəɹˌɑn`, which is the dictionary's own /ˈækərɒn/, while
+  espeak said `ˈAkɹɑn`, "AY-kron" — so macOS was never wrong, and the
+  respelling reproduces the engine that has the word rather than
+  inventing a third reading. A split has a right answer that doesn't
+  need an ear.
+
+  Eight are ordinary English the engines split on: `primordial`
+  (Windows "prih-MOR-dee-ul"), `shogunate`, `Thanatos` ("than-AH-tohz"),
+  `prismatic` (an s for a z), `status` ("STAT-us"), `madame`
+  ("MAD-um"), `diviner` ("duh-VIN-er") — and **`calm`**, the first entry
+  in this file where **macOS** is the broken side: misaki sounds the l
+  (`kˈɑlm`) where espeak has it right.
+
+- **Six the scan raised and only an ear could settle.** Proper nouns
+  where both engines guess and the guess is wrong, resolved against the
+  user's own glosses. `Kephale` (721 in the Star Rail dump — `kˈɛfAl`,
+  "KEF-ayl", two syllables where the Greek has three) → `Keff-uh-lee`,
+  `Mydei` (739 — `mˈIdA`, "MY-day") → `Mai-dee`, `Imperator` (652, and
+  the engines disagree with each other: misaki `ˌɪmpəɹˈɑɾəɹ` against
+  espeak `ɪmpˈɜɹAɾəɹ`) → `Em-per-ah-tor`, `Clorinde` (559 — `klˈɔɹɪnd`,
+  "KLOR-ind", for a Fontaine duellist) → `Klo-rahnd`, `Trianne` (465 —
+  `tɹˈIæn`, "TRY-an") → `Tree-ann`, `Meropide` (443 — `mˈɛɹəpˌId`,
+  "MER-uh-pyde") → `Meh-ro-peed`.
+
+  Four ship as the gloss was written. `Trianne` lost its silent e —
+  "Tree-anne" splits the stress on the second chunk (misaki `tɹˈiˌæn`
+  against espeak `tɹˈiˈæn`) — and `Kephale` gained an f, because
+  "kef-a-lee" is the same reading with a schwa the two engines spell
+  differently (misaki `ɐ`, espeak `ə`). `Imperator` is the one entry
+  here that keeps a stress split on purpose: the spelling that lands
+  identically, "Emper-ah-tor", does it by doubling the rhotic — an
+  audible trill traded for an inaudible stress mark.
+
+- **Twenty-seven more, down to the 300-a-dump line — and the commonest
+  Windows fault in either game.** Third pass of the scan. Characters:
+  `Furina` (`fjʊɹɹˈinə`, a /fj/ where the name opens on "foo") →
+  `Foo-ree-nah`, `Kafka` → `Kahf-kuh`, `Clara` → `Klah-rah`, `Svarog` →
+  `Svah-rog`, `Collei` (`kˈɑlA`, the "ei" as /eɪ/) → `Coll-ee`,
+  `Tighnari` → `Tig-nah-ree`, `Navia` → `Nahv-ee-ah`, `Durin` →
+  `Doo-rin`, `Rappa` → `Rahp-ah`, `Nasha` → `Nahshah`. Places and lore:
+  `Watatsumi` → `Wah-tah-tsoo-mee`, `Qingce` (`kˈɪŋs` — the q as /k/ and
+  the final e gone, so the village came out "kings") → `Ching-tsuh`,
+  `Ritou` → `Ree-toh`, `Yashiro` → `Yah-shee-roh`, `Aaru` → `Ahroo`,
+  `Pari` → `Pah-ree`, `Akasha` → `Ah-kah-shah`, and `Kamera`/`Kameras`
+  → `Camera`/`Cameras`, the ordinary word with its doubled rhotic gone.
+
+  Six are ordinary English words that only Windows says wrong — the
+  `split` class the scan exists for, keyed lowercase like `shaman` so
+  `--custom-words` doesn't pin a word the recognizer already knows.
+  `they're` is the big one: **3,336 occurrences**, and espeak reads it
+  `ðAəɹ`, "THAY-er", in running text as well as alone ("They're
+  coming." is `ðAəɹ kˈʌmɪŋ`) — respelled to the homophone `There`,
+  which is `ðˈɛɹ` on both. Then `crimson` (espeak `kɹˈɪmsən`, an s for a
+  z), `calyx`/`calyxes` (`kˈælɪks`, "KAL-ix"), `ambrosial`
+  (`æmbɹˈOsiəl`, the /ʒ/ of "measure" hardened), `eremite`/`eremites`
+  (`ɪɹˈɛmIt`, the stress a syllable late) and `shogun` (`ʃˈɑɡʌn`).
+
+  Two spelling rules came out of this pass and are recorded where they
+  bit: a one-syllable first chunk keeps misaki's flat a, so `Nah-shah`
+  splits the engines where `Nahshah` and `Nahv-ee-ah` don't; and
+  hyphenating a middle schwa splits the stress, so `Air-uh-mite` lost to
+  `Airuh-mite`.
+
+- **Fourteen more, and the last of the full-name keys.** Second pass of
+  the scan. The Japanese names dialogue uses on their own were all
+  wrong: `Shinobu` (249 — `ʃˈɪnəbˌu`) → `Shee-noh-boo`, `Sara` (260 —
+  `sˈɛɹə`) → `Sah-rah`, `Kujou` (364 — `kjˈuʤu`) → `Koo-joh`, `Heizou`
+  (202 — `hˈIzu`) → `Hay-zoh`, `Kokomi` → `Ko-ko-mee`, `Mizuki` →
+  `Mee-zoo-kee`, `Sangonomiya` → `Sahn-go-no-mee-yah`, `Shikanoin`
+  (`ʃˈɪkənˌYn`, the "oin" read as the /ɔɪ/ of "coin") →
+  `Shee-kah-no-in`, `Yumemizuki` → `Yoo-meh-mee-zoo-kee`, `Kaedehara`
+  → `Kah-ed-eh-hah-rah`; plus the two Star Rail halves `Xuan`
+  (`kʃˈuæn`, a spelled-out K in front of the x) → `Shu-en` and `Yuan`
+  → `Yu-en`. `Fu Xuan` and `Jing Yuan` are respelled to the same halves
+  — `Foo Shu-en` fixes a stress split the old `Foo Shoo-en` had (misaki
+  `fˈu ʃˌuˈɛn` against espeak `fˈu ʃˈuˈɛn`), and `Jing Yu-en` is the
+  identical phones, changed so one sound has one spelling.
+  `Kaedehara Kazuha`, `Kujou Sara`, `Sangonomiya Kokomi`,
+  `Shikanoin Heizou` and `Yumemizuki Mizuki` retire with them; `Kuki
+  Shinobu` is the one full name that stays, because `Kuki` alone is
+  already `kˈuki` and nothing sorts ahead of it.
+
+  Two lore terms from the user's own ear-glosses. `Phainon` (963 —
+  `fˈAnɑn`, "FAY-non") ships as the gloss was written: `Fai-non` is
+  `fˈInˈɑn` on both engines. `Stellaron` (1,485 — `stˈɛlæɹən`, the flat
+  a of "fat" for a schwa) does not: the gloss `Stella-ron` is
+  `stˈɛləɹˌɑn` to misaki but `stˈɛləɹɹˈɑn` to espeak — the doubled
+  rhotic, on Windows only — so it ships as `Stell-uh-ron`, the same
+  schwa with one r on both.
+
+  `Fragmentum` and `Amphoreus` were checked and deliberately left out:
+  both already read as asked (`fɹæɡmˈɛntəm`, `æmfˈɔɹiəs`), and an entry
+  that changes nothing is config to maintain for free. The scan lists
+  them because the lexicon has neither — a letter-rules guess can still
+  come out right, which is why the last word is an ear's.
+
+- **Twenty spoken forms, found by the scan rather than by ear.** The
+  first pass of `tools/textmap_words.py` over both dumps, worked
+  through from the top. Nations and regions the games say constantly
+  and no roster lists: `Xianzhou` (3,126 — `zˈIənʒˌu`, the pinyin x
+  read as /z/ *and* the zh as /ʒ/, this file's two opening faults in
+  one word) → `Shyen-joh`, `Mondstadt` → `Mohntshtaht`, `Fontaine` →
+  `Fon-ten`, `Penacony` → `Penna-coh-nee`, `Sumeru` → `Soo-meh-roo`,
+  `Inazuma` → `Ee-nah-zoo-mah`, `Natlan` → `Naht-lahn`, `Akademiya` →
+  `Ah-kah-dem-ee-yah`, `Luofu` → `Loo-aw-foo`, `Belobog` →
+  `Bell-oh-bog`, `Yaoqing` → `Yow-ching`, and the two peoples
+  `Aranara` → `Ahrah-nah-rah` and `Vidyadhara` → `Vid-yah-dah-rah`.
+
+  The rest are names a full-name key never reached. `Ayaka` alone
+  appears 258 times against a handful for "Kamisato Ayaka", `Kazuha`
+  255, `Arataki` 571, `Ruan` 613 — and every bare one read wrong:
+  `Iˈɑkə` ("eye-AH-kuh"), `kˈæzjuhə`, `ˌæɹətˈæki`, `ɹjˈuæn`. Keyed on
+  the parts now, the move the `Yae` entry already records, plus
+  `Kamisato`, `Ayato` and `Herta` (`hˈɜɹɾə`, a flapped t) → `Hurr-tah`.
+  `Ruan Mei`, `Kamisato Ayaka` and `Kamisato Ayato` are retired with
+  it: both halves have their own entry, a shorter key sorts first, and
+  they could never match again.
+
+  Every respelling is measured on both engines like the rest of the
+  table, with the rejected alternatives kept next to it — a chunk-final
+  "eh" that came out /eɪ/ (`Ah-kah-deh-mee-yah` is "ah-kah-DAY-mee-yah"),
+  a chunk starting "sht" that got spelled out (`Mohnt-shtot` is
+  "mohnt-ES-AITCH-tot"), a hyphenation that split the two engines
+  (`Ah-rah-nah-rah`). What has not happened is the listen; the phonemes
+  are checked, the ear is the user's.
+
+- **A mispronounced name can now be found before it is ever spoken.**
+  `tools/textmap_words.py` reads a TextMap dump and reports the words
+  the synthesizer will get wrong, ranked by how often the games say
+  them. Until now every entry in `pronounce_names.py` arrived the same
+  way — somebody heard the app say it wrong, mid-scene, and wrote the
+  respelling afterwards. The dumps hold both games' whole vocabulary,
+  so the same faults are findable in one pass over them.
+
+  Two classes, and the second is the one an ear on one machine cannot
+  catch. A word the misaki lexicon **misses** falls through to espeak's
+  English spelling rules — the path every `FIXES` entry took, "Xiao" to
+  `zˈIəˌO` and "Fatui" to `fˈæɾui` — and the scan says which rule bit:
+  a pinyin x read as /z/, a final -e dropped, the flat /æ/ of "fat"
+  where a foreign a should be open, a doubled rhotic, a flapped t. A
+  word the lexicon **has** but espeak reads differently is right on
+  macOS and wrong on Windows, which is exactly the history behind the
+  `shaman`, `Archon` and `Phlogiston` entries; all three fall out of
+  the scan without anyone having to hear them first, and the report
+  prints both engines' readings side by side.
+
+  Deciding whether two transcriptions are two readings is the whole
+  problem: compared as strings, the Genshin dump alone reports 8,349
+  ordinary English words, because the engines disagree about stress and
+  reduction in nearly all of them. They are aligned instead, and a run
+  that differs only in reduction, dialect (cot/caught, trap/dress), a
+  spelled-out glide, espeak's doubled r, a velar-assimilated n or a
+  one-symbol diphthong is passed over — 1,449 across both dumps
+  survive that, against 1,552 for Genshin's stress alone.
+
+  Words already fixed are filtered through the app's own
+  `spoken_form()`, so the pronunciations map, the interjections and the
+  stammer repairs all count as handled. Output is candidates, not
+  patches: a respelling has to be chosen against the traps
+  `pronounce_names.py`'s header documents and checked by ear, which is
+  a person's job. `tools/test_textmap_words.py` pins both halves — the
+  four splits somebody already found by ear, and the eleven shapes of
+  noise that must stay quiet.
 
 - **The dashboard and the downloaded log name the exact commit.** The
   header and the log's first line now read `0.11.0 (<sha>)` — sha via
