@@ -703,9 +703,11 @@ TERMS = {
     # as glossed voices the final s to a z (kɹˈIsˈOz), which is the fault
     # the entry exists to remove.
     "Chrysos": "cry-sohss",
-    # 178: kjˈulˈɪpɑθ — "kyoo-LIP-oth", the q read as /kj/. "kle-poth" is
-    # klˈipˈɑθ on both and ships as glossed.
-    "Qlipoth": "kle-poth",
+    # 178: kjˈulˈɪpɑθ — "kyoo-LIP-oth", the q read as /kj/. "klepoth" is
+    # klˈɛpɑθ on both. Unhyphenated, because "kleh-poth" is klˈApˈɑθ —
+    # "KLAY-poth", the chunk-final "eh" trap for the third time in this
+    # file, and "kle-poth" (klˈipˈɑθ) closes the vowel to the e of "see".
+    "Qlipoth": "klepoth",
     # 505: sˈɔɹʌʃ — "SOR-ush". "So-roosh" is sˌOɹˈuʃ on both, as glossed.
     "Sorush": "So-roosh",
     # 187: ʃˈɛvɹus — the stress on the first syllable. "shev-rooz" is
@@ -870,12 +872,16 @@ TERMS = {
     "species": "spee-sheez",
     # 457: espeak ˈɑnvəlˌOp — "ON-vuh-lope".
     "envelope": "en-vuh-lope",
-    # 729 between them: espeak drops the /ɡ/ altogether — səʤˈɛst,
-    # "suh-JEST". The one pair here where the respelling keeps a stress
-    # split (misaki sˌʌɡ- against espeak sˈʌɡ-); the segments match, and a
-    # missing consonant is worth more than a stress mark.
-    "suggest": "sug-jest",
-    "suggested": "sug-jested",
+    # 729 between them, and the entry that changed sides. espeak drops the
+    # /ɡ/ (səʤˈɛst) where misaki keeps it (səɡʤˈɛst), and a first pass
+    # restored the /ɡ/ on both — then the audition said espeak had it
+    # right and the g does not belong. "sa-jest" is sˈɑʤˈɛst on both, the
+    # user's spelling as written; it opens the first vowel and takes the
+    # stress, where "suh-jest" (sˌʌʤˈɛst / sˈʌʤˈɛst) is the unstressed
+    # schwa and splits a stress mark. The -ing form is the reason an entry
+    # is still needed at all: BOTH engines drop the g there.
+    "suggest": "sa-jest",
+    "suggested": "sa-jested",
     # 427: espeak ˈɑɹɾɪsənʃˌɪp reduces the second vowel to nothing. The s
     # is right by ear and the first respelling's z was not. NOT
     # "ar-teh-san-ship" as glossed — a chunk-final "eh" is /eɪ/, so that is
@@ -933,10 +939,9 @@ TERMS = {
     # 447: espeak ʤˈænəs — "JAN-us" for the two-faced god. "Jay-nuss" is
     # ʤˈAnˈʌs on both; "Jay-nus" reads the last chunk as "nooz" on misaki.
     "Janus": "Jay-nuss",
-    # 375 between them, and the stems were fixed a pass earlier: espeak
-    # drops the /ɡ/ here too, and in "suggesting" BOTH engines do.
-    "suggests": "sug-jests",
-    "suggesting": "sug-jesting",
+    # the same four-form family, keyed one per form as always.
+    "suggests": "sa-jests",
+    "suggesting": "sa-jesting",
     # 379 between them: espeak pɹˈɛɹ is right for the petition and misaki
     # pɹˈAəɹ is the one who prays — the games mean the petition.
     "prayer": "prair",
