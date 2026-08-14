@@ -778,12 +778,35 @@ _CONTRACTION_RE = re.compile(
 _INTERJECTIONS = [
     (re.compile(r"\bshh+\b", re.IGNORECASE), "shush"),
     (re.compile(r"\bhmph+\b", re.IGNORECASE), "humph"),
+    # The affirmative grunt, and it has to come BEFORE the plain hum below:
+    # "Mm-hmm" is ˌɛmˈɛmhəm to espeak and "Mhm" is ˌɛmˌAʧˈɛm to both —
+    # "em-em-hum" and "em-AITCH-em". Respelled to "uh huh" (ˈʌ hˈʌ on both)
+    # rather than to a doubled "hmm-hmm", which _STUTTER would then read as a
+    # stammer and turn into "Hmmuh-hmm". The SPACE is load-bearing for the
+    # same reason: a hyphen here would put it back in the stammer's way.
+    (re.compile(r"\bm+[-‐‑–—]?h+m+\b", re.IGNORECASE), "uh huh"),
+    # tools/textmap_words.py found this one: "Mmm" is ˌɛmˌɛmˈɛm on BOTH
+    # engines, "EM-EM-EM", where the line is a hum — 506 of them across the
+    # two dumps. "hmm" is hmm / həm, a hum either way. Bare "Mm" is spelled
+    # out too (espeak ˌɛmˈɛm) and takes the same repair; a lone "M" is left
+    # alone, since a single letter is more often an initial than a hum.
+    (re.compile(r"\bmm+\b", re.IGNORECASE), "hmm"),
     (re.compile(r"\btsk\b", re.IGNORECASE), "tisk"),
     (re.compile(r"\btch+\b", re.IGNORECASE), "tisk"),
     (re.compile(r"\buh+m+\b", re.IGNORECASE), "um"),
     (re.compile(r"\bugh+\b", re.IGNORECASE), "ug"),
+    # espeak spells this one out as pˌiˌɛfˌɛftˈi — "P-E-F-E-F-T-EE" — where
+    # misaki's bare ft is roughly the right noise. No respelling keeps the
+    # ft AND fixes Windows ("ft" on its own is ˌɛftˈi, "EF-tee"), so this
+    # trades macOS's reading for one both engines say: "puft" is pˈʌft.
+    (re.compile(r"\bpf+t*\b", re.IGNORECASE), "puft"),
     (re.compile(r"\bu+r+gh+\b", re.IGNORECASE), "ug"),
     (re.compile(r"\ba+h+\b", re.IGNORECASE), "ah"),
+    # "Uhh" is ˈu on both engines — "oo", not the hesitation. Sits AFTER
+    # the uh+m+ rule above, so "Uhm" is still "um".
+    (re.compile(r"\bu+h+\b", re.IGNORECASE), "uh"),
+    # "Aww" is ˈɔwə, "AW-uh", where the sound is one vowel.
+    (re.compile(r"\ba+w+\b", re.IGNORECASE), "aw"),
 ]
 
 # A stammer is written as a repeated initial — "W-what", "N-no", "A-aah" —

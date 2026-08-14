@@ -49,6 +49,16 @@ CASES = [
     # "Tch" is "T-C-H" on Windows, a bare ʧ on macOS — the same tut as Tsk
     ("Tch. Whatever.", "Tisk. Whatever."),
     ("Tchh, fine.", "Tisk, fine."),
+    # "Mmm" is ˌɛmˌɛmˈɛm on both engines — "EM-EM-EM" for a hum
+    ("Mmm, delicious.", "Hmm, delicious."),
+    ("Mm, maybe.", "Hmm, maybe."),
+    ("MMM! So good.", "Hmm! So good."),
+    # the affirmative form fires first, and keeps its space: "hmm-hmm" would
+    # come back through _STUTTER as "Hmmuh-hmm"
+    ("Mm-hmm.", "Uh huh."),
+    ("Mhm, I agree.", "Uh huh, I agree."),
+    # not a hum: a measurement keeps its unit
+    ("The 9mm is fine.", "The 9mm is fine."),
     ("Uhm, I'm not sure.", "Um, I'm not sure."),
     ("Uhmm... maybe.", "Um... maybe."),
     ("Ugh, this is heavy.", "Ug, this is heavy."),
@@ -56,9 +66,16 @@ CASES = [
     ("Urgh… It all blew over so fast.", "Ug… It all blew over so fast."),
     ("Urrgh, my head.", "Ug, my head."),
     ("Aaah, that feels better.", "Ah, that feels better."),
-    # "Pfft" is ˈft on its own, which is roughly the right noise. The "pfff"
-    # respelling this list used to carry came out as "P-E-F-E-F".
-    ("Pfft. As if.", "Pfft. As if."),
+    # "Uhh" is ˈu — "oo" — and "Aww" is ˈɔwə, "AW-uh"
+    ("Uhh, maybe.", "Uh, maybe."),
+    ("Aww, cute!", "Aw, cute!"),
+    # "Pfft" is ˈft to misaki, which is roughly the right noise — but espeak
+    # spells it out as pˌiˌɛfˌɛftˈi, "P-E-F-E-F-T-EE". No respelling keeps
+    # the bare ft and fixes Windows ("ft" alone is ˌɛftˈi), so both engines
+    # get "puft" (pˈʌft). The older "pfff" this list once carried came out
+    # as "P-E-F-E-F".
+    ("Pfft. As if.", "Puft. As if."),
+    ("Pfft, whatever.", "Puft, whatever."),
 
     # Stammers: a lone initial is read as the LETTER'S NAME —
     # "DOUBLE-YOU-what", "EN-no", "AY-ah" — unless it is spelled as a
