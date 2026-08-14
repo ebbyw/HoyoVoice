@@ -178,10 +178,6 @@ FIXES = {
     # sˈæŋɡənˌɑmɪjə — the flat a of "fat", then two syllables swallowed:
     # "SANG-uh-nah-mi-yuh". "Sahn-go-no-mee-yah" is sˈɑŋɡˌOnˈOmˈijˈɑ.
     "Sangonomiya": "Sahn-go-no-mee-yah",
-    # sˈɛɹə, "SEH-ruh". "Sah-rah" is sˌɑɹˈɑ / sˈɑɹˈɑ. Case-insensitive like
-    # every entry here, which is deliberate: the only Sara either game
-    # writes is the Tenryou Commissioner.
-    "Sara": "Sah-rah",
     "Sayu": "Sah-yoo",
     # ʃˈɪkənˌYn — the "oin" read as the /ɔɪ/ of "coin", "SHIK-uh-noyn",
     # where the name ends on a plain "in". "Shee-kah-no-in" is ʃˈikˈɑnˈOˈɪn
@@ -500,7 +496,7 @@ TERMS = {
     # ʃˈIənʤˈO, the "Shy-" onset the shipped Xiao/Xianyun/Xiangling entries
     # already use. "Shen-joh" (ʃˈɛnʤˈO) drops the glide for a plain /ɛ/ and
     # is the one to swap in if the /aɪ/ of "Shy-" doesn't convince.
-    "Xianzhou": "Shyen-joh",
+    "Xianzhou": "Shee-an-joe",
     # 1,385: ljˈuəfˌu, "LYOO-uh-foo". "Loo-aw-foo" is lˈuˈɔfˈu on both — the
     # same two syllables the shipped "Luocha" → "Loo-aw-chah" is built from.
     # "Lwaw-foo" is spelled out as letters (ˈɛlwˈɔfˈu, "L-waw-foo"), the
@@ -540,10 +536,12 @@ TERMS = {
     # 1,367: nˈætlən, the flat a twice. "Naht-lahn" is nˈɑtlˈɑn on both.
     "Natlan": "Naht-lahn",
     # 1,555: ˈækAdmˌɪjə, "AK-ay-d-mee-yuh" — the second syllable read as /eɪ/
-    # and the third dropped altogether. "Ah-kah-dem-ee-yah" is ˈɑkˈɑdˈɛmˈijˈɑ
-    # on both. NOT "Ah-kah-deh-mee-yah": a chunk-final "eh" is /eɪ/ (ˈɑkˈɑdˈA-
-    # , "ah-kah-DAY-mee-yah"), the trap in this file's header.
-    "Akademiya": "Ah-kah-dem-ee-yah",
+    # and the third dropped altogether. Respelled to the ordinary English
+    # word it is a transliteration of: "academia" is ˌækədˈimiə on both,
+    # the same move as "Katheryne" → "Katherine" and "Kamera" → "Camera".
+    # A hyphenated approximation ("Ah-kah-dem-ee-yah", ˈɑkˈɑdˈɛmˈijˈɑ)
+    # shipped first and was heard as five stressed syllables.
+    "Akademiya": "academia",
     # 498: ˌæɹənˈɑɹɹə — flat a and the doubled rhotic. "Ahrah-nah-rah" is
     # ˈɑɹənˈɑɹˈɑ on both. The fully hyphenated "Ah-rah-nah-rah" SPLITS the
     # engines (misaki nˈæ against espeak nˈɑ) and "Ah-rah-nar-ah" keeps the
@@ -681,8 +679,10 @@ TERMS = {
     # mannequin. The feminine form needs its own entry.
     "Manekin": "Man-uh-kin",
     "Manekina": "Man-uh-kee-nah",
-    # 172: bɑɹbˈɑɾOz — a flapped t and a voiced final s.
-    "Barbatos": "bar-bah-toss",
+    # 172: bɑɹbˈɑɾOz — "bar-BAH-doze", the t flapped. The z ending is
+    # right and stays; what was wrong is the middle vowel. "bar-bay-tohz"
+    # is bˈɑɹbˈAtˈOz on both.
+    "Barbatos": "bar-bay-tohz",
     # 168: dˈʌnjɑɹzˌæd — "DUN-yar-zad", English vowels throughout.
     "Dunyarzad": "doon-yar-zahd",
     # 197: ɪnˈæzjumən — the nation is "Ee-nah-zoo-mah" above, and the
@@ -708,9 +708,10 @@ TERMS = {
     "Qlipoth": "kle-poth",
     # 505: sˈɔɹʌʃ — "SOR-ush". "So-roosh" is sˌOɹˈuʃ on both, as glossed.
     "Sorush": "So-roosh",
-    # 187: ʃˈɛvɹus — "SHEV-roos". "Shev-ress" is ʃˈɛvɹˈɛs on both; the
-    # glossed "Shev-rehss" is ʃˈɛvɹˈAs, "shev-RAYSS".
-    "Chevreuse": "Shev-ress",
+    # 187: ʃˈɛvɹus — the stress on the first syllable. "shev-rooz" is
+    # ʃˈɛvɹˈuz on both: the stress moved and the s voiced, which is the
+    # French. (An earlier "Shev-ress" was the wrong vowel entirely.)
+    "Chevreuse": "shev-rooz",
     # 1,603: hˈɛŋ, the e of "bed", where the pinyin is the u of "hung".
     "Heng": "Hung",
     # 857: plˌAnɑɹkˈAdiə — "PLAY-nar-kay-dee-uh". "Plan-ar-kadia" is
@@ -797,8 +798,10 @@ TERMS = {
     # LETTERS, "vee-eye". "Ja-rillo Six" is jˈɑɹˈɪlO sˈɪks on both.
     "Jarilo-VI": "Ja-rillo Six",
     # 886, and both engines make the same mess of it: the damage-over-time
-    # abbreviation is dˌutˈi / dˈu tˈi — "doo-tee". "dot" is dˈɑt on both.
-    "DoT": "dot",
+    # abbreviation is dˌutˈi / dˈu tˈi — "doo-tee". Spelled out rather than
+    # said as a word ("dot" shipped first and was heard as the wrong thing):
+    # "dee-oh-tee" is dˌiˈOtˈi / dˈiˈOtˈi.
+    "DoT": "dee-oh-tee",
     #
     # Then the ones that are ORDINARY English words, wrong on Windows only —
     # the `split` class of the scan, and the reason it exists. A split has a
@@ -847,9 +850,10 @@ TERMS = {
     # 256: espeak pɹɪsmˈæɾɪk, an s where the word has a z.
     # "priz-matic" is pɹˈɪzmˈæɾɪk on both.
     "prismatic": "priz-matic",
-    # 256: espeak stˈæɾəs — "STAT-us", the flat a of "fat".
-    # "stay-tus" is stˈAtˈʌs on both.
-    "status": "stay-tus",
+    # 256: espeak stˈæɾəs — "STAT-us", the flat a of "fat", and misaki's
+    # stˈAɾəs is "STAY-tus". Neither is the reading by ear. "stah-toose" is
+    # stˈɑtˈus on both; "stah-toos" as glossed voices the ending (stˈɑtˈuz).
+    "status": "stah-toose",
     # 248: espeak mˈædəm — "MAD-um", the English noun rather than the
     # French address Fontaine uses it as. "muh-dahm" is mˈʌdˈɑm on both.
     "madame": "muh-dahm",
@@ -872,8 +876,11 @@ TERMS = {
     # missing consonant is worth more than a stress mark.
     "suggest": "sug-jest",
     "suggested": "sug-jested",
-    # 427: espeak ˈɑɹɾɪsənʃˌɪp — an s where "artisan" has a z.
-    "artisanship": "ar-tuh-zan-ship",
+    # 427: espeak ˈɑɹɾɪsənʃˌɪp reduces the second vowel to nothing. The s
+    # is right by ear and the first respelling's z was not. NOT
+    # "ar-teh-san-ship" as glossed — a chunk-final "eh" is /eɪ/, so that is
+    # ˈɑɹtˈAsˌænʃˈɪp, "ar-TAY-san-ship".
+    "artisanship": "ar-tuh-san-ship",
     # 3,004 in the Star Rail dump, plus 515 possessives — the second most
     # common fault in either game after "they're", and the scan hid it for
     # five passes: all-caps words were skipped wholesale as "read out as
@@ -903,8 +910,9 @@ TERMS = {
     # reproduces it on both:
     # 411: misaki skˈiz — "skeez", where the plural of sky is skˈIz.
     "skies": "skyze",
-    # 370: misaki IdˈOlən — "eye-DOH-lun", the stress a syllable late.
-    "Eidolon": "Eye-duh-lon",
+    # 370: espeak ˈIdɑlən clips the middle vowel; misaki's IdˈOlən has it
+    # right. "eye-doh-lon" is ˈIdˈOlˈɑn on both.
+    "Eidolon": "eye-doh-lon",
     # 292: misaki ˈɑbztəkᵊlz — "obz-tuh-kulz", a z where the word has an s.
     "obstacles": "ob-stuh-kulz",
     # 269: misaki dəskˈIz — "dis-KYZE", a hard k where the word has a g.
@@ -1133,6 +1141,11 @@ RETIRED = {
     "Sangonomiya Kokomi": "Sahn-go-no-mee-yah Ko-ko-mee",
     "Shikanoin Heizou": "Shee-kah-no-een Hay-zoh",
     "Yumemizuki Mizuki": "Yoo-meh-mee-zoo-kee Mee-zoo-kee",
+    # withdrawn the same way, and for the same kind of reason: "Sara" is
+    # sˈɛɹə already — the English "Serra" — and the entry gave the
+    # Commissioner a Japanese "Sah-rah" nobody asked for. "Kujou" keeps its
+    # own entry, so the full name still reads.
+    "Sara": "Sah-rah",
     # withdrawn rather than superseded: the flat-a tell was wrong about
     # "Chasca" and the name needs no entry at all (see CLEARED below). It
     # shipped for one revision, so it has to be retired by name or --write
@@ -1166,7 +1179,7 @@ CLEARED = {
     # the s turns the ch into a /ʃ/ ("Chasska" is ʃˈæskə), a capital
     # inside the chunk spells it out (sˌiˈAʧ əskˈæ), and opening the a
     # ("Chahsska", ʧˈɑskə) is a different name.
-    "Chasca",
+    "Chasca", "Sara",
     "wispae", "Mary-Ann", "Gallagher", "Odette", "Hanu", "Aeon", "Aeons",
     # laughter and hesitation: already read as themselves
     "Hehe", "hehe", "Heh", "heh", "Hehehe", "Hahaha", "hahaha", "Hahahaha",
