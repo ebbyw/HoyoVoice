@@ -72,6 +72,17 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Added
 
+- **The suggest family changes sides, and Qlipoth loses a hyphen.**
+  Second round of audition notes. `suggest`, `suggests`, `suggested` and
+  `suggesting` had been respelled to restore the /ɡ/ espeak drops
+  (`səʤˈɛst` against misaki's `səɡʤˈɛst`) — heard aloud, espeak was
+  right and the g does not belong. All four now read `sa-jest`
+  (`sˈɑʤˈɛst` on both), and the family still needs entries because in
+  "suggesting" *both* engines drop the g and misaki alone still carries
+  it in the other three. `Qlipoth` → `klepoth` (`klˈɛpɑθ`), unhyphenated
+  because "kleh-poth" is `klˈApˈɑθ`, "KLAY-poth" — the chunk-final "eh"
+  trap for the third time in this file.
+
 - **Ten corrections from hearing the table read aloud.** The first
   audition of the whole set moved nine entries and withdrew one.
   `Xianzhou` → `Shee-an-joe` (the house "Shy-" onset the Xiao/Xianyun
