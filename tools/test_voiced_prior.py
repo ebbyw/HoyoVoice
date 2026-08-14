@@ -15,15 +15,22 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import live                                                      # noqa: E402
 from live import (PRIOR_WINDOW, SOFT_GATE_MIN_VOICED,            # noqa: E402
-                  FIRM_GATE_MIN_SPOKEN, never_voiced,
+                  FIRM_GATE_MIN_SPOKEN, model_deaf, never_voiced,
                   record_voiced, seed_window, usually_voiced)
 
 fails = []
 
 
-def reset():
+def reset(builtin=False, **priors):
+    """Clear the record and start from the named priors given.
+
+    The built-in MODEL_DEAF list is switched off unless asked for: the
+    record-driven half of this file is written about Paimon, who is on it.
+    """
     live.voiced_history.clear()
     live.voiced_recent.clear()
+    off = {} if builtin else {name: "" for name in live.MODEL_DEAF}
+    live.VOICES.setdefault("settings", {})["gate_prior"] = dict(off, **priors)
 
 
 def feed(speaker, outcomes):
@@ -104,6 +111,39 @@ reset()
 seed_window("Fresh", 0, 0)
 check(False, never_voiced("Fresh"), "an empty tally seeds an empty window")
 check([0, 0], live.voiced_history["Fresh"], "...and empty counts")
+
+# --- named priors: the record is not the only way in ------------------------
+# The whole prior above is derived from the VAD's verdicts, so a character
+# the VAD cannot hear can never earn one. Naming them supplies it.
+reset(builtin=True)
+feed("Sparxie", "s" * 300)             # 300 talk-overs, every one a mis-hear
+check(True, model_deaf("Sparxie"), "the built-in list needs no record")
+check(False, never_voiced("Sparxie"),
+      "and a run of mis-hears must never arm the firm gate against her")
+check(False, usually_voiced("Sparxie"),
+      "model_deaf buys center-energy corroboration, not the soft gate")
+
+reset(**{"Reporting Furb": "unvoiced"})
+feed("Reporting Furb", "v" * PRIOR_WINDOW)
+check(True, never_voiced("Reporting Furb"),
+      "a declared prior outranks a full window pointing the other way")
+check(False, usually_voiced("Reporting Furb"), "...in both directions")
+
+reset(Furina="voiced")
+check(True, usually_voiced("Furina"), "declared voiced from the first line")
+check(False, never_voiced("Furina"), "and never firm")
+feed("Furina", "s" * PRIOR_WINDOW)
+check(True, usually_voiced("Furina"), "a talk-over does not erode it")
+
+reset(Nobody="nonsense")
+check(False, model_deaf("Nobody"), "an unrecognized value is not a prior")
+
+reset(**{next(iter(live.MODEL_DEAF)): "unvoiced"})
+check(True, never_voiced(next(iter(live.MODEL_DEAF))),
+      "settings.gate_prior overrides the built-in list")
+
+check(False, model_deaf(""), "no speaker, no prior")
+check(False, model_deaf(None), "...and None is not a dict key lookup crash")
 
 reset()
 if fails:

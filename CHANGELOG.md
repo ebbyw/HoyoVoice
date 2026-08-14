@@ -72,6 +72,45 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Added
 
+- **A gate prior that can be set by name, for the two characters the
+  speech model cannot hear.** Paimon and Sparxie are processed
+  high-register voices; Silero is trained on human speech and scores
+  them at or near 0.00, which is a stalemate the existing priors cannot
+  break because they are *built out of* the VAD's verdicts. Their voiced
+  lines get talked over, every talk-over is filed as another unvoiced
+  observation, and the soft gate that would have saved them stays
+  unreachable no matter how thoroughly the scene voices them. Worse with
+  use: at three of those observations the FIRM gate arms, so we also
+  stop cutting our own playback when their VO does start — a wrong
+  answer built entirely from the detector's own failure.
+
+  Both are now named in `live.MODEL_DEAF`, in code rather than in
+  `voices.json`, because the file is gitignored and the Windows box
+  tracks the repo — and because they are the same two characters in
+  every save. `settings.gate_prior` extends and overrides it, per
+  speaker: `"model_deaf"`, `"voiced"` (soft gate from the first line),
+  or `"unvoiced"` (hold the firm gate). A named prior wins over the
+  observed record in both directions, which also makes it the way to
+  undo a record that went wrong.
+
+  What the model-deaf name buys is corroboration for the centre-energy
+  layer, and deliberately nothing else. That layer measures a real
+  event — a mid-channel burst 7dB over the pre-line baseline and 5dB
+  over the side channel, arriving with the line — and it is the layer
+  that caught the Paimon line that went out over her own VO at mid+17.3
+  side+5.2; it was held back only by a corroboration test these two can
+  never pass. The VAD thresholds themselves stay at full strength.
+  Dropping them to the soft floor for these characters was the obvious
+  alternative and is the wrong one: Paimon is unvoiced for hundreds of
+  lines at a stretch, and 0.12 over three chunks is cleared by an
+  unvoiced line in a loud scene as readily as by a voiced one — the
+  measurement in `VAD_SOFT_THRESHOLD`'s comment (a voiced line at 4
+  such chunks, an unvoiced one in the same scene at 5) is exactly that.
+  Not addressed: the mid-play yield has no centre-energy layer, so VO
+  that starts after we do still goes undetected for these two.
+  `[voiced — center energy]` now says `model-deaf prior` when the name
+  is what tipped it.
+
 - **The suggest family changes sides, and Qlipoth loses a hyphen.**
   Second round of audition notes. `suggest`, `suggests`, `suggested` and
   `suggesting` had been respelled to restore the /ɡ/ espeak drops
