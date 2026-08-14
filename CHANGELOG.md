@@ -72,6 +72,28 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Added
 
+- **Ten corrections from hearing the table read aloud.** The first
+  audition of the whole set moved nine entries and withdrew one.
+  `Xianzhou` → `Shee-an-joe` (the house "Shy-" onset the Xiao/Xianyun
+  entries use turned out to be the /aɪ/ of "shy"), `Akademiya` →
+  `academia` — the ordinary English word it transliterates, the
+  `Katheryne` → `Katherine` move again — `Chevreuse` → `shev-rooz`,
+  `Barbatos` → `bar-bay-tohz` (the z ending was right all along; the
+  middle vowel was not), `Eidolon` → `eye-doh-lon`, `DoT` →
+  `dee-oh-tee` spelled out rather than said as "dot", `artisanship` →
+  `ar-tuh-san-ship` (the s is right by ear, the first respelling's z was
+  not) and `status` → `stah-toose`, which is neither engine's reading.
+
+  `Sara` is withdrawn, the second entry in this sweep to be: `sˈɛɹə` is
+  already the English "Serra", and the entry had been giving the Tenryou
+  Commissioner a Japanese "Sah-rah" nobody asked for. `Kujou` keeps its
+  own entry, so the full name still reads. Retired as well as cleared, so
+  `--write` takes it back out.
+
+  Two of the glosses could not ship as spelled, both on traps this file
+  already documents: "ar-teh-san-ship" is `ˈɑɹtˈAsˌænʃˈɪp`,
+  "ar-TAY-san-ship", and "stah-toos" voices its ending to a z.
+
 - **The 200-a-dump floor cleared, and the scan now remembers what has
   been ruled on.** Last pass over the tier: `Guyun` (`ɡˈIʌn`, "GUY-un"),
   `Guhua`, `Chenyu`, `Kichiboushi`, `Kusanali` (a /kj/ onset the name
