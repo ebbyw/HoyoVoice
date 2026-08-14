@@ -875,13 +875,14 @@ TERMS = {
     # 729 between them, and the entry that changed sides. espeak drops the
     # /ɡ/ (səʤˈɛst) where misaki keeps it (səɡʤˈɛst), and a first pass
     # restored the /ɡ/ on both — then the audition said espeak had it
-    # right and the g does not belong. "sa-jest" is sˈɑʤˈɛst on both, the
-    # user's spelling as written; it opens the first vowel and takes the
-    # stress, where "suh-jest" (sˌʌʤˈɛst / sˈʌʤˈɛst) is the unstressed
-    # schwa and splits a stress mark. The -ing form is the reason an entry
-    # is still needed at all: BOTH engines drop the g there.
-    "suggest": "sa-jest",
-    "suggested": "sa-jested",
+    # right and the g does not belong. "suh-jest" is sˌʌʤˈɛst / sˈʌʤˈɛst —
+    # the unstressed schwa, which is where the stress belongs; the engines
+    # differ only in which mark they put on the first chunk. ("sa-jest"
+    # shipped for one revision and was sˈɑʤˈɛst, "SAH-jest", an open vowel
+    # with the stress on the wrong syllable.) The -ing form is the reason
+    # an entry is still needed at all: BOTH engines drop the g there.
+    "suggest": "suh-jest",
+    "suggested": "suh-jested",
     # 427: espeak ˈɑɹɾɪsənʃˌɪp reduces the second vowel to nothing. The s
     # is right by ear and the first respelling's z was not. NOT
     # "ar-teh-san-ship" as glossed — a chunk-final "eh" is /eɪ/, so that is
@@ -940,8 +941,8 @@ TERMS = {
     # ʤˈAnˈʌs on both; "Jay-nus" reads the last chunk as "nooz" on misaki.
     "Janus": "Jay-nuss",
     # the same four-form family, keyed one per form as always.
-    "suggests": "sa-jests",
-    "suggesting": "sa-jesting",
+    "suggests": "suh-jests",
+    "suggesting": "suh-jesting",
     # 379 between them: espeak pɹˈɛɹ is right for the petition and misaki
     # pɹˈAəɹ is the one who prays — the games mean the petition.
     "prayer": "prair",
