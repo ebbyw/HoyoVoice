@@ -106,10 +106,44 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   unvoiced line in a loud scene as readily as by a voiced one — the
   measurement in `VAD_SOFT_THRESHOLD`'s comment (a voiced line at 4
   such chunks, an unvoiced one in the same scene at 5) is exactly that.
+  Corroboration turned out to be only half of it. Reading the mid/side
+  numbers back out of seventeen session logs — 109 lines HoyoVoice spoke
+  for Paimon or Sparxie — the burst that would have saved them usually
+  passed the corroboration test and failed the *shape* test, on the
+  decisive cut. `rec_20260812_083939` is the proof: "Wow, it's so
+  majestic! Just flying from one side to the other…" was read four times
+  over the game's own delivery of it, at 7.1, 6.4, 6.7 and 9.8dB of
+  mid-over-side. Only the 9.8 crossed `ENERGY_DECISIVE_OVER_SIDE`, so the
+  app skipped the fourth read as voiced and talked over the first three —
+  the same sentence, the same voiceover, seconds apart. 8.0 is a
+  population split measured across all speakers, and for these two it
+  lands inside the population rather than beside it.
+
+  So a named speaker also gets a relaxed cut, `MODEL_DEAF_OVER_SIDE`
+  = 6.0, which takes all four reads together. Relaxing it costs two
+  lines: over the same seventeen logs it moves six Paimon lines, four in
+  that Snezhnaya station scene and two in sessions with no voice acting
+  in them at all. Those last two are what `SCENE_VO_WINDOW` is for — the
+  relaxed cut applies only while something in the scene has been heard to
+  be voiced in the last ten minutes, ANY speaker, because voice acting is
+  a property of the scene and not of the character. Both stray lines come
+  from sessions where nothing was ever detected as voiced (the Leyla
+  vegetable quest, 2026-08-08) and stay spoken; the four in the station
+  scene, where other speakers were being skipped seconds earlier, land.
+  Six moved, two of them wrongly, becomes four moved and none wrongly. A
+  mid-play yield now counts as scene evidence too — it is the scene
+  proving it has a voice that the gate's own verdict just missed.
+
+  Not verified by replay: `tools/replay.py` re-reads the recording's
+  audio bed, which has the original session's TTS muxed into it, and that
+  TTS alone is enough to make both lines skip with or without this
+  change. The measurements above come from the live logs, where the
+  mid/side figures were taken off clean HDMI audio.
+
   Not addressed: the mid-play yield has no centre-energy layer, so VO
   that starts after we do still goes undetected for these two.
-  `[voiced — center energy]` now says `model-deaf prior` when the name
-  is what tipped it.
+  `[voiced — center energy]` now says `model-deaf cut 6.0dB` when the
+  name is what tipped it.
 
 - **The suggest family changes sides, and Qlipoth loses a hyphen.**
   Second round of audition notes. `suggest`, `suggests`, `suggested` and

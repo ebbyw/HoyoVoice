@@ -29,6 +29,7 @@ def reset(builtin=False, **priors):
     """
     live.voiced_history.clear()
     live.voiced_recent.clear()
+    live.scene_vo.clear()
     off = {} if builtin else {name: "" for name in live.MODEL_DEAF}
     live.VOICES.setdefault("settings", {})["gate_prior"] = dict(off, **priors)
 
@@ -144,6 +145,18 @@ check(True, never_voiced(next(iter(live.MODEL_DEAF))),
 
 check(False, model_deaf(""), "no speaker, no prior")
 check(False, model_deaf(None), "...and None is not a dict key lookup crash")
+
+# --- "does this scene have voice acting in it" is scene-wide ---------------
+reset()
+check(False, live.scene_has_vo(), "a fresh scene has heard nothing")
+feed("Anyone", "sssss")
+check(False, live.scene_has_vo(), "lines we read aloud are not evidence of VO")
+feed("Anyone", "v")
+check(True, live.scene_has_vo(), "one voiced line anywhere is")
+check(True, live.scene_has_vo(window=1e6), "and it is remembered")
+check(False, live.scene_has_vo(window=0.0),
+      "...but only for as long as the window")
+reset()
 
 reset()
 if fails:
