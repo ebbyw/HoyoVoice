@@ -23,6 +23,15 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   onset ("hah") already reads as an ordinary prefix rather than a
   stammer.
 
+- **"Hehe" no longer comes out as "hee-HEE."** An earlier entry in this
+  section measured the laughter family (`Hehe` 3,866, `Heh`, `Hahaha`)
+  and left it alone on the claim that both engines already read it as
+  laughter; re-measured on the same g2p (misaki + espeak fallback),
+  `Hehe`/`hehe` is actually `hihˈi` — the vowels are wrong, not just the
+  stress. Its neighbours really are fine as-is (`Heh` is `hˈɛh`, `Hehehe`
+  is `hˈɛhɛh`), so only `Hehe` gets a `tools/pronounce_names.py` TERMS
+  entry: `"Heh-heh"`, which measures `hˈɛhhˈɛh` on both engines.
+
 - **A hum is no longer read out as letters.** "Mmm" is `ˌɛmˌɛmˈɛm` to
   both engines — "EM-EM-EM" — where the line is somebody humming; 506 of
   them across the two dumps, and bare "Mm" is spelled out the same way
