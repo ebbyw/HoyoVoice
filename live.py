@@ -1025,6 +1025,25 @@ def _unstutter(m):
     return f"{onset.capitalize() if onset.isupper() else onset}uh-{word}"
 
 
+# "Haha" (one pair) is already hɑhˈɑ, "hah-HAH", on both engines. Past two
+# pairs the phonemizer flattens the middle vowels — "Hahaha" is hæhˈɑhə,
+# "HA-hah-huh" — and ALL-CAPS "HAHAHA" is worse, spelled out as letters
+# (ˌAʧˌAˌAʧˌA…). Hyphenating into repeated "hah" units fixes every length at
+# once (measured with tools/pronounce_names.py: "Hah-hah-hah" is hˌɑhˈɑhˈɑ,
+# "Hah-hah-hah-hah" is hˌɑhˌɑhˈɑhˈɑ, both engines) — a fixed-string table
+# entry can't cover a repeat count a text dump varies line to line.
+_LAUGH = re.compile(r"\b(?:[Hh][Aa]){2,}[Hh]?\b")
+
+
+def _unlaugh(m):
+    text = m.group(0)
+    units = -(-len(text) // 2)                  # ceil: ~2 letters per "hah"
+    if units < 3:                                # "Haha" already reads right
+        return text
+    first = "Hah" if text[0].isupper() else "hah"
+    return "-".join([first] + ["hah"] * (units - 1))
+
+
 # RapidOCR's default recognition model is Chinese-trained, and Chinese
 # doesn't use spaces — so it drops the space after punctuation
 # ("Patience,Sparxie,patience.Once"). Vision spaces correctly, so these
@@ -1164,6 +1183,7 @@ def spoken_form(text):
         text = pat.sub(spoken, text)
     for pat, rep in _INTERJECTIONS:
         text = pat.sub(_keep_case(rep), text)
+    text = _LAUGH.sub(_unlaugh, text)
     return _STUTTER.sub(_unstutter, text)
 
 

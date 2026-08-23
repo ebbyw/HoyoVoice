@@ -95,6 +95,12 @@ FIXES = {
     # ends on a schwa, and "Stoo-zhuh" (stˈuʒˈʌ) buys the same stress for
     # the right vowel.
     "Stuzha": "Stoozha",
+    # əkˈɪvɪli, "uh-KIH-vih-lee" — the schwa opening a Nod-Krai god's name
+    # doesn't have. "Ah-kee-vil-lee" is ˈɑkˈivˈɪllˈi on both: the open first
+    # vowel and a clean final "-lee" the user's own "villi" spelling doesn't
+    # chunk into on its own ("-villi" alone is ˈɪlI, "vil-EYE" — the final i
+    # read long, the trap the header records for a chunk-final vowel).
+    "Akivili": "Ah-kee-vil-lee",
     # An Easybreeze Holiday Resort NPC — a minor speaking role, and on
     # neither playable roster. Both engines read the ai as /eɪ/: tˈumAni,
     # "too-MAY-nee". The user's own spelling is exactly right and is kept as
@@ -1187,8 +1193,13 @@ CLEARED = {
     # ("Chahsska", ʧˈɑskə) is a different name.
     "Chasca", "Sara",
     "wispae", "Mary-Ann", "Gallagher", "Odette", "Hanu", "Aeon", "Aeons",
-    # laughter and hesitation: already read as themselves
-    "Hehe", "hehe", "Heh", "heh", "Hehehe", "Hahaha", "hahaha", "Hahahaha",
+    # laughter and hesitation: already read as themselves. "Haha"/"haha"
+    # (one "ha" pair) is measured fine as-is — hɑhˈɑ, "hah-HAH" — but 3+
+    # pairs ("Hahaha", "Hahahaha", ALL-CAPS "HAHAHA", and every other length
+    # a text dump throws up) is NOT in this list: the flat vowel it picks up
+    # past two pairs (hæhˈɑhə, "HA-hah-huh") is live.py's _LAUGH regex's job,
+    # not a fixed-string table that can't cover a variable repeat count.
+    "Hehe", "hehe", "Heh", "heh", "Hehehe",
     "Hee-hee", "Hmm", "hmm", "Umm", "Ohh", "Argh", "Agh",
     # ordinary English where both readings are legitimate
     "route", "routes", "cosmos", "Cosmos", "restaurant", "Restaurant",

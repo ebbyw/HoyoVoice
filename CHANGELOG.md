@@ -9,6 +9,20 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **A run of "haha" past two pairs no longer flattens into "HA-hah-huh",
+  and ALL-CAPS "HAHAHA" no longer spells itself out letter by letter.**
+  One pair ("Haha") is already `hɑhˈɑ` on both engines and untouched, but
+  "Hahaha" measures `hæhˈɑhə` and caps versions read as their letter
+  names (`ˌAʧˌAˌAʧˌA…`). A text dump varies the repeat count line to
+  line, so this isn't a `tools/pronounce_names.py` table entry — it's a
+  new `live._LAUGH` regex that hyphenates any 3-or-more-pair run into
+  repeated "hah" units regardless of length ("Hah-hah-hah" is
+  `hˌɑhˈɑhˈɑ`, "Hah-hah-hah-hah" is `hˌɑhˌɑhˈɑhˈɑ`, both engines). Runs
+  ahead of the stammer repair in `spoken_form()`; the stammer regex
+  leaves the hyphenated result alone on its own, since a vowel in the
+  onset ("hah") already reads as an ordinary prefix rather than a
+  stammer.
+
 - **A hum is no longer read out as letters.** "Mmm" is `ˌɛmˌɛmˈɛm` to
   both engines — "EM-EM-EM" — where the line is somebody humming; 506 of
   them across the two dumps, and bare "Mm" is spelled out the same way
@@ -71,6 +85,13 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   claim now holds against a whole-repo sweep, not a per-file diff.
 
 ### Added
+
+- **Akivili respelled.** The Nod-Krai god's name is `əkˈɪvɪli` on both
+  engines — the schwa opening the raw spelling doesn't have. Respelled
+  to "Ah-kee-vil-lee" (`ˈɑkˈivˈɪllˈi`, both engines); a bare "-villi"
+  ending reads `ˈɪlI`, "vil-EYE", the chunk-final-vowel trap the header
+  of `tools/pronounce_names.py` documents for "eh" and "ey", so the
+  final syllable is spelled "-vil-lee" instead.
 
 - **A gate prior that can be set by name, for the two characters the
   speech model cannot hear.** Paimon and Sparxie are processed
