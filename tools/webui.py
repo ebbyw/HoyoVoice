@@ -20,7 +20,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 from profiles import PROFILES, profile_choices
 
-VERSION = "0.11.0"
+VERSION = "0.11.0"  # x-release-please-version
 
 
 @functools.lru_cache(maxsize=1)

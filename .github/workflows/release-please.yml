@@ -1,0 +1,27 @@
+name: release-please
+
+# Owns steps 2 ("Version") and 4-5 ("Commit, tag, push" / "Publish the
+# GitHub release") of plans/RELEASING.md — the tag-pushed-but-release-
+# not-published foot-gun that history (v0.5.1, v0.6.0, v0.6.1) already
+# paid for. CHANGELOG.md content stays entirely hand-written: this repo's
+# release-please-config.json sets skip-changelog, so release-please never
+# writes to it. See plans/RELEASING.md for the release PR's manual step
+# (pasting the dated CHANGELOG.md section into the PR description, which
+# is what release-please reads for the GitHub Release body at merge time).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
