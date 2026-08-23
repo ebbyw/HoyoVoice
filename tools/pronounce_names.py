@@ -387,6 +387,12 @@ TERMS = {
     # entries would change nothing. So were "Aeon"/"Aeons", already
     # ˈiɑn(z) / ˈiːɑːn(z), "EE-on(z)", on both.
     "Ms.": "Miss",
+    # "Hehe"/"hehe" comes out hihˈi ("hee-HEE") on both engines — the
+    # neighbouring "Heh" (hˈɛh) and "Hehehe" (hˈɛhɛh) are already right, so
+    # this is the one length in the laughter family that needs an entry
+    # (see the CLEARED comment). "Heh-heh" measures hˈɛhhˈɛh on both
+    # engines — both vowels land as /ɛ/.
+    "Hehe": "Heh-heh",
     # "ma'am" as written is already mˈæm on both engines and needs no entry.
     # What needs one is the form the OCR leaves when it misses the
     # apostrophe: "maam" is mˈɑm on both, "mahm" with the open a of
@@ -1199,7 +1205,13 @@ CLEARED = {
     # a text dump throws up) is NOT in this list: the flat vowel it picks up
     # past two pairs (hæhˈɑhə, "HA-hah-huh") is live.py's _LAUGH regex's job,
     # not a fixed-string table that can't cover a variable repeat count.
-    "Hehe", "hehe", "Heh", "heh", "Hehehe",
+    # "Hehe" is NOT in this list, unlike its neighbours: measured on the
+    # same g2p (misaki + espeak fallback), "Heh" is hˈɛh and "Hehehe" is
+    # hˈɛhɛh, both fine, but "Hehe" alone comes out hihˈi — "hee-HEE", not
+    # "heh-heh". Fixed spelling (the game text doesn't vary the letter
+    # count the way the Hahaha family does), so it gets a TERMS entry
+    # ("Hehe": "Heh-heh") instead of living here.
+    "Heh", "heh", "Hehehe",
     "Hee-hee", "Hmm", "hmm", "Umm", "Ohh", "Argh", "Agh",
     # ordinary English where both readings are legitimate
     "route", "routes", "cosmos", "Cosmos", "restaurant", "Restaurant",
