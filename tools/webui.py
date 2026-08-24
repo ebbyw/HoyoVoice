@@ -237,6 +237,8 @@ document.addEventListener('change',e=>{
   const t=e.target;
   if(t.dataset.role==='cast'&&t.value)
     post('/api/assign',{character:decodeURIComponent(t.dataset.ch),voice:t.value});
+  if(t.dataset.role==='default'&&t.value)
+    post('/api/default',{slot:t.dataset.slot,voice:t.value});
   if(t.dataset.role==='mute')
     post('/api/mute',{character:decodeURIComponent(t.dataset.ch),muted:t.checked});
 });
@@ -290,10 +292,22 @@ async function tick(){
         '<td><select data-role="cast" data-ch="'+enc+'">'+(assigned?'':'<option></option>')+opts(voice)+'</select></td>'+
         '<td><input type="checkbox" data-role="mute" data-ch="'+enc+'"'+(muted?' checked':'')+'></td>'+
         '<td><button data-role="del" data-ch="'+enc+'" title="delete">✕</button></td></tr>';};
-    const castFp=JSON.stringify([s.characters,s.unknown,s.always_voiced]);
+    // the default slots, pinned above the cast: who speaks when no
+    // character owns the line (narrator), and the seeds auto-casting
+    // hands a newly met character (female / male)
+    const slotTitle={narrator:'narration, lore cards, loading tips and any line with no speaker',
+      female:'fallback voice for unnamed female speakers; seeds auto-casting',
+      male:'fallback voice for unnamed male speakers; seeds auto-casting'};
+    const defRow=(slot,voice)=>
+      '<tr><td title="'+slotTitle[slot]+'"><i>'+slot+'</i> <span class="muted">(default)</span></td>'+
+      '<td><select data-role="default" data-slot="'+slot+'">'+opts(voice)+'</select></td>'+
+      '<td></td><td></td></tr>';
+    const castFp=JSON.stringify([s.characters,s.unknown,s.always_voiced,s.defaults]);
     if(castFp!==lastCastFp&&!interacting('casting')){
       lastCastFp=castFp;
       let rows='';
+      for(const slot of ['narrator','female','male'])
+        if(s.defaults&&s.defaults[slot]) rows+=defRow(slot,s.defaults[slot]);
       for(const [ch,c] of Object.entries(s.characters)) rows+=row(ch,c.voice,true,c.auto);
       for(const ch of s.unknown) if(!(ch in s.characters)) rows+=row(ch,'',false,false);
       for(const ch of s.always_voiced)
@@ -596,6 +610,7 @@ def start_webui(shared, port=DASHBOARD_PORT):
         return jsonify({
             "events": list(shared["events"]),
             "characters": shared["voices"]["characters"],
+            "defaults": shared["voices"].get("defaults", {}),
             "always_voiced": shared["voices"].get("always_voiced", []),
             "unknown": sorted(shared["unknown"]),
             "voices": catalog(),
@@ -734,6 +749,18 @@ def start_webui(shared, port=DASHBOARD_PORT):
         v = (request.get_json() or {}).get("voice")
         if v in shared["voices"].get("custom_voices", {}):
             shared["commands"].put(("delvoice", v))
+        return jsonify(ok=True)
+
+    @app.post("/api/default")
+    def set_default():
+        """Re-cast one of the default voice slots (narrator / female /
+        male). Validated here the way /api/say validates, because a bad
+        voice id in `defaults` doesn't fail loudly — it silences every
+        line that falls back to that slot."""
+        d = request.get_json() or {}
+        slot, v = d.get("slot"), d.get("voice")
+        if slot in shared["voices"].get("defaults", {}) and v in catalog():
+            shared["commands"].put(("setdefault", slot, v))
         return jsonify(ok=True)
 
     @app.post("/api/mute")
