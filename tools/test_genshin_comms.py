@@ -87,8 +87,32 @@ BOARD_FRAME = [
      "x": 0.8750, "y": 0.0050, "w": 0.0959, "h": 0.0208},
 ]
 
+# A comms message that expects an answer floats the player's reply option
+# to the right of the line, and the bubble's lower row lands inside the
+# plate band — where the nothing-else-in-the-band rule read it as a board
+# label and vetoed the sender. Shot #1343 (2026-08-23) verbatim: the frame
+# the "Compassion is something to be respected" line went unread on.
+REPLY_FRAME = [
+    {"text": "They've been carrying out this", "confidence": 0.9986,
+     "x": 0.6885, "y": 0.2722, "w": 0.1786, "h": 0.0306},
+    {"text": "\"ritual\" again and again.", "confidence": 0.9901,
+     "x": 0.6859, "y": 0.2444, "w": 0.1417, "h": 0.0370},
+    {"text": "Eye of Graeae", "confidence": 0.9721,
+     "x": 0.3068, "y": 0.2167, "w": 0.0865, "h": 0.0296},
+    {"text": "Compassion is something to be respected, Miss Paimon.",
+     "confidence": 0.9971,
+     "x": 0.3063, "y": 0.1676, "w": 0.3859, "h": 0.0315},
+    {"text": "UID: 603275577", "confidence": 0.9941,
+     "x": 0.8745, "y": 0.0028, "w": 0.0953, "h": 0.0259},
+]
+
+REPLY_WANT = ("Eye of Graeae",
+              "Compassion is something to be respected, Miss Paimon.")
+
+
 CASES = [
     ("comms message detected", COMMS_FRAME, WANT),
+    ("reply bubble does not veto the sender", REPLY_FRAME, REPLY_WANT),
     # a CENTERED plate is ordinary dialogue: find_plate's territory, and
     # the no-chrome gate must keep judging it
     ("centered plate is not comms", shift(COMMS_FRAME, 0.10), None),
