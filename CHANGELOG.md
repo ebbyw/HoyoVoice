@@ -95,6 +95,20 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Added
 
+- **The auto-cast voice pools now claim from nearly the whole catalog:
+  27 female and 21 male voices, up from 11 each.** Long sessions were
+  exhausting the pools and reusing voices while ~25 packaged voices sat
+  in `VOICE_CATALOG` unclaimable — the non-English-prefix ones, which
+  (with the phonemizer pinned to en-us) read English text as
+  differently-accented speakers, i.e. exactly what a background NPC
+  needs to stay distinguishable. The original 11-per-gender lineup keeps
+  its order so existing casts are untouched; the additions follow in
+  rough order of how cleanly each reads English. Still excluded:
+  `bm_george` (reserved as the narrator default and `release_voice`
+  fallback) and the pt/es near-duplicates (`pf_dora`, `pm_alex`,
+  `pm_santa`, `em_santa`), whose en-us renderings are too close to their
+  es/en siblings to tell two speakers apart by ear.
+
 - **Akivili respelled.** The Nod-Krai god's name is `əkˈɪvɪli` on both
   engines — the schwa opening the raw spelling doesn't have. Respelled
   to "Ah-kee-vil-lee" (`ˈɑkˈivˈɪllˈi`, both engines); a bare "-villi"

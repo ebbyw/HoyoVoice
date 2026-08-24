@@ -1596,13 +1596,27 @@ def normalize_speaker(speaker):
 
 # Auto-casting pools: each newly met character claims the next voice not
 # already in use, so scenes with several new speakers stay distinguishable.
+# Order is claim order: the original 11-per-gender English lineup stays first
+# and untouched (so existing casts replay identically), then the rest of
+# VOICE_CATALOG in rough order of how cleanly each reads English text — the
+# non-English-prefix voices speak English with an accent, not a language
+# switch (see the catalog note in tools/webui.py). Left out: bm_george
+# (reserved as the narrator default and its release_voice fallback), and the
+# pt/es near-duplicates pf_dora/pm_alex/pm_santa/em_santa, whose en-us
+# renderings are too close to ef_dora/em_alex/am_santa to tell speakers apart.
 VOICE_POOLS = {
     "female": ["af_nova", "af_bella", "af_sarah", "af_sky", "bf_emma",
                "af_jessica", "af_kore", "af_aoede", "bf_alice", "bf_lily",
-               "af_alloy"],
+               "af_alloy",
+               "af_heart", "ff_siwis", "jf_alpha", "bf_isabella", "if_sara",
+               "hf_alpha", "hf_beta", "ef_dora", "af_river", "jf_gongitsune",
+               "zf_xiaoxiao", "zf_xiaobei", "zf_xiaoni", "zf_xiaoyi",
+               "jf_nezumi", "jf_tebukuro"],
     "male": ["am_michael", "am_liam", "am_eric", "am_onyx", "am_puck",
              "bm_daniel", "bm_fable", "bm_lewis", "am_fenrir", "am_santa",
-             "am_adam"],
+             "am_adam",
+             "im_nicola", "hm_omega", "hm_psi", "em_alex", "am_echo",
+             "jm_kumo", "zm_yunjian", "zm_yunxi", "zm_yunxia", "zm_yunyang"],
 }
 
 
