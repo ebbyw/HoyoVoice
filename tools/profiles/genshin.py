@@ -508,11 +508,61 @@ class Genshin(Profile):
         # its own shape instead, above.
         return False
 
+    # Left-anchored dialogue (Snezhnaya 6.x): ordinary boxed dialogue —
+    # Auto/Confirm chrome and all — but the whole box is left-aligned: the
+    # nameplate sits at cx=0.223 (shots #32-#34, 2026-08-23 18:08) with
+    # the rows under it left-aligned to the same edge (plate x 0.1797,
+    # rows 0.1786-0.1797 — within 0.001). find_plate's centered band
+    # can't take a plate there and comms owns 0.30-0.45, so the speaker
+    # was lost and three Eye of Graeae lines read in the narrator's
+    # voice. The x-band's ceiling is COMMS_PLATE_X's floor: a plate is
+    # centered, comms, or left-anchored — never two of them.
+    LEFT_PLATE_X = (0.15, 0.30)
+    # plate left edge relative to the rows': measured 0.0005-0.0011 across
+    # the three shots; the same tolerance the comms alignment test uses,
+    # for the same reason (stray world labels are not anchored to the box)
+    LEFT_PLATE_ALIGN = (-0.02, 0.06)
+
+    def _left_plate(self, blocks, dialogue_rows):
+        """The left-anchored layout's nameplate, or None.
+
+        Same evidence chain as the comms plate: exactly one plate-shaped
+        block in the plate band's left reach, anchored to the left edge of
+        the dialogue rows below it. The plate band itself does the rest —
+        dialogue rows were never seen above cy 0.194, and the chat panel
+        and reading screens are classified before this can run."""
+        if not dialogue_rows:
+            return None
+        pool = [b for b in blocks if b["confidence"] >= self.PLATE_MIN_CONF
+                and b["text"].strip() not in self.IGNORE]
+        plates = [b for b in pool
+                  if self.PLATE_Y[0] <= b["y"] + b["h"] / 2 <= self.PLATE_Y[1]
+                  and self.LEFT_PLATE_X[0] <= b["x"] + b["w"] / 2
+                  < self.LEFT_PLATE_X[1] and b["w"] <= self.PLATE_MAX_W]
+        if len(plates) != 1:
+            return None
+        plate = plates[0]
+        left = min(b["x"] for b in dialogue_rows)
+        if not (self.LEFT_PLATE_ALIGN[0] <= plate["x"] - left
+                <= self.LEFT_PLATE_ALIGN[1]):
+            return None
+        return plate
+
     def classify(self, blocks, _no_plate=False):
         if self.is_menu(blocks):
             return {"speaker": None, "dialogue": "", "choices": [],
                     "boxes": [], "conf": 1.0}
         state = super().classify(blocks, _no_plate)
+        # No centered plate but a line on screen: check the left-anchored
+        # layout before the line is surrendered to the narrator. The rows
+        # to align against are the ones the line was built from — they are
+        # in state["boxes"], less the choice blocks (which sit far right).
+        if state["dialogue"] and not state["speaker"]:
+            rows = [b for b in state["boxes"]
+                    if b["x"] + b["w"] / 2 <= self.CHOICES["x"][0]]
+            plate = self._left_plate(blocks, rows)
+            if plate is not None:
+                state["speaker"] = plate["text"].strip()
         # A choice prompt only exists alongside a speaker. The teleport map
         # lists its waypoints ("Sea of Bygone Eras", "Temple of Space"…) in
         # the same column at the same left edge, and reads as a three-option
