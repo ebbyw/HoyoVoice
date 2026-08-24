@@ -9,6 +9,24 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **A comms message that expects an answer is no longer silenced by its
+  own reply bubble.** The Eye of Graeae's "Compassion is something to be
+  respected, Miss Paimon." went unread — logged as "unknown speaker, no
+  story chrome" — on every frame it was up (shots #1340/#1343/#1390/#1398,
+  session 2026-08-23), while plain announcements from the same sender in
+  the same session read fine. The comms detector requires the plate band
+  to hold nothing but the sender, a rule that exists to keep shop-board
+  label columns from reading as a plate; the player's floating reply
+  option ("They've been carrying out this 'ritual' again and again.")
+  wraps to two rows and its lower row lands in that band (cy=0.263,
+  measured identically on all four shots), vetoing a perfectly valid
+  sender plate at cy=0.231. The band-emptiness test now ignores blocks
+  inside the CHOICES region — the bubble sits dead inside it at cx=0.757,
+  which is why every one of those frames also logged it as the choice
+  prompt it is — and the board defense is untouched, because label
+  columns sit left of the choice column. The reply option itself is still
+  not spoken; only the message is.
+
 - **A run of "haha" past two pairs no longer flattens into "HA-hah-huh",
   and ALL-CAPS "HAHAHA" no longer spells itself out letter by letter.**
   One pair ("Haha") is already `hɑhˈɑ` on both engines and untouched, but

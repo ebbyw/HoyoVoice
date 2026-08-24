@@ -545,8 +545,20 @@ class Genshin(Profile):
             return None
         pool = [b for b in blocks if b["confidence"] >= self.PLATE_MIN_CONF
                 and b["text"].strip() not in self.IGNORE]
+        # The reply bubble is exempt from the nothing-else-in-the-band rule.
+        # A comms message that expects an answer floats the player's reply
+        # option to the right of the line, and its lower row lands in the
+        # plate band: measured on shots #1340/#1343/#1390/#1398 (2026-08-23),
+        # '"ritual" again and again.' sits at cy=0.263 cx=0.757 — inside the
+        # band, and dead inside the CHOICES region, where every other frame
+        # classifies it as the choice prompt it is. Counting it here vetoed
+        # the sender plate (cy=0.231) and the line fell to the no-chrome gate
+        # unread. The board/menu defense the rule exists for is untouched:
+        # label columns sit left of the choice column (BOARD_FRAME's in-band
+        # labels are at cx 0.42 and cy 0.217, outside CHOICES either way).
         band = [b for b in pool
-                if self.PLATE_Y[0] <= b["y"] + b["h"] / 2 <= self.PLATE_Y[1]]
+                if self.PLATE_Y[0] <= b["y"] + b["h"] / 2 <= self.PLATE_Y[1]
+                and not in_region(b, self.CHOICES)]
         plates = [b for b in band
                   if self.COMMS_PLATE_X[0] <= b["x"] + b["w"] / 2
                   < self.COMMS_PLATE_X[1] and b["w"] <= self.PLATE_MAX_W]
