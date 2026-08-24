@@ -9,6 +9,21 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **Left-anchored dialogue keeps its speaker instead of falling to the
+  narrator.** Snezhnaya 6.x draws some conversations as ordinary boxed
+  dialogue — Auto/Confirm chrome and all — but left-aligned: the
+  nameplate at cx=0.223 with the rows sharing its left edge to within
+  0.001 (shots #32-#34, 2026-08-23 18:08). find_plate's centered band
+  (cx 0.45-0.55) can't take a plate there and the comms band owns
+  0.30-0.45, so the plate fell between the two, the speaker was lost,
+  and three Eye of Graeae lines read in the narrator's voice — the same
+  failure behind the earlier session's "Ebby… please stay calm" lines.
+  A plate-shaped block in the band's left reach (cx 0.15-0.30), anchored
+  to the dialogue rows' left edge with the same tolerance the comms
+  alignment test uses, now claims the line before it is surrendered to
+  the narrator. A plate is centered, comms, or left-anchored — the three
+  x-bands share edges and never overlap.
+
 - **A comms message that expects an answer is no longer silenced by its
   own reply bubble.** The Eye of Graeae's "Compassion is something to be
   respected, Miss Paimon." went unread — logged as "unknown speaker, no
