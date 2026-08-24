@@ -37,10 +37,14 @@ from:
   * The UID sits bottom-right and is on screen in nearly every context
     (249 frames), which makes it a good game fingerprint but useless as a
     system-screen marker.
-  * No phone UI: no group-chat panel. Readable articles (the
-    "Investigative Report" panels) ARE a reading screen and are read
-    incrementally the way Star Rail's Quick Read books are, but their
-    layout is entirely their own — see READABLE_* below.
+  * Since 6.x Genshin DOES have a phone-style chat panel (the Eye of
+    Graeae's "Messages" device) — a different layout from Star Rail's
+    (topic sidebar on the left, sender bubbles left / player bubbles
+    right), hooked into the same incremental chat reader. See CHAT_*
+    below. Readable articles (the "Investigative Report" panels) ARE a
+    reading screen and are read incrementally the way Star Rail's Quick
+    Read books are, but their layout is entirely their own — see
+    READABLE_* below.
 """
 import re
 
@@ -57,7 +61,8 @@ class Genshin(Profile):
     # here is calibrated, choices included (CHOICES below carries its own
     # measurement history); "lore" is Star Rail's card, which Genshin
     # doesn't draw.
-    SCREENS = frozenset({"dialogue", "narration", "loading", "quickread"})
+    SCREENS = frozenset({"dialogue", "narration", "loading", "quickread",
+                         "chat"})
 
     # Box chrome that is never speech. 'Confirm' and 'Auto' both sit inside
     # the dialogue band's reach; without this they can join a row.
@@ -591,6 +596,119 @@ class Genshin(Profile):
                                        / self.LINE_H), b["x"]))
         text = " ".join(b["text"] for b in rows)
         return (plate["text"], text) if len(text) >= 12 else None
+
+    # --- Chat panel (Snezhnaya 6.x "Messages" device) -------------------
+    # A phone-style messaging UI: topic sidebar on the left (x 0.155-0.31),
+    # conversation on the right. Sender bubbles hang left with a small
+    # sender label above each ("Unknown Sender"), the player's replies hang
+    # right with the player's name above them ("Ebby"). Left untreated the
+    # sidebar topics fused into the messages and were skipped — or worse:
+    # the 2026-08-23 17:56 session spoke one such fusion and auto-cast
+    # "completely lost it." and "them to you later." as SPEAKERS (shots
+    # #19-#29, the calibration frames for every number here).
+    #
+    # The screen marker is the device header top-left ("Messages from the
+    # Eye of Graeae", cx=0.227 cy=0.941-0.943 across all shots) — required,
+    # so ordinary menus that merely have a left column can't read as chat.
+    _CHAT_MARKER = re.compile(r"^Messages\b", re.I)
+    CHAT_MARKER_REGION = {"x": (0.10, 0.40), "y": (0.89, 0.97)}
+    # Conversation title above the thread ("Unknown Signal", cx 0.610-0.612
+    # cy 0.874-0.876). The x floor keeps out the sidebar's copy of the same
+    # text (the selected topic, cx=0.212); the y floor keeps out the
+    # highest sender label measured (cy=0.840, shot #29).
+    CHAT_HEADER = {"x": (0.50, 0.80), "y": (0.845, 0.91)}
+    # The message column, sidebar excluded (its widest text reaches
+    # cx=0.235). Ceiling sits between the highest message row (cy=0.843,
+    # shot #23) and the panel title (0.875); the floor clears the Return
+    # hint (cy=0.076) and the UID.
+    CHAT_BODY = {"x": (0.40, 0.85), "y": (0.10, 0.855)}
+    # Sender labels vs message rows, by LEFT edge — the same 'only just'
+    # separation Star Rail's panel has: labels land at x 0.4125-0.4177,
+    # message rows at 0.4255-0.4333. Midpoint of the clear gap; re-measure
+    # from shots/<id>.json before changing it.
+    CHAT_SENDER_MAX_X = 0.4216
+    # The player's bubbles hang right: their name label at x=0.782, replies
+    # right-aligned around x=0.72. Everything left of this is the NPC
+    # column (widest NPC row ends at x=0.4333 + its width, but its LEFT
+    # edge never passes 0.434). A maximum-width player reply would wrap
+    # back to x~=0.43 and misread as an NPC row — not seen in practice;
+    # replies here are the short choice texts the player clicked.
+    CHAT_PLAYER_MIN_X = 0.55
+    # Defer the bottom message while its deepest row is still rising from
+    # under the panel edge: settled bottom rows measure cy 0.170-0.172,
+    # never lower, so anything under this is mid-scroll and will be read
+    # whole a frame later. The Return hint (drawn once the conversation is
+    # over) lifts the deferral the way Star Rail's "Conversation Over"
+    # does: nothing can still be scrolling in.
+    CHAT_CLIP_Y = 0.155
+
+    def classify_chat(self, blocks):
+        """[(sender, text), …] for the Messages chat panel, or None.
+
+        Same contract as Star Rail's: complete visible messages top-down,
+        the bottom one dropped while it hugs the clip edge. live.py owns
+        settling, dedupe, scrolled-tail suppression and per-sender voices.
+
+        Sender labels keep MIN_CONF even though the plate slot takes 0.3:
+        a garbled label read ("Unl nowwnS1", conf 0.56, shot #23) accepted
+        here becomes a garbage SPEAKER and is auto-cast; dropped, the
+        messages under it inherit the previous NPC sender, which in every
+        observed frame is the same one the garbled label was."""
+        if "chat" not in self.SCREENS:
+            return None
+        conf = self.confident(blocks)
+        if not any(self._CHAT_MARKER.match(b["text"].strip())
+                   and in_region(b, self.CHAT_MARKER_REGION) for b in conf):
+            return None
+        hdr = [b for b in conf if in_region(b, self.CHAT_HEADER)]
+        hdr.sort(key=lambda b: -(b["y"] + b["h"] / 2))
+        header_name = hdr[0]["text"].strip() if hdr else None
+        ended = any(self._is_return_hint(b["text"])
+                    and in_region(b, self.HINT_STRIP) for b in conf)
+        body = [b for b in conf if in_region(b, self.CHAT_BODY)]
+        body.sort(key=lambda b: -(b["y"] + b["h"] / 2))
+        # `sender` follows the bubble being built; `npc_sender` remembers
+        # the last NPC label so NPC rows that follow a player bubble with
+        # no label of their own (the label was garbled away) don't read in
+        # the player's voice.
+        msgs, buf, last_y = [], [], 1.0
+        sender = npc_sender = None
+        zone = "npc"
+
+        def flush():
+            if buf:
+                msgs.append((sender or header_name, " ".join(buf), last_y))
+                buf.clear()
+
+        for b in body:
+            cy = b["y"] + b["h"] / 2
+            if b["x"] < self.CHAT_SENDER_MAX_X:      # NPC sender label
+                flush()
+                sender = npc_sender = b["text"].strip()
+                zone = "npc"
+            elif b["x"] >= self.CHAT_PLAYER_MIN_X:   # player bubble column
+                # every player bubble carries the name label as its top row
+                # (measured at conf 0.999 on every shot — white on the
+                # avatar bubble, unlike the small grey NPC labels)
+                if zone != "player" or (buf and last_y - cy > 2.2 * b["h"]):
+                    flush()
+                    sender = b["text"].strip()
+                    zone = "player"
+                else:
+                    buf.append(b["text"])
+            else:                                     # NPC message row
+                if zone == "player":
+                    flush()
+                    sender = npc_sender
+                    zone = "npc"
+                elif buf and last_y - cy > 2.2 * b["h"]:
+                    flush()
+                buf.append(b["text"])
+            last_y = cy
+        flush()
+        if msgs and msgs[-1][2] < self.CHAT_CLIP_Y and not ended:
+            msgs = msgs[:-1]
+        return [(s, t) for s, t, _ in msgs]
 
     def is_plate_subtitle(self, block, plate):
         # boxed layout only — see SUBTITLE_PLATE_MIN_CY
