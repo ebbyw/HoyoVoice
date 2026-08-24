@@ -119,6 +119,25 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Added
 
+- **Genshin's new chat panel (the 6.x "Messages" device) is read as a
+  conversation.** The phone-style UI the Eye of Graeae questline opens —
+  topic sidebar on the left, sender bubbles left, the player's replies
+  hanging right — matched no screen the profile knew, so the sidebar
+  topics fused into the messages: most fusions were skipped as unknown
+  speakers, one was spoken aloud, and "completely lost it." and "them to
+  you later." were auto-cast as characters (session 2026-08-23 17:56,
+  shots #19-#29 — the calibration frames for every number in the new
+  CHAT_* block). The panel now hooks into the same incremental chat
+  reader as Star Rail's message screens: identified by the "Messages
+  from…" device header, each bubble read in its sender's (auto-)cast
+  voice, the player's own replies in theirs, the bottom message deferred
+  while it is still sliding in, and the Return hint lifting that deferral
+  the way "Conversation Over" does. The sidebar is excluded wholesale;
+  sender labels that OCR garbles below the confidence floor
+  ("Unl nowwnS1") are dropped rather than cast, and the messages under
+  them inherit the previous sender. Scrolled tails of already-read
+  messages fall to live.py's existing containment suppression.
+
 - **The auto-cast voice pools now claim from nearly the whole catalog:
   27 female and 21 male voices, up from 11 each.** Long sessions were
   exhausting the pools and reusing voices while ~25 packaged voices sat
