@@ -119,6 +119,20 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Added
 
+- **The default voice slots are visible and changeable in the dashboard.**
+  The narrator (narration, lore cards, loading tips, every line with no
+  speaker) and the female/male fallbacks that seed auto-casting lived
+  only in `voices.json`'s `defaults` block — the one casting decision the
+  dashboard couldn't see or change, and the reason a narrator voice swap
+  meant hand-editing a gitignored file. The three slots are now pinned
+  above the cast list with the same voice dropdowns as characters (no
+  mute, no delete — a default can't be deleted, only re-cast). Changing
+  the narrator re-reads its last line as an audition, the same way
+  re-casting a character does; the female/male seeds have no lines of
+  their own, so they speak the smoke-test line instead. Validated on both
+  ends because a bad id in `defaults` doesn't fail loudly — it silences
+  every line that falls back to that slot.
+
 - **Genshin's new chat panel (the 6.x "Messages" device) is read as a
   conversation.** The phone-style UI the Eye of Graeae questline opens —
   topic sidebar on the left, sender bubbles left, the player's replies

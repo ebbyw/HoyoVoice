@@ -2162,6 +2162,30 @@ def handle_commands(speech, recent_lines):
                                VOICES["characters"][char].get("speed", 1.0))
                     add_event("re-read", "spoken", char, e["text"], voice)
                     break
+        elif cmd[0] == "setdefault":
+            # narrator / female / male slots, from the dashboard's pinned
+            # default rows. The webui validated slot and voice; keep the
+            # guard anyway — a bad id in `defaults` doesn't fail loudly, it
+            # silences every line that falls back to the slot.
+            _, slot, voice = cmd
+            if (slot in VOICES.get("defaults", {})
+                    and voice in set(VOICE_CATALOG)
+                    | set(VOICES.get("custom_voices", {}))):
+                VOICES["defaults"][slot] = voice
+                save_voices()
+                print(f"[cast] default {slot} → {voice}", flush=True)
+                # audition like a re-cast character: the narrator re-reads
+                # its last line so the voice is heard in context; the
+                # female/male seeds have no lines of their own, so they
+                # speak the smoke line
+                last = next((e for e in reversed(events)
+                             if not e["speaker"] and e["can_replay"]),
+                            None) if slot == "narrator" else None
+                if last:
+                    speech.say(last["text"], voice)
+                    add_event("re-read", "spoken", None, last["text"], voice)
+                else:
+                    speech.say(SMOKE_LINE, voice)
         elif cmd[0] == "replay":
             e = next((x for x in events if x["id"] == cmd[1]), None)
             if e and e["can_replay"]:
