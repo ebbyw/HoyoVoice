@@ -511,8 +511,16 @@ class Genshin(Profile):
         # A choice prompt only exists alongside a speaker. The teleport map
         # lists its waypoints ("Sea of Bygone Eras", "Temple of Space"…) in
         # the same column at the same left edge, and reads as a three-option
-        # prompt otherwise; it has no nameplate.
-        if state["choices"] and not state["speaker"]:
+        # prompt otherwise; it has no nameplate. A comms message is the one
+        # frame with a speaker this rule can't see: its plate is
+        # left-anchored, outside find_plate's centered band, so the reply
+        # bubble floating beside the message (shots #1340-#1398, 2026-08-23)
+        # was cleared here every frame and logged "ignored — no speaker" —
+        # while the sender was plainly on screen. classify_comms IS the
+        # speaker check for that layout, so it keeps the prompt alive; the
+        # map still clears, having no plate of either shape.
+        if state["choices"] and not state["speaker"] \
+                and not self.classify_comms(blocks):
             state["choices"] = []
         return state
 
