@@ -9,6 +9,25 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **Star Rail menus stop reading their labels as choice prompts.** A
+  Currency Wars session (2026-08-24, Windows) had Trailblazer speaking
+  the nav's "Data Bank" and "Back", a combat effect name ("Enervation"),
+  and the team-setup tooltip ("Increases DMG dealt by all allies…" —
+  shot #132, wrapped rows at left edge 0.738-0.757, dead inside the
+  choice band), with the same session's earlier menus reading "Claim …
+  Claim" and "Rewards Preview". The HSR choice band was never calibrated
+  against a real prompt — it still carried the base-profile default, and
+  unlike Genshin it had no rule tying a prompt to a speaker. Sweeping
+  rec_20260726_121902 at 1 fps supplied the calibration: every genuine
+  prompt keeps the speaker's nameplate on the dialogue box under the
+  bubbles (frames 111, 482-490, 547-549), while the one plateless
+  "prompt" was a battle-prep enemy-team title (frames 268-272). The
+  profile now drops a plateless choice list, same rule as Genshin; a
+  prompt it refuses still leaves a "choice prompt (ignored — no
+  speaker)" row in the log. A 906-frame before/after sweep (that
+  corpus, the saved shots, and the reported session's) moved only
+  plateless hsr.choices — every real prompt classified unchanged.
+
 - **Left-anchored dialogue keeps its speaker instead of falling to the
   narrator.** Snezhnaya 6.x draws some conversations as ordinary boxed
   dialogue — Auto/Confirm chrome and all — but left-aligned: the
