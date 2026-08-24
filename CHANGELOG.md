@@ -24,8 +24,14 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   inside the CHOICES region — the bubble sits dead inside it at cx=0.757,
   which is why every one of those frames also logged it as the choice
   prompt it is — and the board defense is untouched, because label
-  columns sit left of the choice column. The reply option itself is still
-  not spoken; only the message is.
+  columns sit left of the choice column. The reply option is read too:
+  the no-speaker rule that clears plateless choice prompts (the teleport
+  map's defense) couldn't see the comms sender — its left-anchored plate
+  is outside find_plate's centered band — so the bubble was cleared and
+  logged "ignored — no speaker" on every frame the sender was plainly on
+  screen. On a frame classify_comms recognizes, the prompt now survives
+  and is read through the ordinary choice path, after the message it
+  floats beside; the map still clears, having no plate of either shape.
 
 - **A run of "haha" past two pairs no longer flattens into "HA-hah-huh",
   and ALL-CAPS "HAHAHA" no longer spells itself out letter by letter.**

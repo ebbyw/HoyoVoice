@@ -123,6 +123,21 @@ CASES = [
 ]
 
 
+# classify() clears a choice prompt that has no speaker beside it (the
+# teleport map reads as options otherwise) — but the comms plate is
+# left-anchored, invisible to find_plate, so the reply bubble on a comms
+# frame must survive the clearing on classify_comms's say-so. The map
+# case is the same frame minus the sender and its message: options alone,
+# no plate of either shape.
+CLASSIFY_CASES = [
+    ("reply bubble survives classify", REPLY_FRAME,
+     ['They\'ve been carrying out this "ritual" again and again.']),
+    ("plateless option column still cleared",
+     [b for b in REPLY_FRAME if b["text"].startswith(("They", "\"rit"))
+      or "UID" in b["text"]], []),
+]
+
+
 def main():
     bad = 0
     for label, frame, want in CASES:
@@ -131,7 +146,13 @@ def main():
         if got != want:
             print(f"FAIL {label}: want {want!r}, got {got!r}")
             bad += 1
-    print(f"{len(CASES) - bad}/{len(CASES)} ok")
+    for label, frame, want in CLASSIFY_CASES:
+        got = GENSHIN.classify(frame)["choices"]
+        if got != want:
+            print(f"FAIL {label}: want {want!r}, got {got!r}")
+            bad += 1
+    n = len(CASES) + len(CLASSIFY_CASES)
+    print(f"{n - bad}/{n} ok")
     return 1 if bad else 0
 
 
