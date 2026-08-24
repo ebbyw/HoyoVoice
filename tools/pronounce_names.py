@@ -1126,6 +1126,15 @@ TERMS = {
     # choice, A/B'd against the compound and kept because the difference is
     # audible. Keep it.
     "Wishpower": "Wish power",
+    # ˈAʧvˈɜɹʤɪlmˌɪɹ — the initial "Hv" cluster is unreadable and spelled
+    # out as letters ("AITCH-v-"), same trap the header records for
+    # shw/chw/hw/lw; and "ge" is soft on both engines (the "Gepard" fault
+    # again), so the middle reads "-jil-" not "-ghel-". Dropping the silent
+    # H and hardening the g with "gh" (the "ghe" rule the header spells
+    # out) gives "Ver-ghel-meer", vˈɜɹɡˈɛlmˈɪɹ on both — "VUR-ghel-meer",
+    # which also happens to match the standard English approximation of
+    # the Old Norse name (Wiktionary: /ˈvɜːrɡɛlmɪər/).
+    "Hvergelmir": "Ver-ghel-meer",
 }
 
 # Entries this file used to ship and has withdrawn. `--write` only ever
