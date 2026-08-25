@@ -1135,6 +1135,10 @@ TERMS = {
     # which also happens to match the standard English approximation of
     # the Old Norse name (Wiktionary: /ˈvɜːrɡɛlmɪər/).
     "Hvergelmir": "Ver-ghel-meer",
+    # Snezhnaya NPC, Russian "beast" (Зверь, IPA zʋéːr). Both engines can't pronounce the zv onset and insert a schwa: zˈivˈɜɹ, "zee-VUR", three syllables where the word is one. "Zur" is zˈɜɹ on both, restoring the one syllable — the schwa-r vowel is not the Russian é, but this is the closest match that works in English phonetics.
+    "Zver": "Zur",
+    # Snezhnaya NPC, Russian folklore immortal sorcerer. Kokoro reads "sch" as /ʃ/ and stresses the first syllable: kˈɑʃA, "KAH-shay". "Ko-chay" splits into unstressed ko- and stressed -chay, lands the o sound, and replaces sch with ch (ʧ): kˈOʧˈA, "KOH-chay", matching the target stress and consonant.
+    "Koschei": "Ko-chay",
 }
 
 # Entries this file used to ship and has withdrawn. `--write` only ever
