@@ -93,6 +93,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 | Quick Read book screens (Star Rail) | Read incrementally as you scroll; Back stops mid-sentence |
 | Readable articles (Genshin — "Investigative Report…") | Title then body by the narrator, incrementally as you scroll; Return stops mid-sentence |
 | Message / group-chat panels | Each message in its sender's cast voice, incrementally as you scroll; system notices ("… started sharing location") read by the narrator |
+| Phone Messages app (Star Rail — the regular character chats) | Each message in its sender's cast voice as it arrives, your own replies in yours; the conversation list, the delivery notices and the unsent reply buttons are all silent |
 | Info screens (Participant Details…) | Read top-to-bottom via the same reader |
 | Floating host bubbles (portrait, no nameplate) | Spoken as `settings.overlay_speaker` |
 | Comms messages (Genshin — left-anchored nameplate over the HUD, e.g. "Eye of Graeae") | Spoken in the sender's cast voice; the anchored-plate geometry stands in for story chrome |

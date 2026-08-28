@@ -7,6 +7,46 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ## [Unreleased]
 
+### Added
+
+- **Star Rail's phone Messages app is read — the regular character
+  chats.** It had no screen of its own and fell through to the dialogue
+  classifier, which in one minute of the 2026-08-28 14:14 session
+  (rec_20260828_141426) spoke the thread header as a line in the
+  player's voice ("Rin iTahsaka", 14:15:01), auto-cast a
+  conversation-list preview as a speaker ("This is way too cute"),
+  auto-cast a delivery notice as another ("Message" → zm_yunxi, which
+  then said Rin's closing line), and read the player's own sent bubbles
+  back to them as Trailblazer choice prompts, since a right-hanging
+  bubble lands squarely in the choice band. Nine of Rin Tohsaka's ten
+  messages were never read at all.
+
+  It is the same incremental reader the in-story "Answer" panel uses, so
+  settling, dedupe and per-sender voices come for free; only the layout
+  is new, and Star Rail now has two chat panels behind one
+  `classify_chat`. Rows are sorted by what they are ALIGNED to rather
+  than by which side of a threshold they fall on — the pane has four
+  alignments (sender label 0.367, incoming bubble 0.379, player bubble
+  right-aligned 0.867, player name label right-aligned 0.882) and a
+  row's own width is irrelevant to all of them. A threshold was tried
+  first and got both edges wrong on the same recording: the player's
+  longest reply starts at x=0.5945, left of any workable player-column
+  floor, and the longest delivery notice starts at x=0.3939, right of
+  the incoming rows but inside any band wide enough to hold them safely.
+  Anything aligned to none of the four is not speech — the delivery
+  notices are UI status, and the reply buttons across the bottom are
+  options that have not been sent yet, each of which is read once it
+  has, as its own bubble.
+
+  No clip threshold, unlike the Answer panel: a bubble here is faded in
+  whole rather than clipped by the pane edge, so across shots #2-#16
+  every thread row read identically while it was still rising, and a
+  threshold would only have cost the last message of a quiet thread —
+  the one with nothing arriving after it to push it up out of the way.
+  Replaying the same 61 seconds now reads all ten messages, in order,
+  each in its own voice, and speaks none of the list, the notices or the
+  buttons. Pinned by `tools/test_hsr_messages.py`.
+
 ### Fixed
 
 - **Star Rail menus stop reading their labels as choice prompts.** A
