@@ -1,5 +1,5 @@
-"""Pins the Star Rail rule that a choice prompt only exists alongside a
-speaker.
+"""Pins the Star Rail rule for when a choice prompt is real: a speaker
+beside it, or the story chrome above it.
 
 Menus kept landing one or two blocks in the choice band and reading them
 aloud as Trailblazer: the Currency Wars team-setup tooltip (shot #132,
@@ -7,9 +7,14 @@ aloud as Trailblazer: the Currency Wars team-setup tooltip (shot #132,
 effect names, nav labels ("Data Bank", "Back"), and the Battle
 Preparations enemy-team title (frames 268-272 of rec_20260726_121902).
 Every genuine prompt in the same corpus kept its nameplate on the box
-below the bubbles (frames 111, 482-490, 547-549), so the plate is the
-discriminator. Geometry here is measured off those frames; the words are
-invented. Run directly or under pytest:
+below the bubbles (frames 111, 482-490, 547-549), so the plate was the
+first discriminator \u2014 until a cutscene handed the player a lone option
+with no dialogue box under it to plate at all (shot #155, 2026-08-30),
+which the plate rule dropped. '\u2715 Continue' bottom-right separates the
+two: story screens draw it, menus draw Confirm / Back / Start Challenge.
+Geometry here is measured off those frames; the words are invented,
+except shot #155's, which is the reported line. Run directly or under
+pytest:
 
     python tools/test_hsr_choice_speaker.py
 """
@@ -62,12 +67,23 @@ BOARD = [
     block("Back", 0.938, 0.016, w=0.031, h=0.018),
 ]
 
+# The reported cutscene, verbatim from shot #155 (2026-08-30 12:23,
+# Windows): one option bubble, the story chrome bottom-right, the UID
+# strip bottom-left, and nothing else on screen \u2014 no dialogue box, so no
+# plate to find.
+CUTSCENE = [
+    block("I will not back down.", 0.710, 0.285, w=0.141, h=0.028, conf=0.974),
+    block("UID:603150536", 0.020, 0.015, w=0.065, h=0.020),
+    block("Continue", 0.927, 0.010, w=0.051, h=0.028),
+]
+
 # (name, frame, expected speaker, expected choices)
 FRAMES = [
     ("prompt with plate", PROMPT, "Cartwright",
      ["Any sign of the missing cart?", "Maybe it rolled away."]),
     ("menu tooltip", TOOLTIP, None, []),
     ("battle-prep board", BOARD, None, []),
+    ("plateless cutscene prompt", CUTSCENE, None, ["I will not back down."]),
 ]
 
 

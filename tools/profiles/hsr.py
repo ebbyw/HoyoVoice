@@ -201,20 +201,29 @@ class HSR(Profile):
     # ------------------------------------------------------------------
     def classify(self, blocks, _no_plate=False):
         state = super().classify(blocks, _no_plate)
-        # A choice prompt only exists alongside a speaker — same rule as
-        # Genshin, arrived at from the other direction. This game's menus
-        # keep landing 1-2 blocks in the choice band and reading them
-        # aloud as Trailblazer: the Currency Wars team-setup tooltip
-        # ("Increases DMG dealt by all allies…", shot #132 2026-08-24,
-        # left edges 0.738-0.757), combat-screen effect names, nav labels
-        # ("Data Bank", "Back"), and the Battle Preparations enemy-team
-        # title ("Mysterious Familiars", x=0.712 — frames 268-272 of
-        # rec_20260726_121902 at 1 fps). Against the same corpus every
-        # genuine prompt kept its plate (frames 111, 482-490, 547-549:
-        # the box below the bubbles still shows the speaker), so the
-        # plate is the discriminator, and a prompt this drops leaves a
-        # "choice prompt (ignored — no speaker)" row in the log.
-        if state["choices"] and not state["speaker"]:
+        # A choice prompt needs either a speaker beside it or the game's
+        # story chrome above it. This game's menus keep landing 1-2 blocks
+        # in the choice band and reading them aloud as Trailblazer: the
+        # Currency Wars team-setup tooltip ("Increases DMG dealt by all
+        # allies…", shot #132 2026-08-24, left edges 0.738-0.757),
+        # combat-screen effect names, nav labels ("Data Bank", "Back"),
+        # and the Battle Preparations enemy-team title ("Mysterious
+        # Familiars", x=0.712 — frames 268-272 of rec_20260726_121902 at
+        # 1 fps). Every genuine prompt in that corpus kept its plate
+        # (frames 111, 482-490, 547-549: the box below the bubbles still
+        # shows the speaker), so the plate alone was made the test.
+        #
+        # It is necessary but not sufficient. A cutscene hands the player
+        # a lone option with no dialogue box under it at all, and nothing
+        # to plate: "I will not back down." (shot #155, 2026-08-30 12:23,
+        # x=0.710) was dropped with the menus and logged "choice prompt
+        # (ignored — no speaker)". The '✕ Continue' hint bottom-right is
+        # what the two cases disagree on — it marks a story screen, while
+        # the menus draw Confirm / Back / Start Challenge — and across the
+        # 330 saved frames on hand a plateless choice list and that hint
+        # coincided on exactly one: this cutscene.
+        if (state["choices"] and not state["speaker"]
+                and not self.trusts_dialogue(blocks)):
             state["choices"] = []
         return state
 
