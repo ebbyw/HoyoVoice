@@ -62,11 +62,26 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   prompt keeps the speaker's nameplate on the dialogue box under the
   bubbles (frames 111, 482-490, 547-549), while the one plateless
   "prompt" was a battle-prep enemy-team title (frames 268-272). The
-  profile now drops a plateless choice list, same rule as Genshin; a
-  prompt it refuses still leaves a "choice prompt (ignored — no
-  speaker)" row in the log. A 906-frame before/after sweep (that
-  corpus, the saved shots, and the reported session's) moved only
-  plateless hsr.choices — every real prompt classified unchanged.
+  profile drops a plateless choice list, same rule as Genshin; a prompt
+  it refuses still leaves a "choice prompt (ignored — no speaker)" row
+  in the log. A 906-frame before/after sweep (that corpus, the saved
+  shots, and the reported session's) moved only plateless hsr.choices —
+  every real prompt classified unchanged.
+
+  The plate turned out to be necessary but not sufficient. A cutscene
+  hands the player a lone option with no dialogue box on screen at all,
+  and so nothing to plate: "I will not back down." (2026-08-30 12:23,
+  Windows — shot #155, bubble at x=0.710) was refused along with the
+  menus and read as nothing. What the two cases disagree on is the
+  story chrome: a genuine prompt sits under the "✕ Continue" hint
+  bottom-right, and the menus draw Confirm, Back or Start Challenge
+  instead — the same hint the profile already trusts to tell dialogue
+  from menus. A plateless choice list is now kept when that hint is on
+  screen. Across the 330 saved frames on hand the two coincide on
+  exactly one, this cutscene: a re-sweep of all 660 classifications
+  (both profiles) moved that frame and nothing else, and replaying the
+  reported clip reads the line in the Trailblazer's voice where it
+  previously logged "ignored — no speaker" and said nothing.
 
 - **Left-anchored dialogue keeps its speaker instead of falling to the
   narrator.** Snezhnaya 6.x draws some conversations as ordinary boxed
