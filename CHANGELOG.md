@@ -49,6 +49,42 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **The dashboard stops rebuilding its log table on every poll.** The
+  once-a-second refresh rewrote `#log tbody` whether or not anything had
+  happened, and every row that has a screenshot carries a full-size
+  hover-preview `<img>`: a session sitting at the 200-event cap threw
+  away and re-created ~200 image elements a second, each of which the
+  browser then has to re-resolve. It was reported from Windows
+  (2026-08-30) as a page that freezes and loads badly, in a
+  Firefox-based browser. The table is now rebuilt only when the events
+  payload differs from the one already on screen — the same fingerprint
+  trick the casting table has always used, over a payload this tick
+  already parsed. Checked in a browser: marked rows survive several
+  polls untouched, and a line added on the server still appears within
+  one tick.
+
+- **⤓ Download log cannot answer with a 500, and no longer reads the
+  whole console capture in order to serve it.** Reported not working on
+  Windows (2026-08-30); the cause was not reproduced there, so all
+  three ways it could fail are closed. The route iterated the live
+  decision log and the live casting table while the capture thread was
+  appending to both — under synthetic churn that raised "dictionary
+  changed size during iteration" on 8 downloads out of 8, and a 500 on
+  this route is a dead end: an error page, no file, and the traceback
+  explaining why written to the console log the user was trying to
+  download. It now snapshots those structures before walking them, and
+  anything that still goes wrong is written INTO the file, which is
+  served anyway. The console capture is the launcher's record of
+  live.py's stdout and grows for as long as the session runs; it was
+  read whole to keep the last 4000 lines of it, on the same thread that
+  answers the dashboard poll, and silently truncated. It is now tailed
+  (8 MB) and says what it dropped. The button itself is a plain download
+  link rather than a scripted top-level navigation, which is what a
+  Firefox-based browser handles most predictably, and the server prints
+  a line when it serves one — so "I clicked it and nothing happened" can
+  now be told apart from a file the browser dropped. Pinned by
+  `tools/test_webui_log.py`.
+
 - **Star Rail menus stop reading their labels as choice prompts.** A
   Currency Wars session (2026-08-24, Windows) had Trailblazer speaking
   the nav's "Data Bank" and "Back", a combat effect name ("Enervation"),

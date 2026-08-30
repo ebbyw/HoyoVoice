@@ -13,6 +13,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -82,6 +83,12 @@ DASHBOARD_PORT = int(os.environ.get("HOYOVOICE_PORT", "8470"))
 LOG_NOISE = re.compile(
     "pixel format|Supported|uyvy|yuyv|nv12|0rgb|bgr0|in#0|Fetching|vad: chunks")
 LOG_TAIL_LINES = 4000
+# ...and read at most this many bytes off the END of it. A session that
+# runs all evening writes a console log of unbounded size, and the
+# download read the whole thing into memory before filtering it down to
+# the last 4000 lines — on the serving thread, with the dashboard polling
+# it every second.
+LOG_TAIL_BYTES = 8 << 20
 
 VOICE_CATALOG = [
     "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore",
@@ -114,6 +121,8 @@ table{border-collapse:collapse;width:100%}td,th{padding:4px 8px;text-align:left;
 .act-choice{color:#8ab4f8}
 select,input,button{background:#1e2027;color:#e8e8ec;border:1px solid #33353d;border-radius:6px;padding:4px 8px}
 button{cursor:pointer}button:hover{border-color:#7ec97e}
+a.btn{display:inline-block;background:#1e2027;color:#e8e8ec;border:1px solid #33353d;border-radius:6px;padding:4px 8px;font-size:13px;text-decoration:none}
+a.btn:hover{border-color:#7ec97e}
 .pill{display:inline-block;background:#1e2027;border-radius:10px;padding:2px 10px;margin:2px 6px 2px 0;font-size:12px}
 #log.hidden{display:none}.muted{color:#778}.voice{color:#8ab4f8}
 .live{color:#7ec97e}.paused{color:#e0605e}
@@ -182,12 +191,12 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 
 <h2>Log <button id="toggleLog" onclick="toggleLog()">Hide</button>
 <button onclick="post('/api/clearlog',{})" title="Empty the log and forget the recent-lines window, so replayed content is read again instead of being skipped as a repeat">Clear</button>
-<button onclick="window.location='/log.txt'" title="Download this session's decisions + console log as a text file">⤓ Download log</button></h2>
+<a class="btn" href="/log.txt" download title="Download this session's decisions + console log as a text file">⤓ Download log</a></h2>
 <table id="log"><thead><tr><th>time</th><th>speaker</th><th>line</th><th>voice</th><th>action</th><th></th></tr></thead><tbody></tbody></table>
 
 <script>
 let hidden=false, observing=true, recOn=false, lastCastFp='';
-let lastVoicesFp='';
+let lastVoicesFp='', lastLogFp='';
 function toggleRecord(){post('/api/record',{on:!recOn});}
 function setRecDir(){post('/api/recdir',{dir:document.getElementById('recDir').value});}
 function setGame(){post('/api/game',{game:document.getElementById('gameSel').value});}
@@ -321,11 +330,19 @@ async function tick(){
       if(!el.options.length||voicesFp!==lastVoicesFp) el.innerHTML=opts(el.value||'af_heart');
     }
     if(voicesFp!==lastVoicesFp){lastVoicesFp=voicesFp; lastCastFp='';}
-    // log refreshes every poll; held while a screenshot preview is open
-    // or while the user is selecting text to copy
+    // Rebuilt only when the log actually changed, and held while a
+    // screenshot preview is open or the user is selecting text to copy.
+    // The table was rebuilt on every poll, and each row that has a shot
+    // carries a full-size hover-preview <img>: a session at the 200-event
+    // cap threw away and re-created ~200 image elements a second, which
+    // Firefox-based browsers turn into a page that scrolls in lurches and
+    // a preview that reloads mid-gesture. The fingerprint is a string
+    // compare of a payload already parsed this tick.
     const sel=window.getSelection();
     const selInLog=sel&&!sel.isCollapsed&&document.getElementById('log').contains(sel.anchorNode);
-    if(!document.querySelector('#log .shot:hover')&&!selInLog){
+    const logFp=JSON.stringify(s.events);
+    if(logFp!==lastLogFp&&!document.querySelector('#log .shot:hover')&&!selInLog){
+      lastLogFp=logFp;
       document.querySelector('#log tbody').innerHTML=s.events.slice().reverse().map(e=>
       '<tr><td class="muted">'+e.t+'</td><td>'+esc(e.speaker||'—')+'</td><td>'+esc(e.text)+'</td>'+
       '<td class="voice">'+(e.voice||'')+(e.speed&&e.speed!==1?' ×'+e.speed:'')+'</td>'+
@@ -541,68 +558,114 @@ def start_webui(shared, port=DASHBOARD_PORT):
         """One downloadable file with everything needed to debug a session:
         environment, live analytics, casting, the decision log that the
         dashboard shows, and the filtered console log. Beats a screenshot —
-        the text is searchable and complete."""
-        m = shared["metrics_fn"]()
-        out = [
-            f"HoyoVoice {_build_id()} session log",
-            f"generated   {datetime.now().isoformat(timespec='seconds')}",
-            f"platform    {platform.platform()}  python {platform.python_version()}",
-            f"observing   {shared['observing']['on']}   recording "
-            f"{shared['recording']['on']}",
-            f"devices     video={shared['devices']['video']!r} "
-            f"audio={shared['devices']['audio']!r} "
-            f"output={shared['devices'].get('output') or 'system default'!r}",
-            f"game        {'auto' if shared['game'].auto else 'fixed'} — "
-            f"reading as {shared['game'].profile.label}",
-            "",
-            "ANALYTICS",
-            "  " + "   ".join(f"{k}={v}" for k, v in m.items()),
-            "",
-            "CASTING",
-        ]
-        always = shared["voices"].get("always_voiced", [])
-        for ch, c in shared["voices"]["characters"].items():
-            out.append(f"  {ch:28s} {c.get('voice',''):12s}"
-                       f"{'  [muted]' if ch in always else ''}"
-                       f"{'  (auto)' if c.get('auto') else ''}")
-        unknown = [u for u in sorted(shared["unknown"])
-                   if u not in shared["voices"]["characters"]]
-        if unknown:
-            out.append("  unassigned: " + ", ".join(unknown))
+        the text is searchable and complete.
 
-        out += ["", "DECISION LOG (oldest first)", ""]
-        for e in shared["events"]:
-            speed = f" x{e['speed']}" if e.get("speed") else ""
-            # the event id, shown only when a shot was actually saved: it
-            # names the files under captures/shots/ (<id>.jpg, <id>.json),
-            # which is what a bug report needs relayed — "which shot ids?"
-            # was previously unanswerable from the log alone
-            shot = f"  shot #{e['id']}" if e.get("shot") else ""
-            out.append(f"  {e['t']}  {(e['speaker'] or '—'):20.20s} "
-                       f"{e['action']:34.34s} {(e['voice'] or ''):10s}"
-                       f"{speed}{shot}")
-            out.append(f"            {e['text']}")
-            if e.get("spoken"):     # the line as the synthesizer heard it
-                out.append(f"            ↳ synth heard: {e['spoken']}")
-
-        out += ["", "CONSOLE LOG (noise filtered)", ""]
-        path = Path(shared.get("log_path", ""))
+        Nothing in here may raise. A 500 is a dead end on this route: the
+        browser is left on an error page, the file never arrives, and the
+        traceback explaining why went to the console log the user was
+        trying to download. Anything that goes wrong is written INTO the
+        file instead and the partial log is still served.
+        """
+        out = []
         try:
-            lines = [ln for ln in path.read_text(
-                         encoding="utf-8", errors="replace").splitlines()
-                     if not LOG_NOISE.search(ln)]
-            if len(lines) > LOG_TAIL_LINES:
-                out.append(f"  … {len(lines) - LOG_TAIL_LINES} earlier lines "
-                           "omitted …")
-                lines = lines[-LOG_TAIL_LINES:]
-            out += ["  " + ln for ln in lines]
-        except OSError as exc:
-            out.append(f"  (console log unavailable: {exc})")
+            # Snapshot first. Everything below is a Python-level loop over
+            # structures the capture thread mutates — the decision log
+            # grows a line at a time, casting gains a character the moment
+            # one is auto-cast — and iterating them live raises RuntimeError
+            # ("deque mutated during iteration") in the middle of the
+            # download. Each of these is one C-level call, so it cannot be
+            # interrupted the way the loops can.
+            events = list(shared["events"])
+            characters = dict(shared["voices"]["characters"])
+            always = list(shared["voices"].get("always_voiced", []))
+            unknown = sorted(set(shared["unknown"]))
+            m = shared["metrics_fn"]()
+            out += [
+                f"HoyoVoice {_build_id()} session log",
+                f"generated   {datetime.now().isoformat(timespec='seconds')}",
+                f"platform    {platform.platform()}  "
+                f"python {platform.python_version()}",
+                f"observing   {shared['observing']['on']}   recording "
+                f"{shared['recording']['on']}",
+                f"devices     video={shared['devices']['video']!r} "
+                f"audio={shared['devices']['audio']!r} "
+                f"output={shared['devices'].get('output') or 'system default'!r}",
+                f"game        {'auto' if shared['game'].auto else 'fixed'} — "
+                f"reading as {shared['game'].profile.label}",
+                "",
+                "ANALYTICS",
+                "  " + "   ".join(f"{k}={v}" for k, v in m.items()),
+                "",
+                "CASTING",
+            ]
+            for ch, c in characters.items():
+                out.append(f"  {ch:28s} {c.get('voice',''):12s}"
+                           f"{'  [muted]' if ch in always else ''}"
+                           f"{'  (auto)' if c.get('auto') else ''}")
+            unassigned = [u for u in unknown if u not in characters]
+            if unassigned:
+                out.append("  unassigned: " + ", ".join(unassigned))
+
+            out += ["", "DECISION LOG (oldest first)", ""]
+            for e in events:
+                speed = f" x{e['speed']}" if e.get("speed") else ""
+                # the event id, shown only when a shot was actually saved:
+                # it names the files under captures/shots/ (<id>.jpg,
+                # <id>.json), which is what a bug report needs relayed —
+                # "which shot ids?" was previously unanswerable from the
+                # log alone
+                shot = f"  shot #{e['id']}" if e.get("shot") else ""
+                out.append(f"  {e['t']}  {(e['speaker'] or '—'):20.20s} "
+                           f"{e['action']:34.34s} {(e['voice'] or ''):10s}"
+                           f"{speed}{shot}")
+                out.append(f"            {e['text']}")
+                if e.get("spoken"):   # the line as the synthesizer heard it
+                    out.append(f"            ↳ synth heard: {e['spoken']}")
+
+            out += ["", "CONSOLE LOG (noise filtered)", ""]
+            path = Path(shared.get("log_path", ""))
+            try:
+                # Tail, never the whole file: this is the launcher's
+                # capture of live.py's stdout and it grows for as long as
+                # the session runs. Reading it whole to keep the last 4000
+                # lines put the entire thing in memory on the serving
+                # thread, which is also the thread answering the
+                # dashboard's once-a-second poll.
+                with open(path, "rb") as fh:
+                    fh.seek(0, os.SEEK_END)
+                    size = fh.tell()
+                    fh.seek(max(0, size - LOG_TAIL_BYTES))
+                    raw = fh.read()
+                if size > LOG_TAIL_BYTES:
+                    raw = raw.split(b"\n", 1)[-1]     # drop the cut line
+                    out.append(f"  … first {size - LOG_TAIL_BYTES} bytes "
+                               "omitted …")
+                lines = [ln for ln in raw.decode("utf-8", "replace").splitlines()
+                         if not LOG_NOISE.search(ln)]
+                if len(lines) > LOG_TAIL_LINES:
+                    out.append(f"  … {len(lines) - LOG_TAIL_LINES} earlier "
+                               "lines omitted …")
+                    lines = lines[-LOG_TAIL_LINES:]
+                out += ["  " + ln for ln in lines]
+            except OSError as exc:
+                out.append(f"  (console log unavailable: {exc})")
+        except Exception:
+            # Straight into the file, and into the console log too: a
+            # download that half-works is still a bug report, and this is
+            # the one failure the user cannot read any other way.
+            note = ("!!! this log is INCOMPLETE — assembling it raised, "
+                    "traceback below")
+            out = [note, ""] + out + ["", note, "", traceback.format_exc()]
+            print("dashboard: /log.txt failed\n" + traceback.format_exc(),
+                  flush=True)
 
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         resp = Response("\n".join(out) + "\n", mimetype="text/plain")
         resp.headers["Content-Disposition"] = (
             f'attachment; filename="hoyovoice-{stamp}.log"')
+        # so "I clicked download and nothing happened" is answerable from
+        # the next log: this line says the server built and served one
+        print(f"dashboard: served log.txt ({len(out)} lines)", flush=True)
         return resp
 
     @app.get("/api/state")
