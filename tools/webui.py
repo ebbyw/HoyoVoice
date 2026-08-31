@@ -150,6 +150,10 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
     <div id="status" class="muted" style="font-size:16px;margin-bottom:10px"></div>
     <h2 style="margin-top:0">Analytics</h2><div id="metrics"></div>
     <h2>Casting <span class="muted">(muted = never speak for this character)</span></h2>
+    <div style="margin-bottom:6px">
+      <input id="castSearch" placeholder="search cast… (fuzzy: 'zhl' finds Zhongli)" size="28" autocomplete="off" oninput="filterCast()">
+      <span id="castCount" class="muted"></span>
+    </div>
     <div class="castwrap">
     <table id="casting"><thead><tr><th>character</th><th>voice</th><th>muted</th><th></th></tr></thead><tbody></tbody></table>
     </div>
@@ -241,6 +245,23 @@ function addChar(){const n=document.getElementById('newChar').value.trim();
   document.getElementById('newChar').value='';
   lastCastFp='';}
 function replay(id){post('/api/replay',{id:id});}
+// fuzzy match: substring anywhere, or query chars appearing in order
+// ("zhl" finds Zhongli). Case-insensitive.
+function fuzzy(q,s){
+  if(s.includes(q)) return true;
+  let i=0;
+  for(const c of s){if(c===q[i])i++;}
+  return i===q.length;}
+function filterCast(){
+  const q=document.getElementById('castSearch').value.trim().toLowerCase();
+  let shown=0,total=0;
+  for(const tr of document.querySelectorAll('#casting tbody tr')){
+    total++;
+    const hit=!q||fuzzy(q,decodeURIComponent(tr.dataset.ch||'').toLowerCase());
+    tr.style.display=hit?'':'none';
+    if(hit)shown++;}
+  document.getElementById('castCount').textContent=
+    q?(shown+' of '+total+(shown?'':' — no match')):'';}
 function esc(s){const d=document.createElement('div');d.textContent=s??'';return d.innerHTML;}
 document.addEventListener('change',e=>{
   const t=e.target;
@@ -297,7 +318,7 @@ async function tick(){
     const opts=v=>s.voices.map(x=>'<option value="'+x+'"'+(x===v?' selected':'')+'>'+vname(x)+'</option>').join('');
     const row=(ch,voice,assigned,auto)=>{
       const enc=encodeURIComponent(ch), muted=s.always_voiced.includes(ch);
-      return '<tr><td>'+esc(ch)+(assigned?(auto?' <span class="muted">(auto)</span>':''):' <span class="muted">(unassigned)</span>')+'</td>'+
+      return '<tr data-ch="'+enc+'"><td>'+esc(ch)+(assigned?(auto?' <span class="muted">(auto)</span>':''):' <span class="muted">(unassigned)</span>')+'</td>'+
         '<td><select data-role="cast" data-ch="'+enc+'">'+(assigned?'':'<option></option>')+opts(voice)+'</select></td>'+
         '<td><input type="checkbox" data-role="mute" data-ch="'+enc+'"'+(muted?' checked':'')+'></td>'+
         '<td><button data-role="del" data-ch="'+enc+'" title="delete">✕</button></td></tr>';};
@@ -308,7 +329,7 @@ async function tick(){
       female:'fallback voice for unnamed female speakers; seeds auto-casting',
       male:'fallback voice for unnamed male speakers; seeds auto-casting'};
     const defRow=(slot,voice)=>
-      '<tr><td title="'+slotTitle[slot]+'"><i>'+slot+'</i> <span class="muted">(default)</span></td>'+
+      '<tr data-ch="'+encodeURIComponent(slot)+'"><td title="'+slotTitle[slot]+'"><i>'+slot+'</i> <span class="muted">(default)</span></td>'+
       '<td><select data-role="default" data-slot="'+slot+'">'+opts(voice)+'</select></td>'+
       '<td></td><td></td></tr>';
     const castFp=JSON.stringify([s.characters,s.unknown,s.always_voiced,s.defaults]);
@@ -322,6 +343,7 @@ async function tick(){
       for(const ch of s.always_voiced)
         if(!(ch in s.characters)&&!s.unknown.includes(ch)) rows+=row(ch,'',false,false);
       document.querySelector('#casting tbody').innerHTML=rows;
+      filterCast();   // rebuild wipes row visibility — re-apply the search
     }
     const voicesFp=s.voices.join(',');
     for(const id of ['sayVoice','newVoice']){
