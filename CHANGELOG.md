@@ -44,6 +44,36 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   there is. Together: **1 wrong line instead of 23**, keeping 5 of the 7
   real repairs. The two given up cost one mispronounced word each.
 
+  Fourteen of those 23 had a second cause underneath, and it is not a
+  stale dump: the read was a mid-typewriter **partial**. Sentence
+  streaming speaks at the first finished sentence, so the matcher was
+  handed "We're a legitimate organization." while the game was still
+  typing "…Try us if you have the guts!" — 31 characters against that
+  line's 59, outside the ±35% length bound, so the read's own line was
+  never a candidate at all. Every one of the six checked was 1.6× to 4×
+  the read. No dump, however current, can repair those; only a neighbour
+  could ever win.
+
+  So each entry's opening sentence is now indexed as a form of that entry,
+  and a streamed partial repairs to its own first sentence and stops
+  there — nothing is spoken ahead of the typewriter, and streaming keeps
+  the latency it was added for. First sentence only, and only where
+  live.py's own streaming rule would produce one, which costs **1.25×**
+  the index entries on the 274 real dialogue lines this install has read
+  (indexing every sentence boundary rather than the first measured 1.96×,
+  and was not taken; the figure wants confirming against a full 315k dump,
+  which is a Windows-box job). `tools/test_stream_prefix.py` now pins
+  textmap's copy of the boundary rule against live.py's, since textmap is
+  imported by live.py and cannot import back: a head indexed but never
+  spoken is dead weight, and a head spoken but never indexed is the
+  unmatchable partial this exists to fix.
+
+  Widening the length bound instead was measured and rejected. Scored
+  whole-string, a half-typed read rates 0.53–0.65 against the line it came
+  from and **loses** to the wrong neighbour of its own length at
+  0.76–0.82. No threshold admits the right line without preferring the
+  wrong one; what had to change was what gets compared.
+
   `wordfreq` is a Windows-only dependency (it is where the dumps live,
   and installing it on macOS would switch on a run-on repair measured to
   be a no-op on Apple Vision output), so on macOS only the name half of

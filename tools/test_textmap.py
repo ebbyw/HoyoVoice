@@ -182,6 +182,43 @@ def main():
             print(f"ok    refused on the lost word {lost!r}, not on its "
                   f"{score:.2f} score")
 
+    # SENTENCE STREAMING hands snap() a PREFIX of the line the game wrote,
+    # which cannot match its own entry on length alone — the read here is
+    # 31 characters against its line's 59. Indexing the first sentence as a
+    # form of the entry is what puts it back in reach; without it the only
+    # candidate is the near-neighbour, and that is what used to be spoken.
+    streamed = TextMap(["We're a legitimate organization. Try us if you "
+                        "have the guts!",
+                        "We are a flat organization"])
+    got = streamed.snap("We're a legitmate organizatlon.")
+    if got != "We're a legitimate organization.":
+        print(f"FAIL  a streamed first sentence must repair to itself, "
+              f"got {got!r}")
+        bad += 1
+    else:
+        print("ok    a streamed first sentence repairs to its own line")
+
+    # ...and it must hand back only the sentence, never the rest of the
+    # line: the tail has not been drawn on screen yet, and speaking ahead
+    # of the typewriter would say something the player cannot see.
+    if got and len(got) > len("We're a legitimate organization."):
+        print(f"FAIL  spoke past the sentence boundary: {got!r}")
+        bad += 1
+    else:
+        print("ok    a first-sentence match stops at the sentence")
+
+    # A string that is one entry's opening sentence AND another entry's
+    # whole line is indexed as the whole line — that is the form a settled
+    # read looks for, and the head is only ever a fallback.
+    both = TextMap(["Hello, Lady Halvette. Do come in and warm yourself.",
+                    "Hello, Lady Halvette."])
+    if len(both) != 2:
+        print(f"FAIL  a head that duplicates a whole line was indexed "
+              f"twice ({len(both)} entries)")
+        bad += 1
+    else:
+        print("ok    a head duplicating a whole line is not indexed twice")
+
     # a map that isn't there, or is nonsense, must leave the app as it was
     for path in ("/nonexistent/textmap.json", os.devnull):
         if TextMap.load(path) is not None:

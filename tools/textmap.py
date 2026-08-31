@@ -200,6 +200,54 @@ def variants(text, nickname):
     return [" ".join(v.split()) for v in out if not _LEFTOVER.search(v)]
 
 
+# --- the first sentence of an entry, indexed as well as the whole thing --
+# Sentence streaming speaks a line as soon as one sentence inside it has
+# closed, so the text handed to snap() is often a PREFIX of the line the
+# game wrote. A prefix cannot match its own entry: "We're a legitimate
+# organization." is 31 characters against that line's 59, which is outside
+# the length bound below and so never even a candidate. Measured on the
+# logged snaps, that is not a corner case — 14 of the 23 wrong lines were
+# partials, and every one of them had its true line out of reach (1.6x to
+# 4.0x the read). No dump, however current, can repair those.
+#
+# Widening the length bound does not fix it. Scored whole-string, a read
+# that is half its line rates 0.53-0.65 against the line it came from and
+# LOSES to the wrong neighbour of its own length, which rates 0.76-0.82.
+# There is no threshold that admits the right line without preferring the
+# wrong one; what has to change is what gets compared. So the first
+# sentence is indexed as a form of its entry in its own right.
+#
+# These four mirror live.py's streaming rule so that only prefixes the app
+# can actually produce are indexed — tools/test_stream_prefix.py pins the
+# two against each other, because a drift here would index heads that are
+# never looked up and miss the ones that are.
+_SENT_END = re.compile(r'[.!?]["”’)]?(?=\s+["“‘(]?[A-Z0-9])')
+_ABBREV = {"mr", "mrs", "ms", "dr", "st", "sr", "jr", "vs", "etc", "no"}
+_ABBREV_RE = re.compile(r"([A-Za-z']+)[.!?]$")
+STREAM_HEAD_MIN = 12
+STREAM_TAIL_MIN = 3
+
+
+def stream_head(line):
+    """The first sentence of a line, if streaming would ever speak it alone.
+
+    The FIRST boundary rather than the longest: by the time a second
+    sentence has closed, the app has already spoken the first and the read
+    arrives through the extension path as the whole line, which is indexed
+    already. All 14 partials on file were first sentences.
+    """
+    for m in _SENT_END.finditer(line):
+        head = line[:m.end()].rstrip()
+        if len(line[m.end():].strip()) < STREAM_TAIL_MIN:
+            continue                    # nothing typed past the boundary
+        abbr = _ABBREV_RE.search(head)
+        if abbr and abbr.group(1).lower() in _ABBREV:
+            continue                    # "Mr." is not the end of a thought
+        if len(key(head)) >= STREAM_HEAD_MIN:
+            return head
+    return None
+
+
 def key(s):
     """Comparison form: lowercase, punctuation-free, single-spaced. OCR gets
     punctuation wrong constantly ("business!" for "business.") and that is
@@ -275,6 +323,13 @@ class TextMap:
         # line as far as the margin gate is concerned — see snap().
         lines = [(v, g) for g, line in enumerate(lines)
                  for v in variants(line, nickname)]
+        # First sentences AFTER the whole lines, never mixed in: `seen`
+        # keeps whichever form is indexed first, and a string that is both
+        # one entry's opening sentence and another entry's whole line has
+        # to be indexed as the whole line — that is the form a settled read
+        # will be looking for. Same group as its parent, so the margin gate
+        # reads the two as one entry rather than as rivals.
+        lines += [(h, g) for v, g in lines if (h := stream_head(v))]
         self.entries = []          # (key, original, group)
         # trigram → positions, kept PER LENGTH BUCKET. One flat index makes
         # a common trigram ("the") a posting list the size of the map, and
