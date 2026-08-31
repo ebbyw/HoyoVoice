@@ -18,7 +18,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from textmap import TextMap, variants            # noqa: E402
+from textmap import (MIN_SCORE, TextMap, best_score,    # noqa: E402
+                     key, lost_word, variants)
 
 # the map's text (invented, in the games' dialogue register)
 MAP = [
@@ -36,6 +37,9 @@ MAP = [
     "Hello, Lady Halvette.",
     "Yes.",
     "No.",
+    # a near-neighbour of the line above, of the kind a 315k-entry dump has
+    # for almost everything: the word-survival gate is what tells them apart
+    "Hello, Lady Halvette. Do come in.",
 ]
 
 # (what OCR read, what it should become — or None to keep the read)
@@ -66,6 +70,31 @@ CASES = [
     ("Ves.", None),
     # already correct, to the character — nothing to hand back
     ("Hello, Lady Halvette.", None),
+
+    # --- word survival: a repair keeps the read's words, a substitution
+    # does not. These are the shape of the 23 wrong lines a real 315k-line
+    # dump produced (module docstring); the prose is invented.
+    #
+    # A line the map does not have, one word away from a line it does —
+    # the everyday case once the map is big, and the shape of every wrong
+    # snap on file. It scores 0.95 against its neighbour and is refused
+    # anyway, because "salvage" is a word the read was sure of and the
+    # match does not have it.
+    ("Right. Choose \"harbor repairs\" under the expense category, but be "
+     "sure to specify \"emergency salvage works\" in the description.",
+     None),
+    # a dropped NAME, which no frequency table can rule on and which a
+    # listener notices before anything else
+    ("Hello, Lady Halvette. Do come in, Ebby.", None),
+    # the same capital, sentence-initial, is grammar and not a name: this
+    # one is a welded misread and must still repair (see also the first
+    # case above, "Right. Choosel…")
+    ("Yes. Well, that's one route, but there are Tolls to consider.",
+     MAP[1]),
+    # OCR ADDING damage is what snapping is for — the lost-word gate looks
+    # only at what the match drops, never at what it supplies
+    ("Yes. Well, that's one route, but there are tolIs to considerr.",
+     MAP[1]),
 ]
 
 
@@ -134,6 +163,24 @@ def main():
         else:
             print(f"ok    {'repaired' if want else 'kept as read'}: "
                   f"{read[:52]!r}")
+
+    # The two substitutions above have to be refused by WORD SURVIVAL, not
+    # by scoring badly — otherwise this file would pin nothing once the
+    # score threshold moves. Both match well enough to be accepted on score
+    # alone, which is exactly why the third gate exists.
+    for read in ("Right. Choose \"harbor repairs\" under the expense "
+                 "category, but be sure to specify \"emergency salvage "
+                 "works\" in the description.",
+                 "Hello, Lady Halvette. Do come in, Ebby."):
+        score = best_score(tm, read)
+        lost = lost_word(read, tm.entries[tm.candidates(key(read))[0]][1])
+        if score < MIN_SCORE or not lost:
+            print(f"FAIL  {read[:48]!r} scores {score:.3f} and loses {lost!r} "
+                  f"— it must clear the score gate and be caught on words")
+            bad += 1
+        else:
+            print(f"ok    refused on the lost word {lost!r}, not on its "
+                  f"{score:.2f} score")
 
     # a map that isn't there, or is nonsense, must leave the app as it was
     for path in ("/nonexistent/textmap.json", os.devnull):
