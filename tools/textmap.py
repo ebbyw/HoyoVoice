@@ -30,21 +30,61 @@ list costs more than it tells us. Measured on a 100k-line map, that is
 11ms a query against 66ms for the naive version — and it runs once per
 line about to be spoken, not once per frame.
 
-ACCEPTING. Two gates, and both matter. The score has to clear `min_score`,
-and it has to beat the runner-up by `min_margin`: a line that half the map
-resembles equally is exactly the case where the top match is arbitrary,
-and picking one anyway would put words in a character's mouth that the
-game never wrote. That failure is worse than reading the misread aloud,
-which is why the defaults are conservative.
+ACCEPTING. Three gates, and all of them matter. The score has to clear
+`min_score`; it has to beat the runner-up by `min_margin`, because a line
+that half the map resembles equally is exactly the case where the top match
+is arbitrary; and every real word the read contains has to SURVIVE into the
+match. That last one is what tells a repair from a substitution, and the
+reasoning is below.
 
-Measured on the recorded sessions: 377 distinct lines as the map, 164 real
-misreads of them as queries. At the defaults, 113 were repaired to exactly
-the right line, 51 were refused, and NONE was snapped to the wrong line.
-The catastrophic case on file — two dialogue rows fused and interleaved —
-scores 0.57 against its own line and is among the refusals. The top match
-is in fact right there, and it is still refused on purpose: nothing about
-a 0.57 acceptance generalizes to a map three orders of magnitude larger,
-and a wrong sentence spoken confidently is worse than a garbled one.
+Measured first on the recorded sessions: 377 distinct lines as the map, 164
+real misreads of them as queries. At a 0.82 score, 113 were repaired to
+exactly the right line, 51 were refused, and NONE was snapped to the wrong
+line. The catastrophic case on file — two dialogue rows fused and
+interleaved — scores 0.57 against its own line and is among the refusals.
+The top match is in fact right there, and it is still refused on purpose,
+because nothing about a 0.57 acceptance generalizes to a bigger map.
+
+WHAT A REAL MAP DID TO THAT. It generalized worse than feared. Across the
+seven Windows sessions that ran a real 315,327-line Star Rail dump, the log
+recorded 30 snaps that changed WORDS (punctuation-only repairs are not
+logged). Read back by hand against the recordings, 23 of the 30 were the
+wrong line — "We're a legitimate organization." became "We are a flat
+organization", "Have some dignity!" became "Save her some dignity...",
+"King Heartthrob!" became "Young Heartthrob". Each one is audible twice
+over: the invented line is spoken, then the real line finishes typing,
+fails to look like an extension of what was just said, and is spoken again.
+That is the "it reads a different sentence, then corrects itself" report.
+
+Nothing was wrong with the matcher; the map got 800 times bigger. At 315k
+entries there is a plausible near-neighbour for almost every short line, so
+a 0.84 match stopped being evidence of anything. Two gates were fitted to
+those 30 pairs:
+
+  * SCORE 0.90 rather than 0.82 — of the 23 wrong lines, 19 sat under 0.90,
+    and only one genuine repair did.
+  * WORD SURVIVAL — a real word the read contains, gone from the match,
+    means the match is a different sentence rather than a repair of this
+    one. OCR damage is character-level and lands on non-words ("gol" for
+    "go", "Ves" for "Yes", a welded "mercyis"); it does not turn
+    "legitimate" into "flat". A capitalised word mid-line is held to the
+    same rule whatever its frequency, because a dropped name ("Ebby",
+    "Ikhor") is the most costly word to lose and the least likely for OCR
+    to have invented.
+
+Together they leave 5 of the 7 real repairs and 1 of the 23 wrong lines.
+The two repairs given up are cheap — one mispronounced word each, against
+whole invented sentences — which is the trade this module has always made:
+refusing is the safe answer, and speaking a misread beats speaking fiction.
+
+`wordfreq` is a Windows-only dependency here (plans/PRE-MERGE.md says why,
+and it is where the dumps are), so on macOS the word half of that gate
+cannot run and only the name half does: 6 of the 7 repairs and 3 of the 23
+wrong lines, measured the same way. Worth knowing, not worth fixing by
+installing wordfreq on macOS — that would switch on a run-on repair which
+was measured to be a no-op on Apple Vision output with a real false-
+positive rate. Requiring EVERY lost token instead was measured too, and
+costs four of the seven repairs to remove two wrong lines; not worth it.
 """
 import difflib
 import json
@@ -60,8 +100,19 @@ LEN_TOLERANCE = 0.35
 # Entries scored properly per query. Wide enough that the right line is in
 # it whenever trigram overlap ranks it anywhere near the top.
 SHORTLIST = 40
-MIN_SCORE = 0.82
+# 0.82 on the 377-line calibration map; 0.90 since a real 315k-line dump
+# showed what a map that size does to it (see the module docstring). 19 of
+# the 23 wrong lines it snapped sat below 0.90, against one real repair.
+MIN_SCORE = 0.90
 MIN_MARGIN = 0.05
+# A read word this common that the match does not have is a word the match
+# REPLACED, not one OCR broke. Zipf 3.0 is "roughly one in a million words"
+# — above it sit "shhh" (3.1) and "legitimate" (4.2), below it the damage
+# OCR actually produces ("gol" 2.7, "ruti" 1.4, "jeither" 0.0).
+LOST_WORD_ZIPF = 3.0
+# Below this a token is punctuation debris or an apostrophe fragment ("d"
+# from "Where'd"), not a word whose loss says anything.
+LOST_WORD_MIN = 3
 # Below this a line is too short to identify: "Yes.", "Mm-hmm.", "Oh?" are
 # each a dozen other lines' equal.
 MIN_CHARS = 12
@@ -90,6 +141,19 @@ SAMPLE = 3
 MAX_POSTINGS = 3000
 
 _WORD = re.compile(r"[^a-z0-9 ]+")
+_TOKEN = re.compile(r"[A-Za-z][A-Za-z']*")
+
+# Optional, exactly as in live.py: without it the word-survival gate cannot
+# tell a real word from OCR debris, so it falls back to the one signal that
+# needs no frequencies — a capitalised word mid-line is a name, and losing
+# one is never a repair.
+try:
+    import functools
+
+    from wordfreq import zipf_frequency
+    _zipf = functools.lru_cache(maxsize=16384)(zipf_frequency)
+except ImportError:                                   # pragma: no cover
+    _zipf = None
 
 # --- what a real TextMap dump contains that the screen never shows -------
 # A map entry is not the line the game draws: it is the line before the
@@ -152,6 +216,52 @@ def trigrams(s):
     """
     return {t for t in (s[i:i + 3] for i in range(len(s) - 2))
             if zlib.crc32(t.encode()) % SAMPLE == 0}
+
+
+def _sentence_start(text, i):
+    """Is the token at `i` opening a sentence? Then its capital is grammar.
+
+    Quotes and brackets are skipped over, not treated as the sentence: the
+    games open a great many lines with one.
+    """
+    j = i - 1
+    while j >= 0 and text[j] in " \t\"'“”‘’([{<*—-":
+        j -= 1
+    return j < 0 or text[j] in ".!?…:;"
+
+
+def lost_word(read, line):
+    """A word the read has and the match dropped, or None if none did.
+
+    The difference between repairing a line and replacing it. OCR breaks
+    words into things that are not words — "gol", "Ves", "mercyis" — so a
+    match that drops one of those is repairing damage. A match that drops
+    "legitimate", "brought" or "Ebby" is a different sentence wearing the
+    same opening, and speaking it puts words in a character's mouth that
+    the game never wrote.
+
+    Only losses count. A match that ADDS a word is the ordinary case of OCR
+    having missed one ("knew you'd come" → "I knew you'd come."), which is
+    exactly what snapping is for.
+    """
+    have = set(key(line).split())
+    for m in _TOKEN.finditer(read):
+        raw = m.group(0)
+        k = key(raw)
+        if len(k) < LOST_WORD_MIN or any(p in have for p in k.split()):
+            continue
+        # A capitalised word MID-SENTENCE is a name, and is held to the rule
+        # whatever its frequency: the games' names are rare or invented, so
+        # frequency says nothing about them, and a dropped name is the loss
+        # a listener notices first. Sentence-initial capitals are grammar,
+        # not names — "Right. Choosel'harbor repairs'" capitalises a welded
+        # misread of "Choose", and reading that as a name would refuse the
+        # commonest repair there is.
+        if raw[:1].isupper() and not _sentence_start(read, m.start()):
+            return raw
+        if _zipf is not None and _zipf(k.split()[0], "en") >= LOST_WORD_ZIPF:
+            return raw
+    return None
 
 
 class TextMap:
@@ -249,8 +359,9 @@ class TextMap:
         """The game's own line for this read, or None to keep the read.
 
         None is the safe answer and is returned for everything uncertain:
-        too short to identify, no candidate, a weak best match, or a best
-        match the runner-up is breathing down the neck of.
+        too short to identify, no candidate, a weak best match, a best
+        match the runner-up is breathing down the neck of, or a match that
+        drops a word the read was sure of.
         """
         k = key(text)
         if len(k) < MIN_CHARS:
@@ -284,6 +395,13 @@ class TextMap:
         if best < self.min_score or best - runner < self.min_margin:
             return None
         line = self.entries[pos][1]
+        # Last gate, and the one the score cannot express: a top match can
+        # be both strong and margin-clear and still be a DIFFERENT line
+        # ("Allow me to introduce myself." → "...allow me to reintroduce
+        # myself...", 0.966 and unrivalled). What separates them is whether
+        # the read's own words survived.
+        if lost_word(text, line):
+            return None
         # Returned even when only the punctuation differs. That is not
         # cosmetic here: sentence streaming decides where a line can be
         # split on terminal punctuation, and OCR drops and invents it

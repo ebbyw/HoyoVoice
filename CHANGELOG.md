@@ -9,6 +9,48 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **A line snapped to the game's own text is no longer a different
+  sentence.** The symptom was a line that started right for a word or
+  two, veered into something else, and was then read again correctly —
+  twice audible, and reported as "it reads an almost entirely different
+  sentence, then corrects itself". Both halves are one cause. TextMap
+  snapping picked a wrong line and spoke it; the real line then finished
+  typing, no longer looked like an extension of what had just been said,
+  and was spoken in full.
+
+  The matcher was never wrong; the map got 800 times bigger. Its 0.82
+  score gate was calibrated on a 377-line map, where it repaired 113 of
+  164 real misreads and got none wrong. Across the seven Windows sessions
+  that have run a real 315,327-line Star Rail dump, the log recorded 30
+  snaps that changed words — read back by hand against the recordings,
+  **23 of the 30 were the wrong line**: "We're a legitimate organization."
+  became "We are a flat organization", "Have some dignity!" became "Save
+  her some dignity...", "King Heartthrob!" became "Young Heartthrob".
+  At 315k entries there is a plausible near-neighbour for nearly every
+  short line, so a 0.84 match had stopped being evidence of anything.
+
+  Two gates, fitted to those 30 pairs and re-measured through the real
+  `snap()`. The score has to reach **0.90** rather than 0.82 — 19 of the
+  23 wrong lines sat under it, against one genuine repair. And every real
+  word the read contains has to **survive into the match**: OCR damage is
+  character-level and lands on non-words ("gol" for "go", "Ves" for
+  "Yes", a welded "Choosel"), so a match that drops "legitimate",
+  "brought" or "introduce" is a different sentence rather than a repair
+  of this one. A capitalised word mid-line is held to the same rule
+  whatever its frequency, because a dropped name ("Ebby", "Ikhor") is the
+  costliest word to lose and the least likely for OCR to have invented;
+  sentence-initial capitals are exempt, since those are grammar, and
+  reading "Right. Choosel…" as a name would refuse the commonest repair
+  there is. Together: **1 wrong line instead of 23**, keeping 5 of the 7
+  real repairs. The two given up cost one mispronounced word each.
+
+  `wordfreq` is a Windows-only dependency (it is where the dumps live,
+  and installing it on macOS would switch on a run-on repair measured to
+  be a no-op on Apple Vision output), so on macOS only the name half of
+  that gate runs: 3 wrong lines instead of 23, keeping 6 of 7. Requiring
+  every lost token instead was measured too — it costs four of the seven
+  repairs to remove two wrong lines, and was not taken.
+
 - **A Star Rail chat panel waiting on a reply option is read — messages
   and the option both.** A cutscene chat with an option pending swaps
   the panel's Back hint for Select, and it can hold Select for the whole
