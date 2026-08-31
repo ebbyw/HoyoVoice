@@ -67,6 +67,17 @@ class HSR(Profile):
     # calibrated value rather than a round number; re-measure from
     # shots/<id>.json before changing it.
     CHAT_SENDER_MAX_X = 0.665
+    # Message rows are LEFT-ALIGNED to one column: 0.671 in the original
+    # calibration frames, 0.6698-0.6703 in shot #1 (2026-08-30 13:11) — a
+    # spread of ~0.001 across sessions. A row right of the sender split that
+    # is NOT aligned here is a reply-option button: those are centred in the
+    # panel ("That's right", left edge 0.7130 in that same shot), so their
+    # left edge moves with their text length and no threshold can hold them —
+    # alignment is the same trick the Messages app bands use. Tolerance
+    # matches MSGAPP_ALIGN_TOL's reasoning: several times the measured
+    # spread, still clear of the sender column at 0.657-0.659.
+    CHAT_MSG_X = 0.6705
+    CHAT_ALIGN_TOL = 0.005
     # Defer a message whose deepest row sits this low: near the panel's clip
     # edge, rows below are simply not rendered yet, and reading there
     # produced a truncated message ("…Should be") followed by the full one a
@@ -319,7 +330,14 @@ class HSR(Profile):
         this isn't an Answer screen."""
         hints = {b["text"].strip() for b in conf
                  if 0.10 < b["y"] < 0.20 and b["x"] > 0.72}
-        if not {"Scroll", "Back"} <= hints:
+        # A panel waiting on a reply option swaps Back for Select, and it
+        # can show Select for the WHOLE conversation — rec_20260830_131155
+        # holds Scroll/Select on every frame, so nothing in it was read.
+        # Select is a much weaker signature than Back (menus everywhere use
+        # it), so that variant also demands the panel header below before
+        # it counts; the in-panel hint band (0.10-0.20, not the screen-edge
+        # 0.08 every other hint row uses) is what keeps menus out of both.
+        if not ({"Scroll", "Back"} <= hints or {"Scroll", "Select"} <= hints):
             return None
         # a finished conversation can't have anything still scrolling in, so
         # its last message is complete no matter how low it sits
@@ -333,6 +351,8 @@ class HSR(Profile):
                and b["text"].strip().lower() not in ("answer", "close")]
         hdr.sort(key=lambda b: -(b["y"] + b["h"] / 2))
         header_name = hdr[0]["text"].strip() if hdr else None
+        if "Back" not in hints and header_name is None:
+            return None
         body = [b for b in conf if in_region(b, self.CHAT_BODY)
                 and not self.CHAT_SYSTEM_ROW.search(b["text"].strip())]
         body.sort(key=lambda b: -(b["y"] + b["h"] / 2))
@@ -353,6 +373,22 @@ class HSR(Profile):
                 if buf:
                     msgs.append((sender or header_name, " ".join(buf), last_y))
                 sender, buf = b["text"].strip(), []
+            elif abs(b["x"] - self.CHAT_MSG_X) > self.CHAT_ALIGN_TOL:
+                # Centred row, not a bubble: a reply-option button. The game
+                # is putting words in the player character's mouth, same as
+                # a lone dialogue choice, so it reads under their name — and
+                # it sorts below the messages, so it queues after them. If
+                # picking it echoes a player bubble into the panel, that may
+                # read again in the wrong voice — unmeasured, and a rare
+                # talk-over beats the skipped line this was.
+                cy = b["y"] + b["h"] / 2
+                if buf and (sender != self.PLAYER_NAME
+                            or (last_y - cy) > 2.2 * b["h"]):
+                    msgs.append((sender or header_name, " ".join(buf), last_y))
+                    buf = []
+                sender = self.PLAYER_NAME
+                buf.append(b["text"])
+                last_y = cy
             else:                                  # message text row
                 cy = b["y"] + b["h"] / 2
                 # A big vertical gap means a new bubble even though no sender
