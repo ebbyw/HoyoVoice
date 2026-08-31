@@ -7,6 +7,32 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ## [Unreleased]
 
+### Fixed
+
+- **A Star Rail chat panel waiting on a reply option is read — messages
+  and the option both.** A cutscene chat with an option pending swaps
+  the panel's Back hint for Select, and it can hold Select for the whole
+  conversation: every frame of rec_20260830_131155 (7s, Kuchiba's
+  cutscene chat, shot #1) reads Scroll/Select, the detector demanded
+  Scroll/Back, and nothing in the panel was spoken — not the two
+  messages, not the option. Detection now takes Scroll plus either hint,
+  but Select is menu furniture everywhere, so that variant also demands
+  the panel header before it counts; the in-panel hint band (y 0.10–0.20
+  rather than the screen-edge 0.08 every other hint row uses) is what
+  keeps menus out of both.
+
+  The option itself ("That's right", left edge 0.7130) is centred in the
+  panel, so it is aligned to neither the sender column (0.657–0.659) nor
+  the message column (0.670–0.671, ~0.001 spread across sessions) — the
+  same alignment test the Messages app bands use, where a threshold
+  would slide with the option's text length. It reads under the player's
+  name, after the messages above it, matching the dialogue-screen rule
+  that a lone option is the game putting words in the player character's
+  mouth. If picking it echoes a player bubble back into the panel, that
+  may read again in the wrong voice — no recording shows the moment
+  after a pick yet, and a rare talk-over beats the skipped conversation
+  this was.
+
 ### Added
 
 - **Star Rail's phone Messages app is read — the regular character
