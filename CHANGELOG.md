@@ -58,15 +58,27 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   and a streamed partial repairs to its own first sentence and stops
   there — nothing is spoken ahead of the typewriter, and streaming keeps
   the latency it was added for. First sentence only, and only where
-  live.py's own streaming rule would produce one, which costs **1.25×**
-  the index entries on the 274 real dialogue lines this install has read
-  (indexing every sentence boundary rather than the first measured 1.96×,
-  and was not taken; the figure wants confirming against a full 315k dump,
-  which is a Windows-box job). `tools/test_stream_prefix.py` now pins
+  live.py's own streaming rule would produce one. Measured against the
+  real Star Rail 4.5.0 dump (466k raw entries): 327k indexed entries
+  become 448k, **1.37×**, but only **+0.05 GB** resident (0.71 → 0.76 GB)
+  and +2.6 s to index, because first sentences are short and contribute
+  few postings. A lookup over the lines an install had really read is
+  6.9 ms. Indexing every sentence boundary rather than only the first was
+  measured at 1.96× and not taken. `tools/test_stream_prefix.py` now pins
   textmap's copy of the boundary rule against live.py's, since textmap is
   imported by live.py and cannot import back: a head indexed but never
   spoken is dead weight, and a head spoken but never indexed is the
   unmatchable partial this exists to fix.
+
+  The other nine wrong lines *were* a stale dump, and that is now
+  checked rather than assumed: every one of the nine reads is present in
+  the current Star Rail 4.5.0 dump. Against that dump, with both new
+  gates, three of them repair correctly — `King Heartthrob!`,
+  `...Do you get it?` and `But how did you find me—`, all punctuation the
+  recognizer had dropped — and the remaining six are refused and read as
+  seen. None is snapped to a wrong line. Worth knowing when a session
+  looks wrong: the dumps track patches, and a map that predates the
+  content being played cannot repair it.
 
   Widening the length bound instead was measured and rejected. Scored
   whole-string, a half-typed read rates 0.53–0.65 against the line it came
