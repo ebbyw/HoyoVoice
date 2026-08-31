@@ -15,6 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import live                                    # noqa: E402
 
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
+import textmap                                 # noqa: E402
+
 STREAMS = [
     # (line still being typed, prefix we should speak now)
     ("Hello there, traveler. How ar", "Hello there, traveler."),
@@ -75,7 +79,28 @@ def main():
         if got is not None:
             print(f"FAIL hold {line!r}: clipped to {got!r}")
             bad += 1
-    total = len(SPLITS) + len(STREAMS) + len(HOLDS)
+    # textmap.py carries its OWN copy of this rule — it is imported by
+    # live.py, so it cannot import back — and uses it to decide which first
+    # sentences to index. The two have to agree: a head textmap indexes but
+    # streaming never speaks is dead weight in a 315k-entry index, and a
+    # head streaming speaks but textmap never indexed is exactly the
+    # unmatchable partial the indexing exists to fix.
+    for line in [ln for ln, _ in STREAMS] + HOLDS:
+        mine = live.stream_prefix(line)
+        theirs = textmap.stream_head(line)
+        # live.py takes the LONGEST closed sentence, textmap the FIRST, so
+        # they differ legitimately once two sentences have closed; what must
+        # never differ is WHETHER there is a speakable head at all.
+        if (mine is None) != (theirs is None):
+            print(f"FAIL drift {line!r}: live says {mine!r}, "
+                  f"textmap says {theirs!r}")
+            bad += 1
+        elif theirs is not None and not mine.startswith(theirs):
+            print(f"FAIL drift {line!r}: textmap's head {theirs!r} is not "
+                  f"a prefix of live's {mine!r}")
+            bad += 1
+    total = (len(SPLITS) + len(STREAMS) + len(HOLDS)
+             + len(STREAMS) + len(HOLDS))
     print(f"{total - bad}/{total} ok")
     return 1 if bad else 0
 
