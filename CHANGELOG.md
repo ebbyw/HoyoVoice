@@ -80,6 +80,18 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   looks wrong: the dumps track patches, and a map that predates the
   content being played cannot repair it.
 
+  Re-run end to end against both current dumps (Star Rail 4.5.0, Genshin
+  7.0.0), the whole corpus of 30 logged snaps now produces **no wrong
+  lines at all**. The last one standing was `(…Might as well take a
+  look.`, which the gates could not catch because it loses no word — and
+  it turned out to be the partial case rather than a gate problem: with
+  its own line present and its first sentence indexed, it repairs to
+  `(...Might as well take a look.` instead of becoming `Yeah, might as
+  well take a look.`
+
+  Genshin measures the same as Star Rail: 398k entries become 549k,
+  1.38×, for +0.07 GB and +3.7 s.
+
   Widening the length bound instead was measured and rejected. Scored
   whole-string, a half-typed read rates 0.53–0.65 against the line it came
   from and **loses** to the wrong neighbour of its own length at
