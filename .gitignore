@@ -1,5 +1,9 @@
-# personal casting/config (created from voices.example.json)
+# personal casting/config (created from voices.example.json).
+# The .bak glob matters: a backup of this file carries the same
+# personal casting, player_name and device names, and an untracked
+# one is exactly what `git add -A` sweeps into a commit.
 voices.json
+voices.json.bak*
 
 # voice packs added from the dashboard (someone else's model weights)
 voices_custom/
