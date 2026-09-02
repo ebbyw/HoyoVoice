@@ -14,6 +14,7 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -508,6 +509,17 @@ tick();
 _REC_CACHE = (None, [])
 
 
+def _upload_destination(dest_dir, filename):
+    """A private staging path for one browser upload.
+
+    Import work runs later on the orchestrator thread. Reusing the browser's
+    filename here lets a second upload overwrite or remove the first one's
+    staged file before its command is handled.
+    """
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(filename).name)[-64:]
+    return Path(dest_dir) / f"{uuid.uuid4().hex}_{safe or 'upload'}"
+
+
 def _recordings(shared):
     global _REC_CACHE
     rd = shared["rec_dir"]["path"]
@@ -783,9 +795,7 @@ def start_webui(shared, port=DASHBOARD_PORT):
             dest_dir.mkdir(parents=True, exist_ok=True)
             # the browser supplies this name; keep only a leaf filename, and
             # only the suffix is load-bearing (it picks the reader)
-            safe = re.sub(r"[^A-Za-z0-9._-]", "_",
-                          Path(upload.filename).name)[-64:] or "upload"
-            src = dest_dir / safe
+            src = _upload_destination(dest_dir, upload.filename)
             upload.save(src)
             name = name or Path(upload.filename).stem
         else:

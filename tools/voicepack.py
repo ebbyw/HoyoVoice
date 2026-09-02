@@ -48,6 +48,24 @@ class VoiceError(ValueError):
 
 # --- readers ---------------------------------------------------------------
 
+def _check_archive_limits(zf, path):
+    """Reject compressed containers that would expand past a voice-sized cap.
+
+    `MAX_BYTES` limits what arrives on disk, not what a zip member expands to.
+    Both torch `.pt` and numpy `.npz` are zip containers, so trusting only the
+    compressed size would let a tiny upload make the dashboard allocate an
+    arbitrary amount of memory before tensor validation runs.
+    """
+    total = 0
+    for info in zf.infolist():
+        if info.is_dir():
+            continue
+        total += info.file_size
+        if info.file_size > MAX_BYTES or total > MAX_BYTES:
+            raise VoiceError(
+                f"{Path(path).name} expands to more than {MAX_BYTES // (1 << 20)} "
+                "MB, so it is not a safe voice pack")
+
 def read_pt(path):
     """A torch .pt voice pack, without torch.
 
@@ -59,6 +77,7 @@ def read_pt(path):
     """
     try:
         zf = zipfile.ZipFile(path)
+        _check_archive_limits(zf, path)
         pkl = next(n for n in zf.namelist() if n.endswith("data.pkl"))
     except (zipfile.BadZipFile, StopIteration) as exc:
         raise VoiceError(f"not a readable .pt file ({exc})") from exc
@@ -133,6 +152,12 @@ def read_safetensors(path, key=None):
 
 
 def read_npz(path, key=None):
+    if zipfile.is_zipfile(path):
+        try:
+            with zipfile.ZipFile(path) as zf:
+                _check_archive_limits(zf, path)
+        except (zipfile.BadZipFile, OSError) as exc:
+            raise VoiceError(f"not a readable numpy file ({exc})") from exc
     try:
         obj = np.load(path, allow_pickle=False)
     except (ValueError, OSError) as exc:

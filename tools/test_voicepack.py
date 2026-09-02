@@ -163,6 +163,21 @@ def main():
     bad += check("a model, not a voice", lambda: voicepack.read(huge),
                  want_error="probably a model")
 
+    # The file-size guard applies to compressed archives too: a tiny .pt/.npz
+    # can claim a massive member and must be rejected before any decompressor
+    # allocates it.
+    class FakeMember:
+        filename = "data/0"
+        file_size = voicepack.MAX_BYTES + 1
+        is_dir = lambda self: False
+
+    class FakeZip:
+        infolist = lambda self: [FakeMember()]
+
+    bad += check("compressed archive bomb",
+                 lambda: voicepack._check_archive_limits(FakeZip(), "bomb.pt"),
+                 want_error="not a safe voice pack")
+
     pickled = tmp / "pickled.npy"
     np.save(pickled, np.array([{"not": "a voice"}], dtype=object),
             allow_pickle=True)

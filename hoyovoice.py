@@ -66,7 +66,7 @@ def pid_alive(pid):
     try:                       # confirm it's our live.py, not a recycled PID
         cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
                              capture_output=True, text=True).stdout
-        return "live.py" in cmd
+        return str(ROOT / "live.py") in cmd
     except OSError:
         return True            # ps unavailable: assume the pidfile is honest
 

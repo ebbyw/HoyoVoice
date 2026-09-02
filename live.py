@@ -93,7 +93,16 @@ def save_voices():
     for k, v in on_disk.items():
         if k not in settings:
             settings[k] = v
-    VOICES_PATH.write_text(json.dumps(VOICES, indent=2, ensure_ascii=False))
+    # Do not overwrite the only copy in place. A cast change is ordinary
+    # mid-session work, so an interrupted write must leave the last good
+    # configuration bootable rather than turn the next launch into a JSON
+    # parse failure.
+    tmp = VOICES_PATH.with_name(f".{VOICES_PATH.name}.tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(VOICES, indent=2, ensure_ascii=False))
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, VOICES_PATH)
 
 
 # Installed voice packs (dashboard "Add voice file"). The canonical copy of

@@ -40,7 +40,22 @@ on_disk["settings"]["player_name"] = "Ebby"
 path.write_text(json.dumps(on_disk))
 
 live.save_voices()
-print(json.dumps(json.loads(path.read_text())))
+saved = json.loads(path.read_text())
+
+# A stopped write must leave the previous complete JSON file in place. This
+# models a full disk / interruption at the replace boundary without touching
+# the real installation.
+live.VOICES["characters"]["Aether"] = {{"voice": "am_eric", "speed": 1.0}}
+replace = live.os.replace
+live.os.replace = lambda *_: (_ for _ in ()).throw(OSError("simulated stop"))
+try:
+    live.save_voices()
+except OSError:
+    pass
+finally:
+    live.os.replace = replace
+survived_stop = json.loads(path.read_text()) == saved
+print(json.dumps({{"saved": saved, "survived_stop": survived_stop}}))
 '''
 
 
@@ -62,11 +77,12 @@ def main():
         if out.returncode:
             print("FAIL  could not run live.py:\n" + out.stderr[-1200:])
             return 1
-        saved = json.loads(out.stdout.strip().splitlines()[-1])
+        result = json.loads(out.stdout.strip().splitlines()[-1])
     finally:
         shutil.rmtree(state, ignore_errors=True)
 
     bad = 0
+    saved = result["saved"]
     settings = saved.get("settings", {})
     if settings.get("textmap") != "/maps/genshin.json":
         print(f"FAIL  a hand-added setting was wiped: {settings}")
@@ -88,6 +104,11 @@ def main():
         bad += 1
     else:
         print("ok    the casting change still lands")
+    if not result["survived_stop"]:
+        print("FAIL  an interrupted save replaced the previous valid JSON")
+        bad += 1
+    else:
+        print("ok    an interrupted save leaves the prior JSON intact")
 
     print("FAILURES:", bad) if bad else print("all good")
     return 1 if bad else 0
