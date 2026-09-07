@@ -57,11 +57,34 @@ looks for) and `version.txt` at the repo root, computing the bump — patch for
 tag. If that doesn't match the version you just wrote into the changelog
 heading, add a `Release-As: 0.12.0` footer to a commit to override it.
 
-**Replace the PR's description** with the changelog section from step 1
-(the prose, not release-please's auto-generated commit list) — release-please
-reads the PR body live at merge time for the GitHub Release notes, so this is
-what readers see on the Releases page. It does not read `CHANGELOG.md`
-itself for this, since release-please never touched that file.
+**Replace the notes in the PR's description** with the changelog section
+from step 1 (the prose, not release-please's auto-generated commit list) —
+release-please reads the PR body live at merge time for the GitHub Release
+notes, so this is what readers see on the Releases page. It does not read
+`CHANGELOG.md` itself for this, since release-please never touched that file.
+
+Replace **only the part between the two `---` rules**. The first line, the
+`---` under it, the `## [0.12.1](…compare…)` heading and the footer are how
+release-please recognises its own PR after the merge; with them gone it
+logs `could not parse pull request body as a release PR`, never tags, and
+opens a fresh PR proposing the *next* version instead (0.12.1: the body was
+swapped wholesale, the merge went unrecognised, and a phantom "0.13.0" PR
+appeared listing every commit in the repo — the tag and release had to be
+made by hand with `gh release create v0.12.1 --target <merge sha>
+--notes-file …`). Keep this shape:
+
+```
+:robot: I have created a release *beep* *boop*
+---
+
+
+## [0.12.1](https://github.com/ebbyw/HoyoVoice/compare/v0.12.0...v0.12.1) (2026-09-07)
+
+<the changelog section's prose>
+
+---
+This PR was generated with [Release Please](https://github.com/googleapis/release-please). See [documentation](https://github.com/googleapis/release-please#release-please).
+```
 
 Merge with a merge commit (not squash) once the PR's diff (`VERSION` and
 `version.txt`, nothing else) and description look right.
