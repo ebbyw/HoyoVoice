@@ -912,7 +912,8 @@ _OCR_FIXES = [
 ]
 # decorative glyphs TTS would read aloud ("tilde") or spell out. Asterisks
 # are NOT in here: *cough* is a stage direction, handled at synthesis.
-_STRIP_GLYPHS = re.compile(r"[~♪♡♥★☆]+")
+# tilde variants: U+007E ~, U+02DC ˜, U+2248 ≈
+_STRIP_GLYPHS = re.compile(r"[~˜≈♪♡♥★☆]+")
 # *cough*, *sigh* — a sound the character makes, written out. Kept through
 # OCR repair with a canonical spelling so the TTS path can act on it.
 _STAGE_DIRECTION = re.compile(r"[*＊]\s*([^*＊]{1,24}?)\s*[*＊]")
