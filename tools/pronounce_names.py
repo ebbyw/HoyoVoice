@@ -360,6 +360,9 @@ FIXES = {
     # spelling ships as written: "Mai-dee" is mˈIdˈi on both. ("My-dee" is
     # the same phones with the stress off the first chunk, mˌIdˈi / mIdˈi.)
     "Mydei": "Mai-dee",
+    # nˈænuk on both — "NAN-uck", where the name is Inuit and said "NAH-nook".
+    # "Nah-nook" is nˈɑnˈuk on both.
+    "Nanook": "Nah-nook",
     "Rappa": "Rahp-ah",
     "Seele": "See-luh",
     # svˈæɹɑɡ, "SVAR-og". "Svah-rog" is svˈɑɹˈɑɡ on both.
