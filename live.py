@@ -908,7 +908,7 @@ _OCR_FIXES = [
     (re.compile(r"\b[lL]t\b"), "It"),
     (re.compile(r"\b[lL]ts\b"), "Its"),
     (re.compile(r"\bi\b"), "I"),
-    (re.compile(r"\btilda\b", re.IGNORECASE), ""),  # OCR reads ~ as "tilda"
+    (re.compile(r"tild[ae]", re.IGNORECASE), ""),  # OCR reads ~ as "tilda" or "tilde"
 ]
 # decorative glyphs TTS would read aloud ("tilde") or spell out. Asterisks
 # are NOT in here: *cough* is a stage direction, handled at synthesis.
