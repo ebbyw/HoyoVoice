@@ -222,8 +222,20 @@ def variants(text, nickname):
 # two against each other, because a drift here would index heads that are
 # never looked up and miss the ones that are.
 _SENT_END = re.compile(r'[.!?]["”’)]?(?=\s+["“‘(]?[A-Z0-9])')
-_ABBREV = {"mr", "mrs", "ms", "dr", "st", "sr", "jr", "vs", "etc", "no"}
+_ABBREV = {"mr", "mrs", "ms", "dr", "st", "sr", "jr", "vs", "etc"}
 _ABBREV_RE = re.compile(r"([A-Za-z']+)[.!?]$")
+
+
+def abbrev_end(head, rest):
+    """Mirror of live.abbrev_end: "No." is an abbreviation only before a
+    number — in dialogue it is a refusal, and a sentence of its own."""
+    m = _ABBREV_RE.search(head.rstrip())
+    if not m:
+        return False
+    w = m.group(1).lower()
+    if w == "no":
+        return rest.lstrip()[:1].isdigit()
+    return w in _ABBREV
 STREAM_HEAD_MIN = 12
 STREAM_TAIL_MIN = 3
 
@@ -240,8 +252,7 @@ def stream_head(line):
         head = line[:m.end()].rstrip()
         if len(line[m.end():].strip()) < STREAM_TAIL_MIN:
             continue                    # nothing typed past the boundary
-        abbr = _ABBREV_RE.search(head)
-        if abbr and abbr.group(1).lower() in _ABBREV:
+        if abbrev_end(head, line[m.end():]):
             continue                    # "Mr." is not the end of a thought
         if len(key(head)) >= STREAM_HEAD_MIN:
             return head

@@ -1333,8 +1333,7 @@ def sentences(text):
     out, at = [], 0
     for m in _SENT_END.finditer(text):
         head = text[at:m.end()]
-        abbr = _ABBREV_RE.search(head.rstrip())
-        if abbr and abbr.group(1).lower() in _ABBREV:
+        if abbrev_end(head, text[m.end():]):
             continue                       # "Mr. Ito" is not two sentences
         out.append(head.strip())
         at = m.end()
@@ -1426,8 +1425,24 @@ def normalize_text(s):
 # boundary: in these games it is a pause the typewriter runs straight
 # through, so splitting there would chop one spoken thought in half.
 _SENT_END = re.compile(r'[.!?]["”’)]?(?=\s+["“‘(]?[A-Z0-9])')
-_ABBREV = {"mr", "mrs", "ms", "dr", "st", "sr", "jr", "vs", "etc", "no"}
+_ABBREV = {"mr", "mrs", "ms", "dr", "st", "sr", "jr", "vs", "etc"}
 _ABBREV_RE = re.compile(r"([A-Za-z']+)[.!?]$")
+
+
+def abbrev_end(head, rest):
+    """Does `head` end in an abbreviation's period rather than a sentence's?
+
+    "No." used to be on the list for "No. 7", and that made "No. You
+    can't!" one utterance — in dialogue it is a refusal far more often
+    than a numbering, so it is an abbreviation only when a number follows.
+    """
+    m = _ABBREV_RE.search(head.rstrip())
+    if not m:
+        return False
+    w = m.group(1).lower()
+    if w == "no":
+        return rest.lstrip()[:1].isdigit()
+    return w in _ABBREV
 
 
 def stream_prefix(s):
@@ -1443,8 +1458,7 @@ def stream_prefix(s):
         head = s[:m.end()]
         if len(s[m.end():].strip()) < STREAM_TAIL_MIN:
             continue                       # nothing typed past the boundary
-        abbr = _ABBREV_RE.search(head.rstrip())
-        if abbr and abbr.group(1).lower() in _ABBREV:
+        if abbrev_end(head, s[m.end():]):
             continue
         if len(normalize_text(head)) >= STREAM_HEAD_MIN:
             best = head.rstrip()
