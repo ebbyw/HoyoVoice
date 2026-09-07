@@ -9,6 +9,15 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **"No." is a sentence again.** It was on the abbreviation list for the
+  "No. 7" sense, and that made a refusal and whatever followed it one
+  utterance for the synthesizer — "No. You can't!" was synthesized as
+  one pass, the exact long-utterance shape that degrades Kokoro's
+  opening. In dialogue that word is a refusal far more often than a
+  numbering, so it now counts as the abbreviation only when a number
+  follows ("Room No. 7"). Same rule in the TextMap's mirror of the split.
+  "…" is unchanged: still a pause inside one thought, never a boundary.
+
 - **The second character to say the same line is no longer silent.** The
   re-fire guard that stops a line still on screen from being spoken twice
   compared text alone, so when two characters answered with one identical
