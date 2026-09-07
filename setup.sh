@@ -36,8 +36,19 @@ echo "== compiling OCR daemon"
 (cd tools && swiftc -O ocrd.swift -o ocrd)
 
 echo "== downloading Silero VAD model"
-[ -f tools/silero_vad.onnx ] || curl -sL -o tools/silero_vad.onnx \
-  https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
+# Pinned to a commit and checked against a SHA-256 the maintainer computed
+# from that commit: the VAD gate runs this model on every line, so a
+# replaced file on a mutable URL would run whatever it was replaced with.
+SILERO_URL=https://github.com/snakers4/silero-vad/raw/bfdc0193023f121ea5b3cc7b176dbed570a68a59/src/silero_vad/data/silero_vad.onnx
+SILERO_SHA256=1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3
+if [ ! -f tools/silero_vad.onnx ]; then
+  curl -sL -o tools/silero_vad.onnx "$SILERO_URL"
+  if ! echo "$SILERO_SHA256  tools/silero_vad.onnx" | shasum -a 256 -c --status; then
+    rm -f tools/silero_vad.onnx
+    echo "ERROR: silero_vad.onnx checksum mismatch — download corrupted or file changed upstream" >&2
+    exit 1
+  fi
+fi
 
 mkdir -p captures tts_out
 [ -f voices.json ] || cp voices.example.json voices.json

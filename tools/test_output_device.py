@@ -223,6 +223,7 @@ check("a stream that won't open still speaks, on the default",
 try:
     import json
     import queue
+    import socket
     import urllib.request
 
     import webui
@@ -236,7 +237,12 @@ else:
                                           ["Microphone (ShadowCast 3)"],
                                           outputs),
               "voices": {"characters": {}}, "commands": cmds}
-    port = webui.start_webui(shared, port=8788)
+    # any free port: a fixed one collides with a dashboard left running
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    free = probe.getsockname()[1]
+    probe.close()
+    port = webui.start_webui(shared, port=free)
 
     def api(path, body=None):
         req = urllib.request.Request(f"http://127.0.0.1:{port}{path}")

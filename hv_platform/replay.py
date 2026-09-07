@@ -122,18 +122,17 @@ class AudioCapture:
 
         def run():
             data = src.read_bytes() if src.exists() else b""
-            out = open(self.pcm, "wb", buffering=0)
             chunk = BYTES_PER_SEC // 20            # 50ms
             t0 = time.monotonic()
             pos = 0
-            while pos < len(data) and not self.stop_flag.is_set():
-                target = t0 + pos / BYTES_PER_SEC
-                delay = target - time.monotonic()
-                if delay > 0:
-                    time.sleep(delay)
-                out.write(data[pos:pos + chunk])
-                pos += chunk
-            out.close()
+            with open(self.pcm, "wb", buffering=0) as out:
+                while pos < len(data) and not self.stop_flag.is_set():
+                    target = t0 + pos / BYTES_PER_SEC
+                    delay = target - time.monotonic()
+                    if delay > 0:
+                        time.sleep(delay)
+                    out.write(data[pos:pos + chunk])
+                    pos += chunk
             _done["audio"] = True
             _maybe_finish()
         self.thread = threading.Thread(target=run, daemon=True)

@@ -9,6 +9,72 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **The second character to say the same line is no longer silent.** The
+  re-fire guard that stops a line still on screen from being spoken twice
+  compared text alone, so when two characters answered with one identical
+  line — a scene the game does write — the second was suppressed before
+  the dedupe window ever saw it, and that window's own rule ("two
+  characters saying the same words is a scene, not a duplicate") never
+  got to apply. The guard now carries the speaker, with the same
+  allowance the window makes for a nameplate that flickers out mid-line.
+  The window entry an extension grows is matched on speaker too.
+
+- **A synthesis failure is logged as one, not as a line spoken.** The
+  speculative synth runs on a thread; an exception there died with the
+  thread, `play()` was handed nothing and said nothing, and the log still
+  recorded the line as spoken with a voice and a speed. The failure is
+  now a `synth failed — <error>` event with the line, and the line counts
+  as handled so its next read is not logged as a repeat.
+
+- **The VAD reader survives a bad read.** Nothing restarts the audio
+  thread, so any error in it beyond a missing PCM file — a permission
+  error while the backend recreated the file, or a short read when
+  capture truncated it between `stat()` and `read()`, which fails the
+  16 kHz reshape — killed the gate for the rest of the session. The
+  symptom was the dashboard's `NO AUDIO` and every line spoken ungated
+  after the five-second grace, which reads as a gate verdict rather
+  than a crash. A failed read now closes the file, logs `vad: reader
+  failed … — rejoining`, and rejoins at the live edge; a short read is
+  treated as the respawn it is.
+
+- **`pronounce_names.py --write` replaces voices.json atomically and
+  names what it overwrote.** It wrote the file in place, so a merge
+  interrupted mid-write left half a file and the next launch failed to
+  parse it; it now writes a temp file and swaps it in, the same rule
+  `save_voices` already follows. The shipped value still wins for a
+  shipped key — that is how a corrected respelling reaches the Windows
+  machine, where voices.json never comes from git — but each hand-tuned
+  value it replaces is now printed as `replaced <key>: old → new`, where
+  before the replacement was indistinguishable from the fix never having
+  been written. `tools/test_pronounce_merge.py` pins both.
+
+- **A path typed into "Add voice file" is accepted only from a browser on
+  the machine running HoyoVoice.** The dashboard has no login; with
+  `settings.dashboard_bind` opened up, that box let anyone on the network
+  point the app at any file on this disk and read the verifier's verdict
+  on it. A remote browser is told to upload the file instead, which it
+  can.
+
+### Changed
+
+- **Setup verifies every model it downloads.** `setup.sh` and `setup.ps1`
+  fetched the Silero VAD model from a mutable `master` URL, and
+  `setup.ps1` the Kokoro model, its voices and the English OCR
+  recognizer, none of them checked. Those files are executed on every
+  line, so a replaced file upstream — or on the way down — would have run
+  whatever it was replaced with. Each is now fetched from a pinned URL
+  and checked against a SHA-256 computed from that exact file; a mismatch
+  deletes the download and stops setup. The release workflow's action is
+  pinned to a commit for the same reason: it holds write permissions and
+  a tag can be moved.
+
+- Smaller things the review turned up: the frame sweep no longer hangs
+  forever on a dead OCR daemon; the Windows audio backend treats a PCM
+  file it cannot open as a dead capture to retry rather than a crash; the
+  replay backend closes its PCM on every exit; the word-scan test skips
+  cleanly without misaki and the output-device test takes a free port
+  instead of a fixed one that collides with a dashboard left running.
+
 - **A line snapped to the game's own text is no longer a different
   sentence.** The symptom was a line that started right for a word or
   two, veered into something else, and was then read again correctly —

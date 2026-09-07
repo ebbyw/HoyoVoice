@@ -180,7 +180,7 @@ READER_CLOSE_AFTER = 2.0
 # game echoes the picked one as the next line) and the dialogue line still
 # on screen. With one slot the option evicted that line, and its next OCR
 # jitter variant ("Obviousk…", a mid-render "help us, bui") sailed past
-# the exact-match fired_norm and an empty window and was spoken again —
+# the exact-match fired key and an empty window and was spoken again —
 # twice in the 2026-08-12 Snezhnaya sessions, right after choice reads.
 DEDUP_WINDOW = 4
 # the persisted window only guards against a restart mid-scene; older than
@@ -697,16 +697,36 @@ def audio_thread():
     """Tail the 48k stereo PCM the audio backend appends to; downmix +
     decimate to 16k mono chunks for the VAD. File writes never block on a
     consumer, so nothing here can cause capture drops. Handles truncation
-    on respawn."""
+    on respawn.
+
+    Nothing restarts this thread, so it must not die: with it gone the
+    dashboard says NO AUDIO and every line is spoken ungated after the 5s
+    grace, which looks like a gate verdict rather than a crash. A failed
+    read rejoins at the live edge instead."""
     vad = SileroVAD(ROOT / "tools" / "silero_vad.onnx")
+    held = {"fh": None}
+    while True:
+        try:
+            _tail_audio(vad, held)
+        except Exception as exc:
+            print(f"[vad: reader failed ({type(exc).__name__}: {exc}) — "
+                  "rejoining]", flush=True)
+            if held["fh"] is not None:
+                held["fh"].close()
+                held["fh"] = None
+            time.sleep(1.0)
+
+
+def _tail_audio(vad, held):
     import numpy as np
     BLOCK = CHUNK * 3 * 2 * 2   # 512@16k = 1536 stereo frames @48k = 6144 B
     warmup = 32
     fh, pos = None, 0
     while True:
+        held["fh"] = fh
         try:
             size = AUDIO_PCM.stat().st_size
-        except FileNotFoundError:
+        except OSError:         # not there yet, or mid-recreate by the backend
             time.sleep(0.1)
             continue
         if fh is None:
@@ -737,6 +757,10 @@ def audio_thread():
             time.sleep(0.02)
             continue
         buf = fh.read(BLOCK)
+        if len(buf) < BLOCK:    # truncated between stat() and read(): respawn
+            fh.close()
+            fh, pos = None, 0
+            continue
         pos += len(buf)
         stereo = np.frombuffer(buf, dtype=np.int16).astype(np.float32)
         lr = stereo.reshape(-1, 2)
@@ -2315,7 +2339,7 @@ def handle_commands(speech, recent_lines):
             # screen — but that also means replaying a quest inside the TTL
             # is silently skipped as a repeat, and Clear is what you reach for
             # when you want the next lines read as if they were new. The line
-            # ALREADY on screen is not re-read: `fired_norm` still holds it,
+            # ALREADY on screen is not re-read: `fired_key` still holds it,
             # so pressing Clear can't make the app start talking at you.
             events.clear()
             n = len(recent_lines)
@@ -2497,13 +2521,18 @@ def main():
     # handling rather than speaking because a deliberate silence is just as
     # much a decision, and its repeats are just as uninteresting.
     last_handled_norm = None
-    fired_norm = None           # line already pushed through the gate once
+    # (speaker, norm) of the line already pushed through the gate once. The
+    # speaker is part of it: this only has to stop the line still on screen
+    # from re-firing, and a plain text match also stopped the NEXT character
+    # from saying the same words — a real scene, two characters answering
+    # with one identical line, and the second stayed silent.
+    fired_key = None
     unstable_count = 0
     miss_streak = 0             # consecutive frames the detector lost the line
     last_raw_norm = None        # previous frame's UNCLIPPED read (growth check)
     # raw reads of the current line, for the best-variant vote at fire
     # time. Bounded: a line left ON SCREEN keeps appending long after it
-    # fired (fired_norm blocks the re-fire, not the append), and a
+    # fired (fired_key blocks the re-fire, not the append), and a
     # two-minute dialogue pause accumulated ~700 entries the vote then
     # normalized in full. The last ~10s of reads is what the vote wants
     # anyway — it votes on the line as currently drawn.
@@ -3162,14 +3191,15 @@ def main():
                         pending_choice["armed"] = True
                         pending_choice["t"] = time.monotonic()
                 # ARMED once the line below has been through the gate —
-                # `fired_norm` covers it whether it was spoken, deduped or
+                # `fired_key` covers it whether it was spoken, deduped or
                 # skipped as voiced. Deliberately NOT conditional on the
                 # option still being on screen: the player often clicks
                 # through while we're still reading the line under it, and
                 # dropping the option then would mean it is almost never
                 # read at a natural pace.
                 if (not pending_choice["armed"]
-                        and same_line(fired_norm, pending_choice["line"])):
+                        and same_line(fired_key and fired_key[1],
+                                      pending_choice["line"])):
                     pending_choice["armed"] = True
                     pending_choice["t"] = time.monotonic()
                 # While the option is still ON SCREEN the read cannot be
@@ -3441,11 +3471,16 @@ def main():
             # adds the closing period, so `complete` flips and the patient
             # +4 allowance disappears). With exact equality the count sails
             # past the new threshold and the line is never spoken at all.
-            # fired_norm then stops a re-fire — punctuation jitter normalizes
-            # to the same string, while a genuine extension differs.
-            if candidate_count < required or key[1] == fired_norm:
+            # fired_key then stops a re-fire — punctuation jitter normalizes
+            # to the same string, while a genuine extension differs. Same
+            # speaker rule as window_verdict: a plate that flickers out
+            # mid-line reads as unknown, and that is still the same line.
+            if candidate_count < required or (
+                    fired_key is not None and key[1] == fired_key[1]
+                    and (similar_speaker(key[0], fired_key[0])
+                         or not key[0] or not fired_key[0])):
                 continue
-            fired_norm = key[1]
+            fired_key = key
             candidate_growing = False
             # Speak the BEST read of this line, not whichever frame happened
             # to trip the threshold. OCR emits micro-variants of the same
@@ -3544,8 +3579,11 @@ def main():
             if ext_base:
                 # update the window entry in place so later growth diffs
                 # against the LONGEST text we've handled, never re-reads
+                spk = state["speaker"]
                 for e in recent_lines:
-                    if e["norm"] == ext_base:
+                    if e["norm"] == ext_base and (
+                            similar_speaker(e["speaker"], spk)
+                            or not e["speaker"] or not spk):
                         e["norm"] = new_norm
                         break
             else:
@@ -3567,10 +3605,18 @@ def main():
             # discarded if the line turns out to be voiced.
             voice, base_speed = pick_voice(state["speaker"])
             spec = {}
-            synth_thread = threading.Thread(
-                target=lambda: spec.update(zip(
-                    ("audio", "speed", "ms"),
-                    speech.synth(speak_text, voice, base_speed))))
+
+            def synth_into(spec=spec, text=speak_text, voice=voice,
+                           base_speed=base_speed):
+                # an exception here dies with the thread; without
+                # catching it, play() got None, said nothing, and the log
+                # still recorded the line as spoken
+                try:
+                    spec.update(zip(("audio", "speed", "ms"),
+                                    speech.synth(text, voice, base_speed)))
+                except Exception as exc:
+                    spec["error"] = f"{type(exc).__name__}: {exc}"
+            synth_thread = threading.Thread(target=synth_into)
             synth_thread.start()
 
             # --- VAD gate ---
@@ -3669,7 +3715,15 @@ def main():
                       f"{state['dialogue'][:60]}", flush=True)
                 continue
 
-            speech.play(spec.get("audio"))
+            if spec.get("error") or spec.get("audio") is None:
+                err = spec.get("error") or "synthesizer returned no audio"
+                last_handled_norm = new_norm
+                add_event(f"synth failed — {err[:80]}", "yield",
+                          state["speaker"], speak_text, voice, shot=True)
+                print(f"[synth failed — {err}] {speak_text[:60]}",
+                      flush=True)
+                continue
+            speech.play(spec["audio"])
             speed = spec.get("speed")
             stats["spoken"] += 1
             last_handled_norm = new_norm
