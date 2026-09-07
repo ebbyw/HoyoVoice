@@ -28,6 +28,8 @@ STREAMS = [
     # two sentences already closed: speak the longest complete prefix
     ("One thing happened. Then another. And th",
      "One thing happened. Then another."),
+    # "no." closing a sentence is a refusal, not the "No. 7" abbreviation
+    ("Absolutely not, no. You can't just walk", "Absolutely not, no."),
 ]
 
 HOLDS = [
@@ -37,6 +39,7 @@ HOLDS = [
     "Hmm… I really do not know about that but",  # "…" is a pause, not an end
     "That is quite enough rowing for today.",             # nothing typed past the end
     "It costs 3.50 mora and then some more",     # decimal
+    "Room No. 7 is down the hall and to the",     # "No." before a number
 ]
 
 
@@ -54,6 +57,10 @@ SPLITS = [
     ("Is something the matter?", ["Is something the matter?"]),
     ("It costs 3.50 mora.", ["It costs 3.50 mora."]),
     ("Mr. Ito said so.", ["Mr. Ito said so."]),
+    # "No." is a sentence — it was on the abbreviation list for "No. 7", and
+    # that made a refusal and what followed it one utterance
+    ("No. You can't do that!", ["No.", "You can't do that!"]),
+    ("Take seat No. 7 please.", ["Take seat No. 7 please."]),
     # "…" is a pause inside one thought, never a boundary
     ("Hmm… I really don't know.", ["Hmm… I really don't know."]),
     # trailing fragment (line still mid-sentence) rides along as its own piece
