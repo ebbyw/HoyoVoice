@@ -300,6 +300,11 @@ class HSR(Profile):
                 if 0.08 < b["y"] < 0.85 and (b["x"] + b["w"] / 2) > 0.22]
         if not body:
             return None
+        # rows bucketed at 0.03 of screen height rather than LINE_H: the
+        # bucket has to be wide enough that two blocks Vision cut from one
+        # row land in it together despite their y differing by a fraction
+        # of a line, and narrower than the row pitch of these screens so
+        # adjacent rows never fold into one
         body.sort(key=lambda b: (round((1 - b["y"]) / 0.03), b["x"]))
         return [b["text"] for b in body]
 
