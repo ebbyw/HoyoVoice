@@ -289,7 +289,13 @@ class AudioCapture:
             self._next_retry = time.time() + self.RETRY_COOLDOWN
             return
         in_ch = min(CHANNELS, dev["max_input_channels"])
-        self.fh = open(self.pcm, "wb", buffering=0)   # truncate, unbuffered
+        try:
+            self.fh = open(self.pcm, "wb", buffering=0)   # truncate, unbuffered
+        except OSError as e:
+            print(f"[audio] cannot open {self.pcm}: {e}", flush=True)
+            self._dead = True
+            self._next_retry = time.time() + self.RETRY_COOLDOWN
+            return
         self._dead = False
         self._rs_next = 0.0               # resampler phase (fallback mode)
         self._rs_tail = None              # last frame of the previous block

@@ -22,7 +22,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import textmap_words as tw                          # noqa: E402
+try:
+    import textmap_words as tw                      # noqa: E402
+except ImportError as e:                # misaki (Kokoro's g2p) not installed
+    print(f"SKIP: {e}")
+    raise SystemExit(0)
 
 # Words the two engines really do read differently — wrong on Windows, right
 # on macOS. All four are TERMS entries, put there after someone heard them.

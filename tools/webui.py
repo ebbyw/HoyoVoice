@@ -802,6 +802,15 @@ def start_webui(shared, port=DASHBOARD_PORT):
             typed = (request.form.get("path") or "").strip()
             if not typed:
                 return jsonify(ok=False, error="no file"), 400
+            # the typed path exists for the browser on the machine running
+            # the game. The dashboard has no login, so with dashboard_bind
+            # opened up this box would let anyone on the network point the
+            # app at any file on this disk and read the verifier's verdict
+            # on it. A remote browser uploads instead.
+            if request.remote_addr not in ("127.0.0.1", "::1"):
+                return jsonify(ok=False, error="a path on this machine can "
+                               "only be typed from a browser on this "
+                               "machine — upload the file instead"), 403
             src = Path(typed).expanduser()
         shared["voice_import"].update(
             state="busy", voice=None,
