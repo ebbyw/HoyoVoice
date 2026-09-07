@@ -7,6 +7,15 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-07
+
+A review pass over the whole codebase, and the fixes it turned up. Two
+respellings changed, so on each machine:
+
+```sh
+python tools/pronounce_names.py --write
+```
+
 ### Fixed
 
 - **"No." is a sentence again.** It was on the abbreviation list for the
@@ -83,6 +92,32 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   replay backend closes its PCM on every exit; the word-scan test skips
   cleanly without misaki and the output-device test takes a free port
   instead of a fixed one that collides with a dashboard left running.
+
+- **A decorative tilde is not a word.** OCR reads the "~" the games hang
+  off a playful line as the word "tilda" or "tilde", and the synthesizer
+  said it. It is stripped before synthesis in every form seen so far:
+  the word with either spelling, even welded to the word before it
+  ("Paraprincetilda"), and the glyph itself in the three code points
+  RapidOCR returns for it (`~`, `˜`, `≈`). **Nanook** is respelled
+  "Nah-nook" — `nˈænuk` on both engines was "NAN-uck" for an Inuit name —
+  and a number written with thousands separators ("400,000") is handed
+  to Kokoro without the commas, which made it read the halves as two
+  numbers.
+
+- **An earlier review pass, before this one:** `voices.json` is written
+  through a temp file and swapped in, so an interrupted cast change
+  cannot leave a half-written file; a voice pack that is a zip container
+  (`.pt`, `.npz`) is rejected if its members would expand past the
+  voice-sized cap, rather than being decompressed into memory first;
+  each browser upload is staged under its own name so a second upload
+  cannot overwrite the first before it is verified; and `hoyovoice.sh`
+  is a wrapper over the Python launcher, whose stop kills a verified
+  pidfile's process group rather than every `python live.py` on the
+  machine.
+
+## [0.12.0] - 2026-08-30
+
+### Fixed
 
 - **A line snapped to the game's own text is no longer a different
   sentence.** The symptom was a line that started right for a word or
