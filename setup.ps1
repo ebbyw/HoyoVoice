@@ -71,21 +71,31 @@ if ($LASTEXITCODE -ne 0) {
 }
 $global:LASTEXITCODE = 0
 
-Write-Host "== downloading Silero VAD model"
-if (-not (Test-Path "tools\silero_vad.onnx")) {
-    Invoke-WebRequest -Uri "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx" `
-        -OutFile "tools\silero_vad.onnx"
+# Every model below is fetched from a pinned URL and checked against a
+# SHA-256 the maintainer computed from that exact file. These files are
+# executed (ONNX graphs) or fed to the synthesizer on every line, so a
+# replaced file on a mutable URL would run whatever it was replaced with.
+function Get-Verified($Uri, $OutFile, $Sha256) {
+    if (Test-Path $OutFile) { return }
+    Invoke-WebRequest -Uri $Uri -OutFile $OutFile
+    $got = (Get-FileHash -Algorithm SHA256 $OutFile).Hash.ToLower()
+    if ($got -ne $Sha256) {
+        Remove-Item $OutFile
+        throw "$OutFile checksum mismatch (got $got) - download corrupted or file changed upstream"
+    }
 }
+
+Write-Host "== downloading Silero VAD model"
+Get-Verified "https://github.com/snakers4/silero-vad/raw/bfdc0193023f121ea5b3cc7b176dbed570a68a59/src/silero_vad/data/silero_vad.onnx" `
+    "tools\silero_vad.onnx" "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3"
 
 Write-Host "== downloading Kokoro TTS model (~340 MB total)"
 New-Item -ItemType Directory -Force -Path "models" | Out-Null
 $kokoroBase = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
-if (-not (Test-Path "models\kokoro-v1.0.onnx")) {
-    Invoke-WebRequest -Uri "$kokoroBase/kokoro-v1.0.onnx" -OutFile "models\kokoro-v1.0.onnx"
-}
-if (-not (Test-Path "models\voices-v1.0.bin")) {
-    Invoke-WebRequest -Uri "$kokoroBase/voices-v1.0.bin" -OutFile "models\voices-v1.0.bin"
-}
+Get-Verified "$kokoroBase/kokoro-v1.0.onnx" "models\kokoro-v1.0.onnx" `
+    "7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5"
+Get-Verified "$kokoroBase/voices-v1.0.bin" "models\voices-v1.0.bin" `
+    "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d"
 
 # English recognition model (en_PP-OCRv5_mobile_rec, ONNX, ~8 MB). The rec
 # model bundled with RapidOCR is Chinese-trained and fuses English words
@@ -93,12 +103,10 @@ if (-not (Test-Path "models\voices-v1.0.bin")) {
 # from models\ automatically; delete the files to fall back.
 Write-Host "== downloading English OCR recognition model (~8 MB)"
 $recBase = "https://huggingface.co/monkt/paddleocr-onnx/resolve/main/languages/english"
-if (-not (Test-Path "models\rec_en.onnx")) {
-    Invoke-WebRequest -Uri "$recBase/rec.onnx" -OutFile "models\rec_en.onnx"
-}
-if (-not (Test-Path "models\rec_en_dict.txt")) {
-    Invoke-WebRequest -Uri "$recBase/dict.txt" -OutFile "models\rec_en_dict.txt"
-}
+Get-Verified "$recBase/rec.onnx" "models\rec_en.onnx" `
+    "4e16deb22c4da6468bdca539b2cd3c8687825538b67109177c47d359ab994cd7"
+Get-Verified "$recBase/dict.txt" "models\rec_en_dict.txt" `
+    "e025a66d31f327ba0c232e03f407ae8d105e1e709e7ccb3f408aa778c24e70d6"
 
 New-Item -ItemType Directory -Force -Path "captures", "tts_out" | Out-Null
 if (-not (Test-Path "voices.json")) { Copy-Item "voices.example.json" "voices.json" }

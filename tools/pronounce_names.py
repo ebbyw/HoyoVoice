@@ -28,6 +28,7 @@ Things the g2p does that constrain the respellings, all measured:
 """
 import argparse
 import json
+import os
 import re
 import sys
 import urllib.request
@@ -1364,7 +1365,13 @@ def merge(path, rosters, custom_words):
     settings = cfg.setdefault("settings", {})
     pron = settings.setdefault("pronunciations", {})
     added = {k: v for k, v in {**FIXES, **TERMS}.items() if pron.get(k) != v}
-    pron.update(added)                       # hand-written entries win nothing
+    # the shipped value wins, by design: --write is how a corrected respelling
+    # reaches the Windows machine, where voices.json never comes from git. The
+    # cost is that a hand-tuned value for a shipped key is replaced too, so
+    # each one is named below — a silent replacement was indistinguishable
+    # from the fix never having been written.
+    replaced = {k: pron[k] for k in added if k in pron}
+    pron.update(added)
     # withdrawn entries go out again, but only where the value is still the
     # one we shipped — a changed value is the user's own respelling
     gone = [k for k, v in RETIRED.items() if pron.get(k) == v]
@@ -1410,7 +1417,16 @@ def merge(path, rosters, custom_words):
         cw -= {k for k in gone if k not in roster_words}
         settings["custom_words"] = sorted(w for w in cw if len(w) > 1)
         words = len(settings["custom_words"]) - before
-    path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+    # never overwrite the only copy in place (same rule as live.save_voices):
+    # an interrupted write must leave a bootable file, not a parse error
+    tmp = path.with_name(f".{path.name}.tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(cfg, indent=2, ensure_ascii=False) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    for k, old in sorted(replaced.items()):
+        print(f"  replaced {k}: {old!r} → {pron[k]!r}")
     print(f"{path}: +{len(added)} pronunciations, +{len(g_added)} genders"
           + (f", -{len(gone)} retired" if gone else "")
           + (f", +{words} OCR words" if custom_words else ""))

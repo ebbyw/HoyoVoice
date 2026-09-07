@@ -34,5 +34,6 @@ has_continue_hint = _default.trusts_dialogue
 
 if __name__ == "__main__":
     p = get_profile(sys.argv[2]) if len(sys.argv) > 2 else _default
-    blocks = json.load(open(sys.argv[1]))
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        blocks = json.load(fh)
     print(json.dumps(p.classify(blocks), indent=2, ensure_ascii=False))

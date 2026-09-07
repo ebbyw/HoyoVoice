@@ -138,9 +138,17 @@ def cmd_ocr(args):
                             stderr=subprocess.DEVNULL, text=True, bufsize=1)
     done = 0
     for j in todo:
+        if proc.poll() is not None:
+            print(f"OCR daemon exited with {proc.returncode} after {done} "
+                  "frames", file=sys.stderr)
+            break
         proc.stdin.write(str(j) + "\n")
         proc.stdin.flush()
-        line = proc.stdout.readline()
+        line = proc.stdout.readline()     # EOF (empty) once the daemon dies
+        if not line:
+            print(f"OCR daemon closed its pipe after {done} frames",
+                  file=sys.stderr)
+            break
         try:
             json.loads(line)
         except Exception:
