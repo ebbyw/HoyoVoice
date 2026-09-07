@@ -908,6 +908,7 @@ _OCR_FIXES = [
     (re.compile(r"\b[lL]t\b"), "It"),
     (re.compile(r"\b[lL]ts\b"), "Its"),
     (re.compile(r"\bi\b"), "I"),
+    (re.compile(r"\btilda\b", re.IGNORECASE), ""),  # OCR reads ~ as "tilda"
 ]
 # decorative glyphs TTS would read aloud ("tilde") or spell out. Asterisks
 # are NOT in here: *cough* is a stage direction, handled at synthesis.
@@ -1156,7 +1157,8 @@ def mark_stage_directions(s):
 
 
 def fix_ocr_text(s):
-    s = re.sub(r"[’‘`´ʼ]", "'", s)      # normalize apostrophe glyph variants
+    s = re.sub(r"[‘’`´ʼ]", "’", s)      # normalize apostrophe glyph variants
+    s = re.sub(r"(\d),(\d)", r"\1\2", s)  # remove commas from numbers (400,000 → 400000)
     s = repair_punctuation(s)           # before word fixes: \b needs spaces
     s = repair_runons(s)                # 'mercyis' → 'mercy is'
     for pat, rep in _OCR_FIXES:
