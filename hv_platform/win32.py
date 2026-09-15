@@ -505,8 +505,16 @@ class Tts:
 
     def synth(self, text, voice, speed):
         voice = self.custom.get(voice, voice)
-        samples, sr = self.kokoro.create(text, voice=voice, speed=speed,
-                                         lang="en-us")
+        try:
+            samples, sr = self.kokoro.create(text, voice=voice, speed=speed,
+                                             lang="en-us")
+        except ValueError:
+            # text that phonemizes to nothing — a chat line the OCR read
+            # as bare quote marks, a symbol-only fragment. kokoro-onnx
+            # raises here (older builds as np.concatenate on an empty
+            # list) where the MLX runtime yields no segments; the contract
+            # is the darwin one: no audio is None, not an exception.
+            return None
         if samples is None or len(samples) == 0:
             return None
         audio = self.np.asarray(samples, dtype=self.np.float32)
