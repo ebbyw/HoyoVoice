@@ -1424,6 +1424,9 @@ def normalize_text(s):
 # lookahead, "Mr. Ito" is caught by _ABBREV. "…" is deliberately NOT a
 # boundary: in these games it is a pause the typewriter runs straight
 # through, so splitting there would chop one spoken thought in half.
+# something the phonemizer can voice: a letter or a digit in any script.
+# Punctuation-only pieces produce no phonemes, and kokoro-onnx raises on those.
+_PRONOUNCEABLE = re.compile(r"[^\W_]")
 _SENT_END = re.compile(r'[.!?]["”’)]?(?=\s+["“‘(]?[A-Z0-9])')
 _ABBREV = {"mr", "mrs", "ms", "dr", "st", "sr", "jr", "vs", "etc"}
 _ABBREV_RE = re.compile(r"([A-Za-z']+)[.!?]$")
@@ -1903,6 +1906,23 @@ class Speech:
         return self.np.concatenate(
             [x for p in pieces for x in (p, gap)][:-1])
 
+    def try_synth(self, spk, text, voice, base_speed=1.0):
+        """synth() for the callers on the orchestrator thread, where an
+        exception is the whole session: the reading pump and the choice
+        reader synthesize inline, and one chunk kokoro rejected took the
+        process down with `need at least one array to concatenate`. The
+        failure is logged the way the speculative path logs its own, and
+        the caller gets (None, None, 0) — the line is dropped, not the
+        app."""
+        try:
+            return self.synth(text, voice, base_speed)
+        except Exception as exc:
+            err = f"{type(exc).__name__}: {exc}"
+            add_event(f"synth failed — {err[:80]}", "yield", spk, text,
+                      voice, shot=True)
+            print(f"[synth failed — {err}] {text[:60]}", flush=True)
+            return None, None, 0
+
     def synth(self, text, voice, base_speed=1.0):
         # sentiment reads the line as written — spoken_form respells names
         # into nonsense words, which is not what a sentiment model should see
@@ -1913,8 +1933,12 @@ class Speech:
             if kind == "play":
                 pieces.append(self.effect(val))
             else:
+                # a piece with nothing to pronounce — "…", a stray quote
+                # mark — has no phonemes, and both runtimes answer that
+                # with no audio; skip it rather than pay a model call for
+                # silence
                 pieces += [self.trim(self.tts.synth(s, voice, speed))
-                           for s in sentences(val)]
+                           for s in sentences(val) if _PRONOUNCEABLE.search(s)]
         pieces = [p for p in pieces if p is not None and len(p)]
         audio = self.join(pieces)
         synth_ms = int((time.time() - t0) * 1000)
@@ -3079,8 +3103,9 @@ def main():
             if read_active is not None and read_next is None:
                 if read_active["chunks"]:
                     chunk = read_active["chunks"].popleft()
-                    audio, speed, _ = speech.synth(
-                        chunk, read_active["voice"], read_active["speed"])
+                    audio, speed, _ = speech.try_synth(
+                        read_active["spk"], chunk, read_active["voice"],
+                        read_active["speed"])
                     if audio is not None and len(audio):
                         read_next = (audio, speed)
                 elif not speech.qr_playing:
@@ -3267,9 +3292,8 @@ def main():
                     VOICES.get("settings", {}).get("choice_speaker")
                     or screens.PLAYER_NAME)
                 voice, base_speed = pick_voice(spk)
-                audio, speed, _ = speech.synth(text, voice, base_speed)
-                speech.play(audio)          # not qr: a late VO should cut it
-                stats["spoken"] += 1
+                audio, speed, _ = speech.try_synth(
+                    spk, text, voice, base_speed)
                 choice_logged = text
                 last_handled_norm = normalize_text(text)
                 # into the dedupe window: picking an option usually makes
@@ -3284,10 +3308,13 @@ def main():
                                   normalize_text(fix_ocr_text(opt)),
                                   stack=True)
                 pending_choice = None
-                yield_event_id = add_event(
-                    "choice (read)", "spoken", spk, text, voice, speed,
-                    can_replay=True, shot=True)
-                print(f"[choice → {voice}] {text[:70]}", flush=True)
+                if audio is not None:       # else try_synth logged it
+                    speech.play(audio)      # not qr: a late VO should cut it
+                    stats["spoken"] += 1
+                    yield_event_id = add_event(
+                        "choice (read)", "spoken", spk, text, voice, speed,
+                        can_replay=True, shot=True)
+                    print(f"[choice → {voice}] {text[:70]}", flush=True)
             choice_prev = opts_norm
 
             loading = screens.classify_loading(blocks)
