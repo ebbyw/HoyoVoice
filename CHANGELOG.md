@@ -7,6 +7,26 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ## [Unreleased]
 
+### Fixed
+
+- **A chat chunk with nothing to pronounce no longer takes the Windows
+  session down.** Mid-read of an Eye of Graeae chat log (2026-09-14) the
+  process died with `ValueError: need at least one array to concatenate`
+  from inside kokoro-onnx: a chunk whose text phonemized to nothing — no
+  letter or digit for espeak to voice, the shape of a line OCR reads as
+  bare quote marks or an ellipsis — gave the runtime an empty list to
+  concatenate, and the reading pump synthesizes on the orchestrator
+  thread, so nothing caught it. The current kokoro-onnx raises its own
+  `ValueError` for the same input; either way the macOS runtime answers
+  it with no segments and `None`, and the Windows backend now keeps the
+  same contract. Above it, `Speech.synth` skips a sentence with no letter
+  or digit on both platforms rather than pay a model call for silence,
+  and the two callers that synthesize inline — the reading pump and the
+  choice reader — go through `try_synth`, which logs a
+  `synth failed — <error>` event the way the speculative thread already
+  does and drops the chunk instead of the app. A choice whose synth fails
+  is no longer logged as spoken, either.
+
 ## [0.12.1] - 2026-09-07
 
 A review pass over the whole codebase, and the fixes it turned up. Two
