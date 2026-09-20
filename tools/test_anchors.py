@@ -134,7 +134,8 @@ def test_bootstrap_cut_verify_persist():
     score, ok = pack.anchors[0].match(frame)
     assert ok and score > 0.98, score
     png, meta = user / "test/g.png", user / "test/g.json"
-    assert png.exists() and _json.loads(meta.read_text())["ref"] == [960, 540]
+    assert png.exists() and _json.loads(
+        meta.read_text(encoding="utf-8"))["ref"] == [960, 540]
 
     # a fresh pack finds the persisted template and has nothing pending
     pack2 = AnchorPack("no-such-game", user_dir=user)

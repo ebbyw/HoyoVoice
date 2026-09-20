@@ -501,7 +501,7 @@ def _seen_lines(shots, game):
     seen = {}
     for f in sorted(Path(shots).glob("*.json")):
         try:
-            blocks = json.loads(f.read_text())
+            blocks = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
         if not isinstance(blocks, list):

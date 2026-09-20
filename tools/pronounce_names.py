@@ -1339,7 +1339,7 @@ def check(path, sample):
     if not path.exists():
         print(f"{path}: MISSING — the app writes it on first run")
         return 1
-    settings = json.loads(path.read_text()).get("settings", {})
+    settings = json.loads(path.read_text(encoding="utf-8")).get("settings", {})
     pron = settings.get("pronunciations", {})
     exact = set(settings.get("pronunciations_exact", []))
     stamp = __import__("datetime").datetime.fromtimestamp(path.stat().st_mtime)
@@ -1370,7 +1370,7 @@ def check(path, sample):
 
 
 def merge(path, rosters, custom_words):
-    cfg = json.loads(path.read_text())
+    cfg = json.loads(path.read_text(encoding="utf-8"))
     settings = cfg.setdefault("settings", {})
     pron = settings.setdefault("pronunciations", {})
     added = {k: v for k, v in {**FIXES, **TERMS}.items() if pron.get(k) != v}

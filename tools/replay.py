@@ -64,10 +64,11 @@ def main():
         # live.py seeds voices.json from the example on first run, but the
         # game has to be set BEFORE it starts — write the file here instead
         src = Path(args.voices) if args.voices else ROOT / "voices.example.json"
-        cfg = json.loads(src.read_text())
+        cfg = json.loads(src.read_text(encoding="utf-8"))
         cfg.setdefault("settings", {})["game"] = args.game
-        (state / "voices.json").write_text(json.dumps(cfg, indent=2,
-                                                      ensure_ascii=False))
+        (state / "voices.json").write_text(
+            json.dumps(cfg, indent=2, ensure_ascii=False),
+            encoding="utf-8")
 
     cut = ["-ss", str(args.start)]
     if args.duration:
@@ -110,7 +111,7 @@ def main():
 
     cache = state / "captures" / "spoken_cache.json"
     if cache.exists():
-        obj = json.loads(cache.read_text())
+        obj = json.loads(cache.read_text(encoding="utf-8"))
         print("\n[replay] voiced history:",
               json.dumps(obj.get("voiced_history", {})), flush=True)
     if args.keep:

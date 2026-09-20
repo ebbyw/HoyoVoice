@@ -31,11 +31,12 @@ def test_merge_keeps_user_keys_and_names_replacements():
         path.write_text(json.dumps({"settings": {"pronunciations": {
             "Zzyzx": "ZY-zix",                  # the user's own entry
             shipped_key: "something else",      # a hand-tuned shipped key
-        }}}))
+        }}}), encoding="utf-8")
         out = io.StringIO()
         with redirect_stdout(out):
             pn.merge(path, {}, custom_words=False)
-        pron = json.loads(path.read_text())["settings"]["pronunciations"]
+        pron = json.loads(
+            path.read_text(encoding="utf-8"))["settings"]["pronunciations"]
         assert pron["Zzyzx"] == "ZY-zix", "a user key must survive a merge"
         assert pron[shipped_key] == pn.TERMS[shipped_key], \
             "the shipped value wins for a shipped key"
@@ -52,12 +53,14 @@ def test_merge_writes_through_a_temp_file():
     real_replace = os.replace
 
     def spy(src, dst):
-        seen.append((Path(src).name, json.loads(Path(dst).read_text())))
+        seen.append((Path(src).name,
+                     json.loads(Path(dst).read_text(encoding="utf-8"))))
         real_replace(src, dst)
 
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "voices.json"
-        path.write_text(json.dumps({"settings": {"pronunciations": {}}}))
+        path.write_text(json.dumps({"settings": {"pronunciations": {}}}),
+                        encoding="utf-8")
         pn.os.replace = spy
         try:
             with redirect_stdout(io.StringIO()):

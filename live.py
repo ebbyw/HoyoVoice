@@ -64,7 +64,7 @@ if not VOICES_PATH.exists():                      # first run: seed from example
     import shutil
     VOICES_PATH.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(ROOT / "voices.example.json", VOICES_PATH)
-VOICES = json.loads(VOICES_PATH.read_text())
+VOICES = json.loads(VOICES_PATH.read_text(encoding="utf-8"))
 
 
 def save_voices():
@@ -86,7 +86,8 @@ def save_voices():
     design.
     """
     try:
-        on_disk = json.loads(VOICES_PATH.read_text()).get("settings", {})
+        on_disk = json.loads(
+            VOICES_PATH.read_text(encoding="utf-8")).get("settings", {})
     except (OSError, ValueError):
         on_disk = {}
     settings = VOICES.setdefault("settings", {})
@@ -454,7 +455,8 @@ lexicon_stale = {"flag": False}
 unknown_speakers = set()
 if UNKNOWN_LOG.exists():
     unknown_speakers.update(
-        n.strip() for n in UNKNOWN_LOG.read_text().splitlines() if n.strip())
+        n.strip() for n in UNKNOWN_LOG.read_text(encoding="utf-8")
+        .splitlines() if n.strip())
 commands = queue.Queue()
 # last "Add voice file" outcome, polled by the dashboard: verification runs
 # on the orchestrator thread (it needs the TTS engine), so the upload
@@ -1810,7 +1812,7 @@ def pick_voice(speaker):
     # the session-log strings behind them: tools/casting_filter.py.
     if junk_speaker(speaker):
         return VOICES["defaults"]["narrator"], 1.0
-    with open(UNKNOWN_LOG, "a") as f:
+    with open(UNKNOWN_LOG, "a", encoding="utf-8") as f:
         f.write(speaker + "\n")
     # documented gender (roster/NPC table) or name-shape guess, then claim
     # a distinct voice; shows as "(auto)" in Casting — override anytime
@@ -2060,7 +2062,7 @@ def concat_parts(parts):
         return Path(parts[0])
     listing = Path(parts[0]).with_suffix(".parts.txt")
     listing.write_text("".join(
-        f"file '{Path(p).as_posix()}'\n" for p in parts))
+        f"file '{Path(p).as_posix()}'\n" for p in parts), encoding="utf-8")
     joined = Path(str(parts[0]).replace("_raw", "_joined"))
     ok = subprocess.run(
         ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "concat",
@@ -2302,8 +2304,10 @@ def handle_commands(speech, recent_lines):
             save_voices()
             if UNKNOWN_LOG.exists():
                 UNKNOWN_LOG.write_text("\n".join(
-                    n for n in UNKNOWN_LOG.read_text().splitlines()
-                    if n.strip() and n.strip() != char) + "\n")
+                    n for n in UNKNOWN_LOG.read_text(
+                        encoding="utf-8").splitlines()
+                    if n.strip() and n.strip() != char) + "\n",
+                    encoding="utf-8")
             lexicon_stale["flag"] = True
             print(f"[deleted] {char}", flush=True)
         elif cmd[0] == "addvoice":
@@ -2386,7 +2390,8 @@ def handle_commands(speech, recent_lines):
                 {"window": [], "saved_at": time.time(),
                  "voiced_history": voiced_history,
                  "voiced_recent": {k: "".join(w)
-                                   for k, w in voiced_recent.items()}}))
+                                   for k, w in voiced_recent.items()}}),
+                encoding="utf-8")
             print(f"[log cleared — dedupe window of {n} cleared too]",
                   flush=True)
         elif cmd[0] == "game":
@@ -2413,7 +2418,7 @@ def main():
     recent_lines = deque(maxlen=DEDUP_WINDOW)
     if SPOKEN_CACHE.exists():
         try:
-            obj = json.loads(SPOKEN_CACHE.read_text())
+            obj = json.loads(SPOKEN_CACHE.read_text(encoding="utf-8"))
             # The window exists so a restart MID-SCENE doesn't re-read the
             # line still on screen. After a real break the same text is a
             # fresh encounter — a loading screen you see every session was
@@ -2475,7 +2480,8 @@ def main():
         words.update(VOICES.get("settings", {}).get("custom_words", []))
         cw = ROOT / "captures" / "custom_words.txt"
         cw.parent.mkdir(exist_ok=True)
-        cw.write_text("\n".join(sorted(w for w in words if w)))
+        cw.write_text("\n".join(sorted(w for w in words if w)),
+                      encoding="utf-8")
         return cw
 
     # settings.ocr_engine (Windows): auto | rapid | windows. auto measures
@@ -3634,7 +3640,8 @@ def main():
                  "saved_at": time.time(),
                  "voiced_history": voiced_history,
                  "voiced_recent": {k: "".join(w)
-                                   for k, w in voiced_recent.items()}}))
+                                   for k, w in voiced_recent.items()}}),
+                encoding="utf-8")
 
             if state["speaker"] in VOICES.get("always_voiced", []):
                 stats["always_voiced"] += 1

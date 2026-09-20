@@ -169,7 +169,7 @@ def make_ocr():
     words = ROOT / "captures" / "custom_words.txt"
     if not words.exists():
         words.parent.mkdir(parents=True, exist_ok=True)
-        words.write_text("")
+        words.write_text("", encoding="utf-8")
     return darwin.create_ocr(ROOT, words)
 
 
@@ -287,7 +287,7 @@ def accuracy(args):
     if not truth_path.exists():
         sys.exit(f"{truth_path} missing — accuracy needs typed ground truth "
                  f"(stability does not)")
-    truth = json.loads(truth_path.read_text())
+    truth = json.loads(truth_path.read_text(encoding="utf-8"))
     frames = [corpus / name for name in sorted(truth)]
     missing = [f.name for f in frames if not f.exists()]
     if missing:
