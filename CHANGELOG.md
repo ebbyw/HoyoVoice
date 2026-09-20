@@ -30,14 +30,15 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   daemon protocol is ASCII by construction (`json.dumps` escapes
   non-ASCII), so that one is left alone rather than changed blind.
 
-- **Jiaoqiu's name ends in the letter Q.** The table read the
-  Foxian's name "Jyow-chyoh", the Mandarin *jiāoqiū*; the user says
-  it "jyow-kyew", so only the second chunk moved. "Jyow-kyew" is
-  ʤˈIWkjˈu on misaki and ʤˈIWkjˈuː on espeak — the same four sounds
-  on both engines, with the opening glide on the vowel of "cow".
-  Two rewrites were tried and rejected: spelling that glide as two
-  syllables flattens it ("Gee-ow-kyew" is ʤˈiˈOkjˈu, an /oʊ/), and
-  "-kyoo" for the Q reads ˈIOˌO, "kee-oh-oh", on both.
+- **Jiaoqiu is "jah-kyew".** The table read the Foxian's name
+  "Jyow-chyoh", the Mandarin *jiāoqiū*; the user reads it as two
+  chunks, a plain open ah and the letter Q. "Jah-kyew" is ʤˈɑkjˈu
+  on misaki and ʤˈɑːkjˈuː on espeak. The spellings that keep the
+  pinyin diphthong were tried by ear first and dropped: "Jyow-" is
+  ʤˈIW, which came back as "jai-ow", and "Gee-ow-" is ʤˈiˈO, an
+  /oʊ/ on top of an extra syllable. On the Q, "-kyoo" reads ˈIOˌO,
+  "kee-oh-oh", and "Jah-Q" splits the stress between the engines;
+  the j needs the h, since "Ja-kyew" is jˈɑkjˈu, "yah-kyoo".
   Pronunciations live in the gitignored `voices.json`, so on each
   machine:
 
