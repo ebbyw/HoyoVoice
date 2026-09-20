@@ -335,7 +335,7 @@ def load_spoken_form(voices):
     path = Path(voices).expanduser()
     if path.exists():
         try:
-            live.VOICES = json.loads(path.read_text())
+            live.VOICES = json.loads(path.read_text(encoding="utf-8"))
         except ValueError:
             pass
     return live.spoken_form
@@ -420,7 +420,8 @@ def main():
     settings = {}
     vpath = Path(args.voices).expanduser()
     if vpath.exists():
-        settings = json.loads(vpath.read_text()).get("settings", {})
+        settings = json.loads(
+            vpath.read_text(encoding="utf-8")).get("settings", {})
     maps = args.maps or list((settings.get("textmap") or {}).values())
     if not maps:
         raise SystemExit("no maps: pass one, or set settings.textmap in "

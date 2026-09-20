@@ -9,6 +9,27 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **`pronounce_names.py --write` no longer dies on Windows reading the
+  config it is about to update.** Python opens a text file in the
+  locale's encoding — UTF-8 on macOS, cp1252 on the Windows box — and
+  every file this app writes is UTF-8: `voices.json` is written with
+  `ensure_ascii=False`, so one accented roster name puts a real
+  multi-byte character in it. Reading that back under cp1252 isn't a
+  wrong character, it's a crash — `UnicodeDecodeError: 'charmap' codec
+  can't decode byte 0x9d in position 56908` — which is what `--write
+  --custom-words` hit after the roster names went into `custom_words`.
+  Every text read and write in the repo now names `encoding="utf-8"`:
+  `voices.json`, the spoken-line cache, the unknown-speaker log, the
+  custom-words file, the anchor specs, the pid file and the replay and
+  sweep tools. The same bug was one accented speaker away from taking
+  the Windows app down at startup, where `live.py` reads `voices.json`
+  the same way. A new `tools/test_encoding.py` walks the tree and fails
+  on any text read or write that leaves the encoding to the locale,
+  because macOS can't feel this class of bug on its own. Subprocess
+  pipes (`text=True`) still decode in the locale's encoding; the OCR
+  daemon protocol is ASCII by construction (`json.dumps` escapes
+  non-ASCII), so that one is left alone rather than changed blind.
+
 - **Jiaoqiu's name ends in the letter Q.** The table read the
   Foxian's name "Jyow-chyoh", the Mandarin *jiāoqiū*; the user says
   it "jyow-kyew", so only the second chunk moved. "Jyow-kyew" is

@@ -38,7 +38,7 @@ except ImportError:            # flask not installed yet (pre-setup)
 
 def read_pid():
     try:
-        return int(PIDFILE.read_text().strip())
+        return int(PIDFILE.read_text(encoding="utf-8").strip())
     except (FileNotFoundError, ValueError):
         return None
 
@@ -108,7 +108,7 @@ def start():
     p = subprocess.Popen([str(VENV_PY), str(ROOT / "live.py")],
                          cwd=str(ROOT), stdout=log, stderr=subprocess.STDOUT,
                          stdin=subprocess.DEVNULL, **kw)
-    PIDFILE.write_text(str(p.pid))
+    PIDFILE.write_text(str(p.pid), encoding="utf-8")
     print(f"started (pid {p.pid}) — tail with: python hoyovoice.py log")
 
 

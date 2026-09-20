@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def main():
-    script = (ROOT / "hoyovoice.sh").read_text()
+    script = (ROOT / "hoyovoice.sh").read_text(encoding="utf-8")
     if "pkill" in script:
         print("FAIL  wrapper still kills processes by global name")
         return 1

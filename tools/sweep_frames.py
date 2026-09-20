@@ -74,19 +74,19 @@ def cmd_snapshot(args):
     snap = {}
     for f in frames:
         try:
-            blocks = json.loads(f.read_text())
+            blocks = json.loads(f.read_text(encoding="utf-8"))
         except Exception as e:
             print(f"[skip] {f}: {e}", file=sys.stderr)
             continue
         snap[f"{f.parent.name}/{f.name}"] = classify_frame(blocks)
     Path(args.out).write_text(json.dumps(snap, indent=1, sort_keys=True,
-                                         ensure_ascii=False))
+                                         ensure_ascii=False), encoding="utf-8")
     print(f"{len(snap)} frames -> {args.out}")
 
 
 def cmd_diff(args):
-    a = json.loads(Path(args.before).read_text())
-    b = json.loads(Path(args.after).read_text())
+    a = json.loads(Path(args.before).read_text(encoding="utf-8"))
+    b = json.loads(Path(args.after).read_text(encoding="utf-8"))
     changed = 0
     for key in sorted(set(a) | set(b)):
         if key not in a or key not in b:
@@ -155,7 +155,7 @@ def cmd_ocr(args):
             print(f"[skip] {j.name}: daemon returned no blocks",
                   file=sys.stderr)
             continue
-        (out / f"{j.stem}.json").write_text(line)
+        (out / f"{j.stem}.json").write_text(line, encoding="utf-8")
         done += 1
         if done % 100 == 0:
             print(f"  {done}/{len(todo)}")

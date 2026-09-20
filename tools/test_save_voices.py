@@ -65,7 +65,7 @@ def main():
         "characters": {}, "defaults": {"narrator": "bm_lewis",
                                        "female": ["af_bella"],
                                        "male": ["am_eric"]},
-        "settings": {"game": "genshin"}}))
+        "settings": {"game": "genshin"}}), encoding="utf-8")
     # HOYOVOICE_STATE_DIR, exactly: getting the name wrong points the
     # child at the real installation and edits the real casting
     env = dict(os.environ, HOYOVOICE_STATE_DIR=str(state))

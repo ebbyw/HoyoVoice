@@ -249,7 +249,8 @@ class AnchorPack:
         spec = ANCHOR_DIR / f"{game}.json"
         if not spec.exists():
             return
-        for a in json.loads(spec.read_text()).get("anchors", []):
+        for a in json.loads(
+                spec.read_text(encoding="utf-8")).get("anchors", []):
             # a broken entry (missing/corrupt PNG, malformed spec) drops
             # that one anchor, never the app: this runs inside the main
             # loop on first use, where an uncaught error would kill it
@@ -292,7 +293,8 @@ class AnchorPack:
             up = self.user_dir / a["template"]
             meta = up.with_suffix(".json")
             if up.exists() and meta.exists():
-                ref = tuple(json.loads(meta.read_text())["ref"])
+                ref = tuple(
+                    json.loads(meta.read_text(encoding="utf-8"))["ref"])
                 return (np.asarray(Image.open(up).convert("L"),
                                    dtype=np.float32), ref)
         return None, None
@@ -358,7 +360,8 @@ class AnchorPack:
                     up.parent.mkdir(parents=True, exist_ok=True)
                     Image.fromarray(t.astype(np.uint8)).save(up)
                     up.with_suffix(".json").write_text(
-                        json.dumps({"ref": list(ref)}) + "\n")
+                        json.dumps({"ref": list(ref)}) + "\n",
+                        encoding="utf-8")
                 self.anchors.append(anchor)
             self.pending = []
             names = "  ".join(f"{s[0]['name']}={s[3]:.2f}" for s in staged)
@@ -420,8 +423,8 @@ def _extract(game, name, frame, nx0, nx1, ny0, ny1):
               "y": [round(max(0.0, ny0 - ph), 4),
                     round(min(1.0, ny1 + ph), 4)]}
     spec_path = ANCHOR_DIR / f"{game}.json"
-    spec = (json.loads(spec_path.read_text()) if spec_path.exists()
-            else {"anchors": []})
+    spec = (json.loads(spec_path.read_text(encoding="utf-8"))
+            if spec_path.exists() else {"anchors": []})
     # re-extracting an existing anchor must not silently strip what the
     # rebuilt entry doesn't know about — losing a `roi` quietly disables
     # the crop win for the whole game (and the crop is default-on)
@@ -443,7 +446,7 @@ def _extract(game, name, frame, nx0, nx1, ny0, ny1):
     if "roi" in old:
         entry["roi"] = old["roi"]
     spec["anchors"].append(entry)
-    spec_path.write_text(json.dumps(spec, indent=2) + "\n")
+    spec_path.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
     kept = " (roi carried over)" if "roi" in old else ""
     print(f"{png} {tmpl.shape[1]}x{tmpl.shape[0]}px search={search}{kept}"
           f" — threshold is a PLACEHOLDER (measured: false); measure score"
