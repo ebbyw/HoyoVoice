@@ -293,16 +293,19 @@ FIXES = {
     "Guinaifen": "Gway-nye-fen",
     "Hanya": "Hahn-yah",
     "Huohuo": "Hoo-aw-hoo-aw",
-    # The -qiu is the letter Q, not the "-chyoh" this table used to say:
-    # the user reads the name "jyow-kyew", the first chunk on the
-    # vowel of "cow". "Jyow-kyew" is ʤˈIWkjˈu on misaki and ʤˈIWkjˈuː
-    # on espeak, which is the old first chunk kept unchanged with the
-    # right second one. Spelling the opening glide out as two
-    # syllables loses that vowel: "Gee-ow-kyew" and "Jee-ow-kyew" are
-    # both ʤˈiˈOkjˈu, an /oʊ/ where the name has /aʊ/. "-kyoo" for
-    # the Q was rejected too — "Jyow-kyoo" reads its last chunk
-    # ˈIOˌO ("kee-oh-oh") on both engines.
-    "Jiaoqiu": "Jyow-kyew",
+    # Two chunks, "jah-kyew" — the -qiu is the letter Q, not the
+    # "-chyoh" this table used to say, and the first syllable is a
+    # plain open ah with no glide in it. "Jah-kyew" is ʤˈɑkjˈu on
+    # misaki and ʤˈɑːkjˈuː on espeak. Every spelling that keeps the
+    # pinyin diphthong was tried by ear first and rejected: "Jyow-"
+    # is ʤˈIW, heard as "jai-ow", and "Gee-ow-"/"Jee-ow-" are ʤˈiˈO,
+    # an /oʊ/ on top of the extra syllable. On the second chunk,
+    # "-kyew" is the only spelling of the Q that holds: "-kyoo"
+    # reads ˈIOˌO ("kee-oh-oh") on both engines, and "Jah-Q" and
+    # "Jah-cue" split the stress (misaki ʤˌɑ against espeak ʤˈɑː).
+    # The j has to be spelled "Jah": "Ja-kyew" is jˈɑkjˈu on both —
+    # a yod, "yah-kyoo".
+    "Jiaoqiu": "Jah-kyew",
     # identical phones either way (ʤˈɪŋ jˈuˈɛn on both) — respelled only so
     # one sound has one spelling, matching the "Yuan" entry below.
     "Jing Yuan": "Jing Yu-en",
