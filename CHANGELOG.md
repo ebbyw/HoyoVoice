@@ -9,6 +9,21 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **Jiaoqiu's name ends in the letter Q.** The table read the
+  Foxian's name "Jyow-chyoh", the Mandarin *jiāoqiū*; the user says
+  it "jyow-kyew", so only the second chunk moved. "Jyow-kyew" is
+  ʤˈIWkjˈu on misaki and ʤˈIWkjˈuː on espeak — the same four sounds
+  on both engines, with the opening glide on the vowel of "cow".
+  Two rewrites were tried and rejected: spelling that glide as two
+  syllables flattens it ("Gee-ow-kyew" is ʤˈiˈOkjˈu, an /oʊ/), and
+  "-kyoo" for the Q reads ˈIOˌO, "kee-oh-oh", on both.
+  Pronunciations live in the gitignored `voices.json`, so on each
+  machine:
+
+  ```sh
+  python tools/pronounce_names.py --write
+  ```
+
 - **A chat chunk with nothing to pronounce no longer takes the Windows
   session down.** Mid-read of an Eye of Graeae chat log (2026-09-14) the
   process died with `ValueError: need at least one array to concatenate`
