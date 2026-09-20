@@ -293,7 +293,16 @@ FIXES = {
     "Guinaifen": "Gway-nye-fen",
     "Hanya": "Hahn-yah",
     "Huohuo": "Hoo-aw-hoo-aw",
-    "Jiaoqiu": "Jyow-chyoh",
+    # The -qiu is the letter Q, not the "-chyoh" this table used to say:
+    # the user reads the name "jyow-kyew", the first chunk on the
+    # vowel of "cow". "Jyow-kyew" is ʤˈIWkjˈu on misaki and ʤˈIWkjˈuː
+    # on espeak, which is the old first chunk kept unchanged with the
+    # right second one. Spelling the opening glide out as two
+    # syllables loses that vowel: "Gee-ow-kyew" and "Jee-ow-kyew" are
+    # both ʤˈiˈOkjˈu, an /oʊ/ where the name has /aʊ/. "-kyoo" for
+    # the Q was rejected too — "Jyow-kyoo" reads its last chunk
+    # ˈIOˌO ("kee-oh-oh") on both engines.
+    "Jiaoqiu": "Jyow-kyew",
     # identical phones either way (ʤˈɪŋ jˈuˈɛn on both) — respelled only so
     # one sound has one spelling, matching the "Yuan" entry below.
     "Jing Yuan": "Jing Yu-en",
