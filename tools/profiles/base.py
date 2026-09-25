@@ -516,6 +516,12 @@ class Profile:
         """Message/group-chat panel. Returns [(sender, text), …] or None."""
         return None
 
+    def reader_page(self, blocks):
+        """Which page of a PAGED reading screen is up ('2/5'), or None.
+        The reader dedupes within a page, so pages that repeat each
+        other's wording are each read."""
+        return None
+
     # ------------------------------------------------------------------
     # Game detection: how confident are we that this frame is THIS game?
     # ------------------------------------------------------------------

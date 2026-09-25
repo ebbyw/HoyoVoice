@@ -7,6 +7,43 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ## [Unreleased]
 
+### Added
+
+- **Genshin's character-trial guide is read aloud.** The paged panel a
+  trial opens with — a looping clip on the left, a title ("Character
+  Summary", "Elemental Skill: I") over a prose column on the right, a
+  `1/5` pager and a Close button under it — was silent: it has no
+  nameplate, no story chrome and no hint in the hint strip, so nothing
+  claimed it. It is now read by the narrator through the same
+  incremental reader the articles use, title first, one page at a time
+  as you page through. Calibrated off rec_20260925_122558 (all five
+  pages, 107 frames): the chrome that identifies it is the pager and
+  the Close button *together* — Close alone is an ordinary popup, a
+  lone `N/M` a stack count — and the text is the rows starting on the
+  column's measured left edge (x 0.523–0.527), which leaves out the
+  frame caught mid page-turn, where every row slides in from further
+  right and reads as fragments ("her Elemen IS").
+
+  Two things had to change outside the profile for the pages to come
+  out whole. The reader deduped against every row read since the panel
+  opened, and a guide repeats itself from page to page: `same_line`
+  scores "Elemental Skill: I." and "…II." 0.97 alike, so each later
+  page's title was dropped as a repeat. Profiles can now name the page
+  on screen (`reader_page()`, the pager for this panel), and the reader
+  dedupes within a page — screens that aren't paged are all one page,
+  exactly as before. And the skill's icon, drawn mid-sentence ("uses her
+  Elemental Skill [icon], she…"), came back from Vision as `®` on 14 of
+  the 20 frames showing it; misaki reads that as "registered", so `®`
+  and `©` join the decorative glyphs OCR repair strips.
+
+  The long page draws its last row half under a fade at the foot of the
+  text — box height 0.016 against 0.021–0.028 for whole rows, read as
+  "characters in the nartv." — so a row reaching into the fade is held
+  back until a scroll brings it up whole, the way an article row under
+  its rule is. The recording never scrolls, so that row went unread in
+  the replay; the top edge of the viewport is set from the ornate rule's
+  position (cy 0.628, pixel scan), not from a measured scroll.
+
 ### Fixed
 
 - **`pronounce_names.py --write` no longer dies on Windows reading the

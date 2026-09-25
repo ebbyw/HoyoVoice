@@ -94,6 +94,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 | System screens (version string, no UID — e.g. epilepsy warning) | Silent |
 | Quick Read book screens (Star Rail) | Read incrementally as you scroll; Back stops mid-sentence |
 | Readable articles (Genshin — "Investigative Report…") | Title then body by the narrator, incrementally as you scroll; Return stops mid-sentence |
+| Trial guides (Genshin — the paged character-trial panel: "Character Summary", "Elemental Skill"…) | Each page's title then its text by the narrator, as you page through; a long page is read as you scroll it |
 | Message / group-chat panels | Each message in its sender's cast voice, incrementally as you scroll; system notices ("… started sharing location") read by the narrator |
 | Phone Messages app (Star Rail — the regular character chats) | Each message in its sender's cast voice as it arrives, your own replies in yours; the conversation list, the delivery notices and the unsent reply buttons are all silent |
 | Info screens (Participant Details…) | Read top-to-bottom via the same reader |
@@ -231,7 +232,7 @@ Reading a screen means knowing where that game draws its nameplate, its dialogue
 | Game | Status |
 |---|---|
 | Honkai: Star Rail | Complete — dialogue, narration, lore cards, loading screens, overlays, Quick Read, info screens, chat panels (the in-story "Answer" panel and the phone's Messages app) |
-| Genshin Impact | **All screens** — dialogue, choice prompts, full-screen narration, loading-screen tips, readable articles and books opened from the inventory archive, and the Snezhnaya update's comms messages (left-anchored sender over the live HUD); all calibrated against real sessions. The archive books turned out to be the same reading panel the articles use — a 2026-08-09 session read a 60-page play script from it end to end |
+| Genshin Impact | **All screens** — dialogue, choice prompts, full-screen narration, loading-screen tips, readable articles and books opened from the inventory archive, character-trial guides, and the Snezhnaya update's comms messages (left-anchored sender over the live HUD); all calibrated against real sessions. The archive books turned out to be the same reading panel the articles use — a 2026-08-09 session read a 60-page play script from it end to end |
 
 `settings.game` picks a profile: `hsr`, `genshin`, or `auto` (the default), which starts on Star Rail and switches when a sustained run of frames carries chrome unique to the other game — Star Rail's `✕ Continue` hint, Genshin's bottom-right UID. The dashboard has the same control, and shows which profile is actually being read in auto mode.
 

@@ -939,7 +939,12 @@ _OCR_FIXES = [
 # decorative glyphs TTS would read aloud ("tilde") or spell out. Asterisks
 # are NOT in here: *cough* is a stage direction, handled at synthesis.
 # tilde variants: U+007E ~, U+02DC ˜, U+2248 ≈
-_STRIP_GLYPHS = re.compile(r"[~˜≈♪♡♥★☆]+")
+# ® and © are an inline ICON misread: Genshin's trial guide draws the
+# skill's icon mid-sentence ("uses her Elemental Skill [icon], she…") and
+# Vision returned it as "®" on 14 of the 20 frames of rec_20260925_122558
+# showing it — which misaki reads as "registered". Neither game writes
+# either sign.
+_STRIP_GLYPHS = re.compile(r"[~˜≈♪♡♥★☆®©]+")
 # *cough*, *sigh* — a sound the character makes, written out. Kept through
 # OCR repair with a canonical spelling so the TTS path can act on it.
 _STAGE_DIRECTION = re.compile(r"[*＊]\s*([^*＊]{1,24}?)\s*[*＊]")
@@ -2585,7 +2590,8 @@ def main():
     last_frame_change = time.monotonic()
     yield_event_id = None
     playing_speaker = None      # whose line is on the speakers right now
-    qr_seen, qr_absent = set(), 99      # Quick Read incremental-reading state
+    qr_absent = 99                      # Quick Read incremental-reading state
+    qr_pages = {}                       # reader page → rows already read on it
     qr_gone_t0 = 0.0                    # when the reader panel first vanished
     reader_prev = set()                 # last frame's panel rows (settle check)
     reader_closed = True                # panel-closed handling already done
@@ -2976,6 +2982,15 @@ def main():
                 qr_absent = 0
                 reader_closed = False
                 items = [(None, t) for t in qr] if qr is not None else chat
+                # Dedupe is per PAGE. A paged screen repeats itself from
+                # page to page — Genshin's trial guide titles three pages
+                # "Elemental Skill: I", "II", "III", which same_line
+                # scores 0.97 apart — so one set across the whole panel
+                # swallowed each later page's title as a repeat. Screens
+                # that aren't paged are all page None, one set as before.
+                qr_seen = qr_pages.setdefault(
+                    screens.reader_page(blocks) if qr is not None else None,
+                    set())
                 # A row is queued the instant it's seen, so a frame caught
                 # mid fade-in gets read verbatim — that is where "started
                 # shan ing (ocation" came from; the same text reads at 0.98+
@@ -3073,7 +3088,7 @@ def main():
                               f"{dropped} queued dropped]", flush=True)
                         speech.stop()
                 if qr_absent == 40:             # gone a while: forget progress
-                    qr_seen.clear()
+                    qr_pages.clear()
                     chat_senders.clear()
                     # Held until here ON PURPOSE, with the rest of the
                     # panel's state. Cleared on every frame that failed to
