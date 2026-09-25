@@ -62,7 +62,7 @@ class Genshin(Profile):
     # measurement history); "lore" is Star Rail's card, which Genshin
     # doesn't draw.
     SCREENS = frozenset({"dialogue", "narration", "loading", "quickread",
-                         "chat"})
+                         "infoscreen", "chat"})
 
     # Box chrome that is never speech. 'Confirm' and 'Auto' both sit inside
     # the dialogue band's reach; without this they can join a row.
@@ -349,10 +349,14 @@ class Genshin(Profile):
         block has to be single-glyph noise. 'Return to Title' and the like
         are still rejected.
         """
+        return self._is_hint(text, self.READABLE_HINT_WORDS)
+
+    def _is_hint(self, text, hint_words):
+        """One of `hint_words`, plus nothing but single-glyph noise."""
         words = self._WORD.findall(text)
-        return (any(w.lower() in self.READABLE_HINT_WORDS for w in words)
+        return (any(w.lower() in hint_words for w in words)
                 and all(len(w) <= 1 for w in words
-                        if w.lower() not in self.READABLE_HINT_WORDS))
+                        if w.lower() not in hint_words))
 
     def _readable_unclipped(self, block):
         """True if this row is drawn WHOLE — clear of both scroll rules."""
@@ -400,7 +404,17 @@ class Genshin(Profile):
         band = [b for b in pool
                 if in_region(b, self.READABLE_BODY)
                 and self._readable_unclipped(b)]
-        band.sort(key=lambda b: -(b["y"] + b["h"] / 2))
+        body, n_rows = self._column(band, self.READABLE_LEFT_EDGE)
+        if n_rows < self.READABLE_MIN_ROWS or not self._is_prose(body):
+            return None
+        return [self._heading(title)] + [b["text"] for b in body]
+
+    def _column(self, band, left_edge):
+        """(blocks, row count) of the rows in `band` that START on a column
+        edge, in reading order. Shared by the readable article and the
+        trial-guide panel: both are a prose column that other text sits
+        beside, and the left edge is what keeps that text out."""
+        band = sorted(band, key=lambda b: -(b["y"] + b["h"] / 2))
         rows, cur, top = [], [], None
         for b in band:
             cy = b["y"] + b["h"] / 2
@@ -412,24 +426,104 @@ class Genshin(Profile):
         body, n_rows = [], 0
         for row in rows:
             row.sort(key=lambda b: b["x"])
-            if (self.READABLE_LEFT_EDGE[0] <= row[0]["x"]
-                    <= self.READABLE_LEFT_EDGE[1]):
+            if left_edge[0] <= row[0]["x"] <= left_edge[1]:
                 body.extend(row)
                 n_rows += 1
-        if n_rows < self.READABLE_MIN_ROWS:
-            return None
+        return body, n_rows
+
+    def _is_prose(self, body):
+        """Prose, not a stat block: the same guards the narration cards use."""
         text = " ".join(b["text"] for b in body).strip()
-        # prose, not a stat block: the same guards the narration cards use
-        if (len(text) < self.NARRATION_MIN_CHARS
-                or len(text.split()) < self.NARRATION_MIN_WORDS
-                or sum(c.isdigit() for c in text)
-                > self.NARRATION_MAX_DIGIT_RATIO * len(text)):
-            return None
-        title.sort(key=lambda b: (-(b["y"] + b["h"] / 2), b["x"]))
+        return (len(text) >= self.NARRATION_MIN_CHARS
+                and len(text.split()) >= self.NARRATION_MIN_WORDS
+                and sum(c.isdigit() for c in text)
+                <= self.NARRATION_MAX_DIGIT_RATIO * len(text))
+
+    @staticmethod
+    def _heading(title):
+        """A title spoken as a heading rather than running into the first
+        line: a period appended when it carries no punctuation of its own."""
+        title = sorted(title, key=lambda b: (-(b["y"] + b["h"] / 2), b["x"]))
         head = split_camel(" ".join(b["text"] for b in title).strip())
         if head and head[-1] not in ".!?…:;,":
             head += "."
-        return [head] + [b["text"] for b in body]
+        return head
+
+    # --- Trial guide ----------------------------------------------------
+    # The paged guide a character trial opens with ("Character Summary",
+    # "Elemental Skill: I"…, pager "1/5"): a band across the screen with a
+    # looping clip on the left and a title over a prose column on the
+    # right, the pager and a 'Close' button centered under it. Nothing but
+    # the UID is in the hint strip, so is_menu stays out of it. Measured
+    # off rec_20260925_122558 (1080p, 107 frames at 2 fps, all five pages):
+    # title left edge x=0.5245-0.5247 cy 0.652-0.654; body rows share a
+    # left edge at x=0.523-0.527, pitch 0.027-0.030; pager '2/5' cx=0.499
+    # cy 0.284-0.287; '• Close' cx=0.501 cy 0.211-0.212.
+    #
+    # It reads through the incremental reader like an article, because the
+    # long pages SCROLL — but it is paged, and pages repeat each other
+    # ("Elemental Skill: I" / "II" / "III", each opening "When Vodyanitsa
+    # uses her Elemental Skill…"), which the reader's fuzzy dedupe would
+    # swallow as repeats. reader_page() gives it the pager, and live.py
+    # dedupes within a page only.
+    TUTORIAL_CLOSE = {"x": (0.44, 0.56), "y": (0.18, 0.24)}
+    TUTORIAL_PAGER = {"x": (0.45, 0.55), "y": (0.26, 0.31)}
+    _PAGER = re.compile(r"^(\d{1,2})\s*/\s*(\d{1,2})$")
+    TUTORIAL_TITLE = {"x": (0.50, 0.90), "y": (0.635, 0.68)}
+    TUTORIAL_LEFT_EDGE = (0.51, 0.54)
+    # The prose viewport, from the ornate rule under the title (a bright
+    # line at cy=0.628, pixel scan) down to where the text fades out. The
+    # long page (4/5) draws its eleventh row half under that fade — box
+    # bottom y=0.3359, h=0.016 against 0.021-0.028 for whole rows, read as
+    # "characters in the nartv." on 7 of 8 frames — so it is deferred until
+    # a scroll brings it up whole, like an article row under its rule. The
+    # lowest WHOLE row measured bottoms at y=0.3590; 0.347 is the midpoint.
+    # The top bound is the rule itself: the highest row's box tops out at
+    # 0.609, and a row reaching past 0.620 is being scrolled under it (not
+    # observed — the capture never scrolls — so this is the rule's position
+    # less the row's own clearance, not a measured scroll).
+    TUTORIAL_BODY = {"x": (0.50, 0.90), "y": (0.30, 0.628)}
+    TUTORIAL_CLIP = (0.347, 0.620)
+
+    def _tutorial_pager(self, conf):
+        """The pager text ('2/5') if the guide's own chrome is on screen:
+        the pager AND the Close button under it. Neither alone — 'Close' is
+        an ordinary button, and a lone 'N/M' is a stack count."""
+        if not any(in_region(b, self.TUTORIAL_CLOSE)
+                   and self._is_hint(b["text"], ("close",)) for b in conf):
+            return None
+        for b in conf:
+            m = self._PAGER.match(b["text"].strip())
+            if m and in_region(b, self.TUTORIAL_PAGER) \
+                    and 1 <= int(m.group(1)) <= int(m.group(2)):
+                return f"{int(m.group(1))}/{int(m.group(2))}"
+        return None
+
+    def classify_infoscreen(self, blocks):
+        """The trial guide's title and visible body rows, or None."""
+        if "infoscreen" not in self.SCREENS:
+            return None
+        if self._tutorial_pager(self.confident(blocks)) is None:
+            return None
+        pool = [b for b in blocks
+                if b["confidence"] >= self.READABLE_MIN_CONF
+                and b["text"].strip() not in self.IGNORE]
+        title = [b for b in pool
+                 if in_region(b, self.TUTORIAL_TITLE)
+                 and self.TUTORIAL_LEFT_EDGE[0] <= b["x"]
+                 <= self.TUTORIAL_LEFT_EDGE[1]]
+        if not title:
+            return None
+        lo, hi = self.TUTORIAL_CLIP
+        band = [b for b in pool if in_region(b, self.TUTORIAL_BODY)
+                and b["y"] >= lo and b["y"] + b["h"] <= hi]
+        body, n_rows = self._column(band, self.TUTORIAL_LEFT_EDGE)
+        if not n_rows or not self._is_prose(body):
+            return None
+        return [self._heading(title)] + [b["text"] for b in body]
+
+    def reader_page(self, blocks):
+        return self._tutorial_pager(self.confident(blocks))
 
     def _uid_corner(self, blocks):
         return any(self._UID.search(b["text"])
