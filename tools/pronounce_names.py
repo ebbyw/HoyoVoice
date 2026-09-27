@@ -285,7 +285,14 @@ FIXES = {
     "Xilonen": "Shee-loh-nen",
     # --- Star Rail: pinyin ---
     "Bailu": "Bye-loo",
-    "Feixiao": "Fay-shyow",
+    # Two chunks, "fey-shao", the second on the vowel of "cow". The
+    # old "Fay-shyow" is fˈAʃˈIW on misaki, and raw espeak-ng spells
+    # out what that is: fˈeɪʃˈaɪaʊ, "fay-shy-ow" — the y after the sh
+    # reads as a whole /aɪ/, the same glide "Jyow-" put into Jiaoqiu.
+    # "Fey-shao" is fˈAʃˈW on misaki and fˈeɪʃˈaʊ on espeak-ng.
+    # "-shau" and "-shao" are the same phones; "-show" is /oʊ/ (fˌAʃˈO,
+    # a stress split too), "-shaw" is /ɔ/, and "-shou" is ʃˈu, "shoe".
+    "Feixiao": "Fey-shao",
     # "Shoo-en" splits the stress on the second half (misaki fˈu ʃˌuˈɛn
     # against espeak fˈu ʃˈuˈɛn); "Shu-en" is fˈu ʃˈuˈɛn on both. Same
     # spelling as the "Xuan" entry below, which is the user's.

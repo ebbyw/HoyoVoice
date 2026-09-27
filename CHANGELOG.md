@@ -67,6 +67,19 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   daemon protocol is ASCII by construction (`json.dumps` escapes
   non-ASCII), so that one is left alone rather than changed blind.
 
+- **Feixiao is "fey-shao".** The respelling shipped as "Fay-shyow",
+  which misaki reads fˈAʃˈIW and espeak-ng fˈeɪʃˈaɪaʊ — "fay-shy-ow",
+  the y after the sh voiced as a whole extra /aɪ/, the same glide the
+  old "Jyow-" put into Jiaoqiu. "Fey-shao" is fˈAʃˈW on misaki and
+  fˈeɪʃˈaʊ on espeak-ng, the second chunk on the vowel of "cow".
+  "-shau" reads the same; "-show" is an /oʊ/ with the stress split
+  between the engines, "-shaw" an /ɔ/, and "-shou" is "shoe". This
+  lives in `voices.json` too, so on each machine:
+
+  ```sh
+  python tools/pronounce_names.py --write
+  ```
+
 - **Jiaoqiu is "jah-kyew".** The table read the Foxian's name
   "Jyow-chyoh", the Mandarin *jiāoqiū*; the user reads it as two
   chunks, a plain open ah and the letter Q. "Jah-kyew" is ʤˈɑkjˈu
