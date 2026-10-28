@@ -65,6 +65,46 @@ def _refresh_path_from_registry():
 
 
 _ffmpeg_path = {"p": None}
+# Hardware H.264 encoders worth trying for the recording, in order; the
+# first one that encodes a few synthetic frames on THIS machine is used
+# for the session, else libx264. Probed, not configured: a build of ffmpeg
+# lists every encoder it was compiled with, present hardware or not, and
+# the failure mode of guessing is a recording that never starts.
+HW_ENCODERS = ("h264_nvenc", "h264_qsv", "h264_amf")
+_record_encoder = {"c": None}
+
+
+def _encoder_works(ffmpeg, codec, run=subprocess.run):
+    """Encode eight black frames with `codec` to nowhere. Exit 0 means the
+    encoder initialised against real hardware; anything else (no device,
+    driver too old, ffmpeg built without it) means no."""
+    try:
+        p = run([ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
+                 "-f", "lavfi", "-i", "color=black:s=256x256:r=30,"
+                 "format=yuv420p", "-frames:v", "8",
+                 "-c:v", codec, "-f", "null", "-"],
+                capture_output=True, timeout=20, creationflags=NO_WINDOW)
+        return p.returncode == 0
+    except Exception:
+        return False
+
+
+def record_encoder(ffmpeg=None, run=subprocess.run):
+    """The H.264 encoder the recording uses, chosen once per process.
+
+    libx264 veryfast at 1080p30 is roughly a core of the Windows box for
+    the whole recording; a GPU encoder is free CPU, and the capture box
+    is usually a gaming PC with one. Each probe is one short ffmpeg run
+    (~1 s), paid on the first recording of the session, never at startup."""
+    if _record_encoder["c"] is None:
+        ffmpeg = ffmpeg or ensure_ffmpeg()
+        chosen = next((c for c in HW_ENCODERS
+                       if _encoder_works(ffmpeg, c, run)), "libx264")
+        _record_encoder["c"] = chosen
+        print(f"[recording] encoder: {chosen}"
+              + ("" if chosen != "libx264" else
+                 " (no working hardware encoder — CPU)"), flush=True)
+    return _record_encoder["c"]
 
 
 def ensure_ffmpeg():
@@ -211,9 +251,12 @@ class VideoCapture:
                "-map", "0:v", "-vf", f"fps={self.fps},scale=1920:-2",
                "-update", "1", "-atomic_writing", "1", "-y", str(self.frame)]
         if record_path:
+            codec = record_encoder()
             cmd += ["-map", "0:v", "-s", "1920x1080", "-r", "30",
-                    "-c:v", "libx264", "-preset", "veryfast", "-b:v", "6M",
-                    "-y", str(record_path)]
+                    "-c:v", codec]
+            if codec == "libx264":
+                cmd += ["-preset", "veryfast"]     # x264's own knob
+            cmd += ["-b:v", "6M", "-y", str(record_path)]
         # stdin pipe: 'q' is the only clean-shutdown channel on Windows
         self.proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
