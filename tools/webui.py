@@ -309,7 +309,7 @@ async function tick(){
     const m=s.metrics;
     document.getElementById('metrics').innerHTML=
       ['vad '+m.vad,'spoken '+m.spoken,'skipped(voiced) '+m.skipped_voiced,'yielded '+m.yielded,
-       'synth avg '+m.synth_avg_ms+'ms','ocr avg '+m.ocr_avg_ms+'ms',
+       'synth avg '+m.synth_avg_ms+'ms','synth saved '+m.synth_saved,'ocr avg '+m.ocr_avg_ms+'ms',
        'ocr saved '+m.ocr_skipped,'lost frames '+m.lost_frames,
        'fused reads '+m.fused_reads,'snapped '+m.snapped,
        'anchor avg '+m.anchor_avg_ms+'ms','roi crops '+m.roi_crops,

@@ -46,6 +46,24 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Changed
 
+- **A speaker the game usually voices no longer has every line
+  synthesized on speculation.** Synthesis has always run on a thread while
+  the VAD gate listens, so an unvoiced line plays the instant the verdict
+  lands — and for a speaker the game voices, that render is thrown away
+  almost every time: in the 2026-08-12 17:41 session 148 lines were skipped
+  as voiced against 141 spoken, and 25 of the last 30 of those skips were
+  soft-gate skips, each one a Kokoro call nobody heard (~200 ms of GPU on
+  the Mac; CPU time taken from the loop on the Windows box). Now a speaker
+  whose record arms the soft gate (`usually_voiced`: three or more voiced
+  lines, three in four of the recent window, or a declared `voiced` prior)
+  waits for the verdict and synthesizes only when the game left the line
+  silent — by the gate's own ratio at most a quarter of their lines, and
+  the price on each is one synth. Everyone else keeps the speculative
+  render, since for them an unvoiced line is the common case. The
+  dashboard's new `synth saved` pill counts the renders that never
+  happened; `tools/test_voiced_prior.py` pins that the decision follows
+  the soft gate exactly, including a declared `unvoiced` prior rendering
+  early whatever the record says.
 - **The OCR daemons read a region of the frame themselves; live.py no
   longer writes a crop file.** Since 0.11 a matched anchor had live.py cut
   the screen kind's ROI out of the frame as a grayscale PNG

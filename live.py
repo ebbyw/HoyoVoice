@@ -464,7 +464,7 @@ voice_import = {"state": "", "voice": None, "msg": ""}
 # start paused — resume from the dashboard (replays auto-resume)
 observing = {"on": os.environ.get("HOYOVOICE_AUTORESUME") == "1"}
 stats = {"spoken": 0, "skipped_voiced": 0, "yielded": 0, "always_voiced": 0,
-         "fused_reads": 0, "snapped": 0,
+         "fused_reads": 0, "snapped": 0, "synth_saved": 0,
          "synth_ms": deque(maxlen=100), "ocr_ms": deque(maxlen=200),
          "anchor_ms": deque(maxlen=200), "started": time.time()}
 
@@ -681,6 +681,8 @@ def metrics():
         "skipped_voiced": stats["skipped_voiced"],
         "yielded": stats["yielded"],
         "synth_avg_ms": int(sum(synth) / len(synth)) if synth else 0,
+        # voiced lines of usually-voiced speakers that were never rendered
+        "synth_saved": stats["synth_saved"],
         "ocr_avg_ms": int(sum(ocr) / len(ocr)) if ocr else 0,
         "ocr_skipped": gate.skips,
         "anchor_avg_ms": (int(sum(stats["anchor_ms"])
@@ -877,6 +879,25 @@ def usually_voiced(speaker):
         return prior == "voiced"
     v, s = voiced_history.get(speaker, (0, 0))
     return v >= SOFT_GATE_MIN_VOICED and v >= SOFT_GATE_RATIO * (v + s)
+
+
+def speculate_synth(speaker):
+    """Render a line's audio BEFORE the VAD verdict, or only after it?
+
+    Synthesis normally runs on a thread while the gate listens, so a line
+    that turns out unvoiced plays the moment the verdict lands. For a
+    speaker the game has consistently voiced that render is almost
+    always thrown away — 25 of the last 30 voiced skips in the 2026-08-12
+    17:41 session were soft-gate skips, each one a synth nobody heard —
+    and on the Windows box synthesis is CPU time taken from the loop. So
+    a usually-voiced speaker waits for the verdict and pays the synth
+    only on the rare line of theirs the game left silent: by the soft
+    gate's own definition (SOFT_GATE_RATIO) that is at most a quarter of
+    their lines, and the price on each is one synth, ~200 ms on the Mac.
+    Everyone else keeps the speculative render, because for them an
+    unvoiced line is the common case and the synth would have to happen
+    anyway."""
+    return not usually_voiced(speaker)
 
 
 def never_voiced(speaker):
@@ -3671,9 +3692,14 @@ def main():
                 continue
 
             # Speculative synthesis: render audio while the VAD gate listens;
-            # discarded if the line turns out to be voiced.
+            # discarded if the line turns out to be voiced. Not for a
+            # speaker the game usually voices — see speculate_synth().
             voice, base_speed = pick_voice(state["speaker"])
             spec = {}
+            # this speaker's VO has consistently been detected before, so
+            # weak evidence is enough to hold our tongue (the gate below)
+            # and the render can wait for the verdict (just here)
+            soft = usually_voiced(state["speaker"])
 
             def synth_into(spec=spec, text=speak_text, voice=voice,
                            base_speed=base_speed):
@@ -3685,8 +3711,10 @@ def main():
                                     speech.synth(text, voice, base_speed)))
                 except Exception as exc:
                     spec["error"] = f"{type(exc).__name__}: {exc}"
-            synth_thread = threading.Thread(target=synth_into)
-            synth_thread.start()
+            synth_thread = None
+            if speculate_synth(state["speaker"]):
+                synth_thread = threading.Thread(target=synth_into)
+                synth_thread.start()
 
             # --- VAD gate ---
             # if the audio stream is dead we can't gate — after a grace
@@ -3705,9 +3733,6 @@ def main():
             # before that belongs to the PREVIOUS line's VO, not this one
             gate_since = max(t_stable - VAD_LOOKBACK,
                              candidate_t0 - VAD_LINE_MARGIN)
-            # this speaker's VO has consistently been detected before, so
-            # weak evidence is enough to hold our tongue
-            soft = usually_voiced(state["speaker"])
             voiced = is_voiced(gate_since, soft)
             deadline = t_stable + VAD_WAIT
             while not voiced and time.monotonic() < deadline:
@@ -3759,7 +3784,14 @@ def main():
                           f"— speaking] mid+{mid_up:.1f}dB "
                           f"side+{side_up:.1f}dB peak={vad_peak:.2f} "
                           f"sustain={sustain:.2f}s", flush=True)
-            synth_thread.join()
+            if synth_thread is not None:
+                synth_thread.join()
+            elif voiced:
+                stats["synth_saved"] += 1       # the render nobody would hear
+            else:
+                # a usually-voiced speaker's line the game left silent:
+                # the one case that pays for waiting, and it pays once
+                synth_into()
             if ext_base and not voiced:
                 # the remainder continues a line we're still speaking —
                 # let the prefix finish instead of cutting it off
