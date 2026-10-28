@@ -48,11 +48,19 @@ Behavioral contracts:
         shrink and rejoins at the live edge).
 
     OcrDaemon.recognize(image_path, roi=None) -> blocks | None
-        None means the engine failed this call; the daemon must have
-        already begun respawning itself. .kill() for shutdown.
+        None means nothing was read: the file was not a complete image
+        (torn mid-rewrite — the daemon answers `null`), or the engine
+        died (the daemon must have already begun respawning itself).
+        Either way the frame is lost, not empty. .kill() for shutdown.
         `roi` ({"x": (x0, x1), "y": (y0, y1)}, Vision-normalized) reads
         only that region; the blocks come back normalized to the WHOLE
         image either way — no caller ever sees region-relative boxes.
+    OcrDaemon.supports_regions() -> bool
+        Whether the running daemon understands a region on the request
+        line (probe_regions() below). A caller with a region must ask
+        first: a daemon built before regions takes the whole line for a
+        path and answers [] to every region request — an invisible
+        failure, since an empty region read is a legitimate answer.
 
     Tts.synth(text, voice, speed) -> np.float32 array | None
     Tts.register_voice(voice_id, path)   # installed voice pack (a
@@ -69,6 +77,7 @@ Behavioral contracts:
     Player.stop() -> bool                      # True if it interrupted playback
     Player.playing -> bool
 """
+import json
 
 
 def request_line(image_path, roi=None):
@@ -83,3 +92,35 @@ def request_line(image_path, roi=None):
         (x0, x1), (y0, y1) = roi["x"], roi["y"]
         line += f"\t{x0:.6f} {y0:.6f} {x1 - x0:.6f} {y1 - y0:.6f}"
     return line + "\n"
+
+
+def probe_regions(daemon):
+    """Ask a freshly spawned daemon whether it understands regions, once.
+    An empty request line is the probe: a daemon that knows regions
+    answers [{"protocol": 2}], an older build answers [] (it tried to
+    open "" as a file). Cached on the daemon as `regions` until its next
+    spawn; a daemon that answers nothing at all (died) is left unprobed
+    so the next call asks again. The warning is printed once per spawn,
+    because the symptom otherwise — whole frames read, roi_crops stuck at
+    0 — looks like anchors never matching."""
+    if getattr(daemon, "regions", None) is not None:
+        return daemon.regions
+    try:
+        daemon.proc.stdin.write("\n")
+        raw = daemon.proc.stdout.readline()
+    except (BrokenPipeError, OSError):
+        raw = ""
+    if not raw:
+        return False
+    try:
+        reply = json.loads(raw)
+    except ValueError:
+        reply = []
+    ok = any(isinstance(b, dict) and b.get("protocol", 0) >= 2
+             for b in (reply or []))
+    daemon.regions = ok
+    if not ok:
+        print("[ocr] daemon predates region requests — reading whole "
+              "frames; rebuild it (setup.sh / setup.ps1) to restore ROI "
+              "reads", flush=True)
+    return ok

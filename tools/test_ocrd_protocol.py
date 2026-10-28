@@ -50,6 +50,20 @@ def test_parse_request_fails_safe_to_whole_frame():
     assert ocrd_win.parse_request("/x.jpg\t0.5 0.5 1 1\n") == (
         "/x.jpg", (0.5, 0.5, 0.5, 0.5))
     assert ocrd_win.parse_request("\n") == ("", None)
+    # nan and inf parse as floats and would clip to a PARTIAL region —
+    # min(1.0, x + nan) is 1.0 — which is not the whole frame
+    for bad in ("nan 0 1 1", "0 0 nan 1", "0 0 1 inf", "-inf 0 1 1"):
+        assert ocrd_win.parse_request(f"/x.jpg\t{bad}\n") == ("/x.jpg", None)
+
+
+def test_px_roi_inverts_roi_px():
+    # the remap must go through the rect that was CUT, which truncation
+    # moved off the requested floats by up to a pixel per edge
+    roi = (0.1234, 0.0567, 0.8, 0.66)
+    box = ocrd_win.roi_px(roi, 1920, 1080)
+    cut = ocrd_win.px_roi(box, 1920, 1080)
+    assert ocrd_win.roi_px(cut, 1920, 1080) == box
+    assert cut != roi and all(abs(a - b) < 1 / 1080 for a, b in zip(cut, roi))
 
 
 def test_roi_px_flips_y_and_refuses_degenerate():
@@ -108,6 +122,94 @@ def test_rapid_region_read_reports_full_frame_boxes():
     assert abs(whole[0]["y"] - (1.0 - 80 / 1080)) < 1e-9
     assert abs(part[0]["y"] - (1.0 - (367 + 80) / 1080)) < 1e-9
     assert part[0]["w"] == whole[0]["w"] and part[0]["h"] == whole[0]["h"]
+
+
+def test_unreadable_frame_is_none_not_empty():
+    # a file that is not a complete image is a LOST frame (None → the
+    # daemon answers null), never an empty region read ([])
+    seen = []
+    with tempfile.TemporaryDirectory() as tmp:
+        torn = Path(tmp) / "torn.jpg"
+        torn.write_bytes(_frame(tmp).read_bytes()[:-64])
+        eng = _engine(seen)
+        assert eng.recognize(torn) is None
+        assert eng.recognize(torn, (0.0, 0.0, 1.0, 0.66)) is None
+    assert seen == []                      # the engine never ran
+
+
+def test_safety_net_region_pass_is_gray_stack():
+    # the detector finds nothing on the flattened region → the safety net
+    # reruns on the ORIGINAL pixels of the region, as a gray stack (the
+    # crop file this replaced was a grayscale PNG); the whole-frame
+    # safety net still gets the original bytes
+    seen = []
+    e = ocrd_win.RapidEngine.__new__(ocrd_win.RapidEngine)
+    e.Image, e.np = Image, np
+    e.gray_ok, e.gray_trials, e._cls_kw = True, 3, {"use_cls": False}
+    e.mode, e.empty_run = "cpu", 0
+    calls = {"n": 0}
+
+    def ocr(img, **kw):
+        calls["n"] += 1
+        seen.append(img)
+        return ([], None) if calls["n"] % 2 else (
+            [([[0, 0], [10, 0], [10, 10], [0, 10]], "x", 0.9)], None)
+    e.ocr = ocr
+    with tempfile.TemporaryDirectory() as tmp:
+        path = _frame(tmp)
+        e.recognize(path, (0.0, 0.0, 1.0, 0.66))
+        e.recognize(path)
+    flat, raw, flat_whole, raw_whole = seen
+    assert raw.shape == (1080 - 367, 1920, 3)
+    assert np.array_equal(raw[..., 0], raw[..., 1])
+    assert np.array_equal(raw[..., 1], raw[..., 2])
+    assert isinstance(raw_whole, bytes)    # whole frame: bytes, as before
+
+
+def test_windows_flatten_falls_back_whole():
+    # the Windows engine's flatten failure hands back the ORIGINAL bytes
+    # and says so, so the caller must not remap region-normalized boxes
+    # that were in fact read from the whole frame
+    saved = ocrd_win._flatten_background
+    ocrd_win._flatten_background = lambda *a: (_ for _ in ()).throw(
+        RuntimeError("boom"))
+    try:
+        out = ocrd_win.WindowsEngine._flattened_png(b"\xff\xd8data", (0, 0, 8, 8))
+    finally:
+        ocrd_win._flatten_background = saved
+    assert out == (b"\xff\xd8data", False)
+    out = ocrd_win.WindowsEngine._flattened_png(
+        _png_bytes(), (0, 0, 8, 8))
+    assert out[1] is True and out[0][:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def _png_bytes():
+    buf = io.BytesIO()
+    Image.new("L", (32, 32), 0).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+class _FakeProc:
+    """A daemon's pipes: what it answers to the probe, and what it saw."""
+    def __init__(self, reply):
+        self.stdin, self.stdout = io.StringIO(), io.StringIO(reply)
+
+
+def test_probe_regions_tells_new_daemon_from_old(capsys=None):
+    from hv_platform.base import probe_regions
+
+    class D:
+        regions = None
+    d = D(); d.proc = _FakeProc('[{"protocol": 2}]\n')
+    assert probe_regions(d) is True and d.regions is True
+    assert d.proc.stdin.getvalue() == "\n"        # the probe is an empty line
+    d.proc = _FakeProc("should not be read\n")
+    assert probe_regions(d) is True                # cached: no second probe
+    assert d.proc.stdin.getvalue() == ""
+    old = D(); old.proc = _FakeProc("[]\n")         # a pre-region build
+    assert probe_regions(old) is False and old.regions is False
+    dead = D(); dead.proc = _FakeProc("")           # no answer: ask again later
+    assert probe_regions(dead) is False and dead.regions is None
 
 
 def test_flatten_crops_before_blur():

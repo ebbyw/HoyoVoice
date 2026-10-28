@@ -45,6 +45,17 @@ def directml_available():
         return False
 
 
+# Reply vocabulary, shared with tools/ocrd (the Apple Vision daemon):
+#   [ ... ]            blocks (possibly none: the image, or the region, held
+#                      no text)
+#   null               the file could not be read as a complete image (torn
+#                      mid-rewrite, missing) — a lost frame, not an empty one
+#   [{"protocol": 2}]  the answer to an empty request line: this daemon
+#                      understands regions. The client probes once; a daemon
+#                      built before regions answers [] and gets whole frames.
+PROTOCOL = [{"protocol": 2}]
+
+
 def out(blocks):
     print(json.dumps(blocks, sort_keys=True), flush=True)
 
@@ -53,6 +64,7 @@ def parse_request(line):
     """(path, roi) from one stdin line; roi is (x, y, w, h) Vision-
     normalized or None. A malformed or empty region reads the whole
     frame — the fail-safe direction, same as a torn frame."""
+    import math
     path, _, rest = line.rstrip("\r\n").partition("\t")
     roi = None
     if rest:
@@ -60,6 +72,8 @@ def parse_request(line):
             x, y, w, h = (float(v) for v in rest.split())
         except ValueError:
             return path, None
+        if not all(math.isfinite(v) for v in (x, y, w, h)):
+            return path, None       # nan clips to a partial region otherwise
         x0, y0 = max(0.0, x), max(0.0, y)
         x1, y1 = min(1.0, x + w), min(1.0, y + h)
         if x1 > x0 and y1 > y0:
@@ -71,7 +85,9 @@ def roi_px(roi, W, H):
     """A Vision-normalized region → (x0, y0, x1, y1) pixel rect with a
     TOP-LEFT origin (the y flip), or None when it would be degenerate
     (under 8px a side: nothing legible fits, and the engines choke on
-    near-empty input)."""
+    near-empty input). Both edges truncate — the same rule as tools/ocrd —
+    and px_roi() is its exact inverse, so a remap through the pair is
+    exact under the truncation."""
     if roi is None:
         return None
     x, y, w, h = roi
@@ -80,6 +96,14 @@ def roi_px(roi, W, H):
     if x1 - x0 < 8 or y1 - y0 < 8:
         return None
     return x0, y0, x1, y1
+
+
+def px_roi(box, W, H):
+    """The region a pixel rect actually covers, Vision-normalized — what a
+    box read from that rect must be remapped with (not the requested
+    floats, which the truncation in roi_px moved by up to a pixel)."""
+    x0, y0, x1, y1 = box
+    return (x0 / W, (H - y1) / H, (x1 - x0) / W, (y1 - y0) / H)
 
 
 def to_full(block, roi):
@@ -271,14 +295,16 @@ class RapidEngine:
                       flush=True)
         return self.ocr(img, **self._cls_kw)
 
-    def _color_crop(self, data, box):
-        """The unflattened region as the BGR ndarray the engine's own
-        bytes decoder would have produced for the whole frame — the
-        safety-net pass reads the original pixels, and with a region
-        there is no file of just those pixels to hand over."""
+    def _raw_crop(self, data, box):
+        """The unflattened region for the safety-net pass, as LUMINANCE
+        stacked to three channels: the crop file this replaced was a
+        grayscale PNG, so that pass has only ever seen gray for a region
+        read, and the thresholds were measured with region reads on. (A
+        whole-frame safety-net pass still gets the original colour bytes,
+        exactly as before.)"""
         with self.Image.open(io.BytesIO(data)) as img:
-            rgb = self.np.asarray(img.convert("RGB").crop(box))
-        return self.np.ascontiguousarray(rgb[:, :, ::-1])
+            g = self.np.asarray(img.convert("L").crop(box))
+        return self.np.stack([g] * 3, axis=-1)
 
     def _detect(self, flat):
         """One detector pass over the flattened frame — through the 2-D
@@ -321,7 +347,7 @@ class RapidEngine:
     def recognize(self, path, roi=None):
         data = read_frame_bytes(path)
         if data is None:
-            return []
+            return None             # not a complete image: a lost frame
         with self.Image.open(io.BytesIO(data)) as img:
             W, H = img.size
         box = roi_px(roi, W, H)
@@ -343,7 +369,7 @@ class RapidEngine:
             # gate's MAX_SKIP_RUN.
             if self.empty_run % 4 == 0:
                 result, _ = self._call(data if box is None
-                                       else self._color_crop(data, box))
+                                       else self._raw_crop(data, box))
             self.empty_run = 0 if result else self.empty_run + 1
         else:
             self.empty_run = 0
@@ -429,12 +455,13 @@ class WindowsEngine:
         img = self.imaging
         data = read_frame_bytes(path)
         if data is None:
-            return []
-        box = None
+            return None             # not a complete image: a lost frame
+        box, size = None, None
         if roi is not None:
             from PIL import Image
             with Image.open(io.BytesIO(data)) as im:
-                box = roi_px(roi, *im.size)
+                size = im.size
+                box = roi_px(roi, *size)
         data, cropped = self._flattened_png(data, box)
         stream = await self._decode_stream(data)
         decoder = await img.BitmapDecoder.create_async(stream)
@@ -474,8 +501,12 @@ class WindowsEngine:
                 "h": (y1 - y0) / H,
             })
         # the bitmap was the region, so its boxes are region-normalized
-        # until this remap; the whole-frame fallback above skips it
-        return [to_full(b, roi) for b in blocks] if cropped else blocks
+        # until this remap — through the pixel rect that was cut, not the
+        # requested floats; the whole-frame fallback above skips it
+        if not cropped:
+            return blocks
+        cut = px_roi(box, *size)
+        return [to_full(b, cut) for b in blocks]
 
     def recognize(self, path, roi=None):
         return self.loop.run_until_complete(self._run(path, roi))
@@ -554,7 +585,7 @@ def main():
     for line in sys.stdin:
         path, roi = parse_request(line)
         if not path:
-            out([])
+            out(PROTOCOL)           # the client's one-time capability probe
             continue
         try:
             out(engine.recognize(path, roi))

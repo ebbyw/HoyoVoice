@@ -68,11 +68,21 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   the same boxes; the daemon's RSS, which is Vision's per-request retention
   and not under our control, ranged 292–727 MB across replays of either
   path). A malformed or degenerate region reads the whole frame, the
-  fail-safe direction, and `tools/test_ocrd_protocol.py` pins the line, the
-  parse, the y flip and the remap. `tools/ocrd` must be rebuilt
-  (`setup.sh`, or `swiftc -O tools/ocrd.swift -o tools/ocrd`) — an old
-  binary ignores the region and reads the whole frame, which is what the
-  app did before anchors shipped.
+  fail-safe direction; a file that is not a complete image now comes back
+  as `null` from either daemon and is counted a lost frame whether or not
+  a region was asked for (the crop path cut only from verified-complete
+  bytes, so an unreadable region read used to be invisible), and each
+  daemon remaps through the pixel rect it actually cut, so boxes are
+  exact under the edge truncation as the crop path's were.
+  `tools/test_ocrd_protocol.py` pins the line, the parse, the y flip and
+  the Windows remap; the Vision remap was measured by hand. `tools/ocrd`
+  must be rebuilt (`setup.sh`, or `swiftc -O tools/ocrd.swift -o
+  tools/ocrd`): a daemon built before this takes the whole request line
+  for a path and would answer `[]` to every region read — an empty region
+  is a legitimate answer, so nothing downstream would notice — which is
+  why the client now probes the daemon once (an empty request line;
+  `[{"protocol": 2}]` back means regions) and reads whole frames, with a
+  warning in the log, from one that doesn't answer it.
 
 ### Fixed
 
@@ -86,7 +96,8 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   the change gate's bright-pixel count by 25% on the same frame (61331 vs
   76988 at BRIGHT=160). Live capture is unaffected: AVFoundation hands over
   untagged raw frames, which the same encoder accepts (verified with raw
-  uyvy422 input through the exact capture flags).
+  uyvy422 input through the exact capture flags). `tools/sweep_frames.py`
+  extracts the same way and got the same fix.
 - **`pronounce_names.py --write` no longer dies on Windows reading the
   config it is about to update.** Python opens a text file in the
   locale's encoding — UTF-8 on macOS, cp1252 on the Windows box — and

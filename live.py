@@ -514,10 +514,11 @@ def match_anchors(profile_name, gray=None):
     (gate.last_gray) — the identical draft decode this matcher needs, so
     passing it saves a second file read + decode per fresh-OCR frame.
     When the gate didn't decode (disabled, skip-run break), the caller
-    reads the bytes ONCE and decodes here from those — so the anchors,
-    the bootstrap and the ROI crop always judge one frame, not three
-    reads straddling ffmpeg rewrites. None with no bytes (torn frame)
-    matches nothing, which is the full-frame fallback."""
+    decodes the file ONCE and the anchors and the bootstrap judge that
+    same decode. The daemon then reads the file itself for the OCR: the
+    same frame, or under ffmpeg's atomic rename the next one, never a
+    torn one. None (torn frame) matches nothing, which is the full-frame
+    fallback."""
     pack = anchor_pack(profile_name)
     if not pack.anchors:
         return None
@@ -2861,7 +2862,8 @@ def main():
                 # 1.3MB of disk per fresh frame at 1080p) and a PNG
                 # decode in the daemon, for the same Vision/RapidOCR
                 # call on the same pixels.
-                if roi is not None and anchor_state["roi"]:
+                if (roi is not None and anchor_state["roi"]
+                        and ocr.supports_regions()):
                     if anchor_state["crop_run"] >= ANCHOR_MAX_CROP_RUN:
                         # deferred long enough — read the whole frame so
                         # text outside the region can't stay invisible,
@@ -2873,7 +2875,13 @@ def main():
                     roi = None
                 t0 = time.time()
                 blocks = ocr.recognize(FRAME, roi)
-                if blocks is None:      # daemon died; it respawned itself
+                if blocks is None:
+                    # nothing was read: the file was not a complete image
+                    # (torn mid-rewrite — the daemon says so now, region
+                    # or not), or the daemon died and respawned itself.
+                    # A lost frame either way, and the one case a region
+                    # read must NOT pass off as an empty region below.
+                    lost_frames["n"] += 1
                     continue
                 stats["ocr_ms"].append(int((time.time() - t0) * 1000))
                 was_crop = roi is not None
@@ -2891,8 +2899,8 @@ def main():
                 # the screen is empty. Counting it as evidence made reader
                 # panels look closed while they were plainly on screen —
                 # which stopped the read and dropped its queue.
-                # A REGION read is the exception: the region was chosen
-                # from a frame whose chrome matched, so [] is a genuinely
+                # A REGION read is the exception: an unreadable frame
+                # came back as None above, so [] here is a genuinely
                 # empty ROI (a fade, dialogue chrome up before text) — not
                 # a lost frame, but still no evidence to act on.
                 if not was_crop:

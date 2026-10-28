@@ -10,7 +10,7 @@ import signal
 import subprocess
 from pathlib import Path
 
-from hv_platform.base import request_line
+from hv_platform.base import probe_regions, request_line
 
 
 def list_devices():
@@ -130,6 +130,7 @@ class OcrDaemon:
         self._spawn()
 
     def _spawn(self):
+        self.regions = None             # re-probed after every spawn
         self.proc = subprocess.Popen(
             [str(self.root / "tools" / "ocrd"), str(self.custom_words)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -149,7 +150,10 @@ class OcrDaemon:
             self.kill()
             self._spawn()
             return None
-        return json.loads(raw)
+        return json.loads(raw)      # `null` (unreadable frame) → None
+
+    def supports_regions(self):
+        return probe_regions(self)
 
     def kill(self):
         if self.proc is not None and self.proc.poll() is None:

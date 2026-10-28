@@ -20,7 +20,7 @@ import time
 from glob import glob
 from pathlib import Path
 
-from hv_platform.base import request_line
+from hv_platform.base import probe_regions, request_line
 
 SAMPLE_RATE = 48000
 CHANNELS = 2
@@ -430,6 +430,7 @@ class OcrDaemon:
         self._spawn()
 
     def _spawn(self):
+        self.regions = None             # re-probed after every spawn
         self.proc = subprocess.Popen(
             [sys.executable, str(self.root / "tools" / "ocrd_win.py"),
              str(self.custom_words)],
@@ -447,7 +448,10 @@ class OcrDaemon:
             self.kill()
             self._spawn()
             return None
-        return json.loads(raw)
+        return json.loads(raw)      # `null` (unreadable frame) → None
+
+    def supports_regions(self):
+        return probe_regions(self)
 
     def kill(self):
         if self.proc is not None and self.proc.poll() is None:

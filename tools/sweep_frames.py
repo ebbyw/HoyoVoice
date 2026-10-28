@@ -122,7 +122,10 @@ def cmd_ocr(args):
         tmp = Path(tempfile.mkdtemp(prefix="sweep_frames_"))
         subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error",
                         *cut, "-i", str(src),
-                        "-vf", f"fps={args.fps},scale=1920:-2", "-q:v", "3",
+                        # full range explicitly: ffmpeg 9 refuses
+                        # limited-range input to mjpeg (see tools/replay.py)
+                        "-vf", f"fps={args.fps},scale=1920:-2:out_range=pc",
+                        "-color_range", "pc", "-q:v", "3",
                         str(tmp / f"{src.stem}_%05d.jpg"), "-y"], check=True)
         jpgs = sorted(tmp.glob("*.jpg"))
     todo = [j for j in jpgs if not (out / f"{j.stem}.json").exists()]

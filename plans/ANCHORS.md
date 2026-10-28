@@ -105,7 +105,17 @@ conversion once, in `tools/anchors.py`, and nowhere else.
   pixels (~10 ms and 7.7 MB/s of disk at 6 fps). `hv_platform/base.py
   request_line()` builds the line; `tools/test_ocrd_protocol.py` pins the
   parse, the y flip and the remap. A daemon that gets a malformed region
-  reads the whole frame — the fail-safe direction, like a torn frame.
+  reads the whole frame — the fail-safe direction. A file that is not a
+  complete image gets `null` back (a lost frame; the old `[]` could not be
+  told from an empty region), and each daemon remaps through the pixel
+  rect it actually cut (both edges truncated, `roi_px`/`px_roi`), so the
+  remap is exact under the truncation as `crop_frame()`'s was.
+- **A daemon built before regions must not be sent one.** It takes the
+  whole line for a path and answers `[]` — indistinguishable from an empty
+  region. The client probes once per spawn with an empty request line
+  (`hv_platform/base.py probe_regions()`): `[{"protocol": 2}]` means
+  regions, `[]` means a pre-region build, which then gets whole frames and
+  a `[ocr] daemon predates region requests` line in the log.
 - **Resolution is an assumption, not a fact.** Everything is calibrated at
   1920×1080 (replay re-scales to 1920; capture negotiates it). Templates are
   cut from half-scale decodes of 1080p frames. anchors.py compares the
