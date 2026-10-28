@@ -10,6 +10,8 @@ import signal
 import subprocess
 from pathlib import Path
 
+from hv_platform.base import request_line
+
 
 def list_devices():
     """Enumerate AVFoundation video + audio device names."""
@@ -109,7 +111,8 @@ class AudioCapture:
 
 
 class OcrDaemon:
-    """Apple Vision daemon (tools/ocrd): image path in, JSON blocks out."""
+    """Apple Vision daemon (tools/ocrd): image path (+ optional region) in,
+    JSON blocks out."""
 
     # Vision reads the custom-words lexicon at spawn, so a casting change
     # can be picked up by restarting the daemon (cheap here — ocrd starts
@@ -132,9 +135,12 @@ class OcrDaemon:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             text=True, bufsize=1)
 
-    def recognize(self, image_path):
+    def recognize(self, image_path, roi=None):
+        """Blocks for the image, or for `roi` of it — {"x": (x0, x1),
+        "y": (y0, y1)} in Vision-normalized space — with coordinates
+        always normalized to the WHOLE image (the daemon remaps)."""
         try:
-            self.proc.stdin.write(str(image_path) + "\n")
+            self.proc.stdin.write(request_line(image_path, roi))
             raw = self.proc.stdout.readline()
         except (BrokenPipeError, OSError):
             raw = ""

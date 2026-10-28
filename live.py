@@ -35,8 +35,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from profiles import (ProfileSelector, narration_self_certain,  # noqa: E402
                       split_camel)
 from change_gate import ChangeGate  # noqa: E402
-from anchors import (AnchorPack, crop_frame, decode_half,  # noqa: E402
-                     remap_box)
+from anchors import AnchorPack, decode_half  # noqa: E402
 from casting_filter import canonical_quotes, junk_speaker  # noqa: E402
 from pronounce_names import NPC_GENDERS  # noqa: E402
 from textmap import TextMap  # noqa: E402
@@ -491,7 +490,6 @@ ANCHOR_MAX_CROP_RUN = 12
 # screen keeps appending after it fires, and the vote only wants the line
 # as currently drawn. One constant, two construction sites.
 CANDIDATE_VARIANTS_MAX = 60
-CROP = FRAME.parent / "live_crop.png"
 
 
 def anchor_pack(profile_name):
@@ -2839,49 +2837,49 @@ def main():
                 # classify — which is right: during a game switch the old
                 # game's chrome stops matching, so the frames the switch
                 # decision needs are read whole.
-                # One read, one decode, shared by the gate, the anchors,
-                # the bootstrap and the crop: when the gate decoded, its
-                # bytes/gray are used; when it didn't (disabled, skip-run
-                # break), the file is read ONCE here so all of them still
-                # judge the same frame instead of three reads straddling
-                # ffmpeg rewrites.
-                frame_bytes, frame_gray = gate.last_bytes, gate.last_gray
+                # One decode, shared by the gate, the anchors and the
+                # bootstrap: when the gate decoded, its gray is used; when
+                # it didn't (disabled, skip-run break), the file is decoded
+                # ONCE here so they still judge the same frame. The daemon
+                # reads the file itself for the OCR, a few ms later; with
+                # ffmpeg's atomic rename that is a whole frame, at worst
+                # the next one, never a torn one.
+                frame_gray = gate.last_gray
                 if frame_gray is None and anchor_state["enabled"]:
                     try:
-                        frame_bytes = FRAME.read_bytes()
-                        frame_gray = decode_half(frame_bytes)
+                        frame_gray = decode_half(FRAME)
                     except Exception:
-                        frame_bytes = frame_gray = None
+                        frame_gray = None
                 roi = (match_anchors(game.profile.name, frame_gray)
                        if anchor_state["enabled"] else None)
-                crop = None
-                # the timer starts BEFORE the crop: crop_frame is a full
-                # decode + PNG encode paid to make the OCR call cheaper, and
-                # the Windows on-vs-off ocr_ms comparison that gates
-                # anchor_roi defaulting on is meaningless if the cost side
-                # of the trade is invisible to the stat
-                t0 = time.time()
+                # The region rides on the request line and the daemon
+                # reads only that part of the frame, remapping its boxes
+                # to the whole frame before answering — so nothing
+                # downstream ever sees region-relative coordinates, and
+                # the frame is decoded once, in one process. This used to
+                # be a full decode + grayscale PNG write here (~10ms and
+                # 1.3MB of disk per fresh frame at 1080p) and a PNG
+                # decode in the daemon, for the same Vision/RapidOCR
+                # call on the same pixels.
                 if roi is not None and anchor_state["roi"]:
                     if anchor_state["crop_run"] >= ANCHOR_MAX_CROP_RUN:
                         # deferred long enough — read the whole frame so
-                        # text outside the crop can't stay invisible, and
-                        # re-arm (the change gate's MAX_SKIP_RUN medicine)
+                        # text outside the region can't stay invisible,
+                        # and re-arm (the change gate's MAX_SKIP_RUN
+                        # medicine)
                         anchor_state["crop_run"] = 0
-                    else:
-                        crop = crop_frame(FRAME, roi, CROP,
-                                          data=frame_bytes)
-                blocks = ocr.recognize(CROP if crop else FRAME)
+                        roi = None
+                else:
+                    roi = None
+                t0 = time.time()
+                blocks = ocr.recognize(FRAME, roi)
                 if blocks is None:      # daemon died; it respawned itself
                     continue
                 stats["ocr_ms"].append(int((time.time() - t0) * 1000))
-                was_crop = crop is not None
+                was_crop = roi is not None
                 if was_crop:
                     anchor_state["crop_run"] += 1
                     anchor_state["crops"] += 1
-                    # the daemon normalizes to the image it was handed —
-                    # remap here, at the call boundary, so NOTHING
-                    # downstream ever sees crop-normalized coordinates
-                    blocks = [remap_box(b, crop) for b in blocks]
                 else:
                     anchor_state["crop_run"] = 0
                 latest_ocr["blocks"] = blocks
@@ -2893,10 +2891,10 @@ def main():
                 # the screen is empty. Counting it as evidence made reader
                 # panels look closed while they were plainly on screen —
                 # which stopped the read and dropped its queue.
-                # A CROPPED read is the exception: the crop was cut from a
-                # verified-complete frame, so [] is a genuinely empty ROI
-                # (a fade, dialogue chrome up before text) — not a lost
-                # frame, but still no evidence to act on.
+                # A REGION read is the exception: the region was chosen
+                # from a frame whose chrome matched, so [] is a genuinely
+                # empty ROI (a fade, dialogue chrome up before text) — not
+                # a lost frame, but still no evidence to act on.
                 if not was_crop:
                     lost_frames["n"] += 1
                 continue

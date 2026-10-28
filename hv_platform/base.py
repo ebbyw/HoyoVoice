@@ -47,9 +47,12 @@ Behavioral contracts:
         restart() truncates pcm_path (the VAD tail-reader detects the
         shrink and rejoins at the live edge).
 
-    OcrDaemon.recognize(image_path) -> blocks | None
+    OcrDaemon.recognize(image_path, roi=None) -> blocks | None
         None means the engine failed this call; the daemon must have
         already begun respawning itself. .kill() for shutdown.
+        `roi` ({"x": (x0, x1), "y": (y0, y1)}, Vision-normalized) reads
+        only that region; the blocks come back normalized to the WHOLE
+        image either way — no caller ever sees region-relative boxes.
 
     Tts.synth(text, voice, speed) -> np.float32 array | None
     Tts.register_voice(voice_id, path)   # installed voice pack (a
@@ -66,3 +69,17 @@ Behavioral contracts:
     Player.stop() -> bool                      # True if it interrupted playback
     Player.playing -> bool
 """
+
+
+def request_line(image_path, roi=None):
+    """One OCR daemon request: the image path, plus a TAB and "x y w h"
+    (Vision-normalized, bottom-left origin) when only that region should
+    be read. tools/ocrd and tools/ocrd_win.py parse exactly this line and
+    answer with boxes normalized to the whole image either way. TAB, not
+    space, because a path may contain spaces; `roi` is the
+    {"x": (x0, x1), "y": (y0, y1)} region dict tools/anchors.py produces."""
+    line = str(image_path)
+    if roi is not None:
+        (x0, x1), (y0, y1) = roi["x"], roi["y"]
+        line += f"\t{x0:.6f} {y0:.6f} {x1 - x0:.6f} {y1 - y0:.6f}"
+    return line + "\n"

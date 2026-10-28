@@ -1,5 +1,14 @@
-// HoyoVoice OCR daemon — reads an image path per line on stdin,
+// HoyoVoice OCR daemon — reads one request per line on stdin,
 // emits one single-line JSON array of {text, confidence, x, y, w, h} per line on stdout.
+//
+// A request is an image path, optionally followed by a TAB and a region of
+// interest "x y w h" — normalized 0-1, origin bottom-left, the same space
+// the boxes come back in. With a region, Vision recognizes only that part
+// of the image and the boxes are still reported against the WHOLE image,
+// so the caller never sees region-relative coordinates. This replaced the
+// caller cutting the region to a PNG and handing that path over: one
+// decode in one process instead of a full decode + PNG write + PNG decode
+// across two.
 // Compile: swiftc -O ocrd.swift -o ocrd
 
 import Foundation
@@ -59,15 +68,50 @@ let RECYCLE_BYTES: UInt64 = 1_500_000_000
 //   * autoreleasepool per frame drains the autoreleased ImageIO/Vision
 //     objects a top-level `while` loop otherwise accumulates.
 while let line = readLine(strippingNewline: true) {
+    // "<path>" or "<path>\t<x> <y> <w> <h>"; a malformed region reads the
+    // whole image — the fail-safe direction, same as a torn frame
+    let parts = line.split(separator: "\t", maxSplits: 1,
+                           omittingEmptySubsequences: false)
+    let path = String(parts[0])
+    var roi: CGRect? = nil
+    if parts.count == 2 {
+        let n = parts[1].split(separator: " ").compactMap { Double($0) }
+        if n.count == 4 && n[2] > 0 && n[3] > 0 {
+            roi = CGRect(x: n[0], y: n[1], width: n[2], height: n[3])
+                .intersection(CGRect(x: 0, y: 0, width: 1, height: 1))
+            if roi!.isEmpty { roi = nil }
+        }
+    }
     autoreleasepool {
-        let url = URL(fileURLWithPath: line) as CFURL
+        let url = URL(fileURLWithPath: path) as CFURL
         let opts = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let src = CGImageSourceCreateWithURL(url, opts),
-              let cg = CGImageSourceCreateImageAtIndex(src, 0, opts) else {
+              let full = CGImageSourceCreateImageAtIndex(src, 0, opts) else {
             // unreadable file (torn mid-rewrite): [] is a lost frame in
             // live.py, same as before
             print("[]")
             return
+        }
+        // Cut the region out of the decoded image and hand Vision only
+        // that (regionOfInterest on the whole image gives the same boxes,
+        // relative to the region either way — remapped below — and the
+        // same per-request memory retention; neither was measurably
+        // lighter, so the cut is just the smaller input). cropping(to:)
+        // is a view, not a copy, and takes a top-left pixel rect: the y
+        // flip from the bottom-left region.
+        var cg = full
+        if let r = roi {
+            let W = CGFloat(full.width), H = CGFloat(full.height)
+            let px = CGRect(x: (r.minX * W).rounded(.down),
+                            y: ((1.0 - r.maxY) * H).rounded(.down),
+                            width: (r.width * W).rounded(.up),
+                            height: (r.height * H).rounded(.up))
+                .intersection(CGRect(x: 0, y: 0, width: W, height: H))
+            if px.width >= 8, px.height >= 8, let c = full.cropping(to: px) {
+                cg = c
+            } else {
+                roi = nil            // degenerate region: read it whole
+            }
         }
         let req = VNRecognizeTextRequest()
         req.recognitionLevel = .accurate
@@ -90,7 +134,17 @@ while let line = readLine(strippingNewline: true) {
         var results: [[String: Any]] = []
         for obs in req.results ?? [] {
             guard let cand = obs.topCandidates(1).first else { continue }
-            let b = obs.boundingBox
+            var b = obs.boundingBox
+            if let r = roi {
+                // boxes are relative to the crop (measured: a row at
+                // y=0.600 of the frame came back at 0.914 under a
+                // 0.66-high region); map back so the caller only ever
+                // sees whole-frame coordinates
+                b = CGRect(x: r.minX + b.minX * r.width,
+                           y: r.minY + b.minY * r.height,
+                           width: b.width * r.width,
+                           height: b.height * r.height)
+            }
             results.append([
                 "text": cand.string,
                 "confidence": Double(cand.confidence),

@@ -20,6 +20,8 @@ import time
 from glob import glob
 from pathlib import Path
 
+from hv_platform.base import request_line
+
 SAMPLE_RATE = 48000
 CHANNELS = 2
 # hide child console windows (ffmpeg, OCR daemon) — without this, every
@@ -434,9 +436,9 @@ class OcrDaemon:
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             text=True, bufsize=1, creationflags=NO_WINDOW)
 
-    def recognize(self, image_path):
+    def recognize(self, image_path, roi=None):
         try:
-            self.proc.stdin.write(str(image_path) + "\n")
+            self.proc.stdin.write(request_line(image_path, roi))
             raw = self.proc.stdout.readline()
         except (BrokenPipeError, OSError):
             raw = ""
