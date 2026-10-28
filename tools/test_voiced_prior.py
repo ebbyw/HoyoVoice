@@ -16,7 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import live                                                      # noqa: E402
 from live import (PRIOR_WINDOW, SOFT_GATE_MIN_VOICED,            # noqa: E402
                   FIRM_GATE_MIN_SPOKEN, model_deaf, never_voiced,
-                  record_voiced, seed_window, usually_voiced)
+                  record_voiced, seed_window, speculate_synth,
+                  usually_voiced)
 
 fails = []
 
@@ -112,6 +113,26 @@ reset()
 seed_window("Fresh", 0, 0)
 check(False, never_voiced("Fresh"), "an empty tally seeds an empty window")
 check([0, 0], live.voiced_history["Fresh"], "...and empty counts")
+
+# --- speculative synthesis follows the soft gate ---------------------------
+# A render before the verdict is only worth paying for when the verdict is
+# usually "unvoiced"; the speakers the game voices wait and pay once, on
+# the rare line it left silent.
+reset()
+check(True, speculate_synth("nobody"), "no history: render while the gate listens")
+feed("Freminet", "vvv")
+check(True, usually_voiced("Freminet"), "three voiced lines arm the soft gate")
+check(False, speculate_synth("Freminet"),
+      "...and from then on the render waits for the verdict")
+feed("Freminet", "sss")                # 3 of 6 voiced: under the 0.75 ratio
+check(True, speculate_synth("Freminet"),
+      "a speaker the game stopped voicing speculates again")
+reset(Sigewinne="voiced")
+check(False, speculate_synth("Sigewinne"), "a declared voiced prior waits too")
+reset(Paimon="unvoiced")
+feed("Paimon", "v" * PRIOR_WINDOW)
+check(True, speculate_synth("Paimon"),
+      "a declared unvoiced prior renders early whatever the record says")
 
 # --- named priors: the record is not the only way in ------------------------
 # The whole prior above is derived from the VAD's verdicts, so a character
