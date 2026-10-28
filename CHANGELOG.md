@@ -46,6 +46,20 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Changed
 
+- **Windows recordings try a GPU encoder before libx264.** libx264
+  veryfast at 1080p30 is a software encode for the length of a recording —
+  on the order of a core on a desktop CPU, not measured on the Windows box
+  itself; for scale, the Mac's hardware `h264_videotoolbox` path adds a
+  tenth of a core to the capture chain (3.0 s against 2.2 s of CPU per
+  10 s of MJPEG input, measured here). On the first recording of a session `h264_nvenc`, `h264_qsv` and
+  `h264_amf` are each tried once against the real hardware — eight
+  synthetic frames encoded to nowhere, about a second each — and the first
+  that works is used; none working means libx264 exactly as before.
+  Probed rather than configured because an ffmpeg build lists every
+  encoder it was compiled with whether or not the GPU exists, and a
+  guessed encoder is a recording that never starts. The console says which
+  was chosen (`[recording] encoder: …`); `tools/test_record_encoder.py`
+  pins the order, the fallback and that the choice is made once.
 - **The OCR daemons read a region of the frame themselves; live.py no
   longer writes a crop file.** Since 0.11 a matched anchor had live.py cut
   the screen kind's ROI out of the frame as a grayscale PNG
