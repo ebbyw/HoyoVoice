@@ -13,9 +13,12 @@ Presence of an anchor is strong evidence; absence is weak (motion blur or
 a fade dents a score for a frame) — anchors may gate COST, never speech.
 Phase (a) made matches log-only evidence; phase (b) adds the cost gate:
 an anchor can carry an `roi` — the union of every band its screen kind
-needs — and live.py (behind settings.anchor_roi) then OCRs only that
-crop, remapping the returned boxes to full-frame coordinates before
-anything downstream sees them. No match → full frame, today's behavior.
+needs — and live.py (behind settings.anchor_roi) then asks the OCR daemon
+for only that region, which the daemon reads and answers in full-frame
+coordinates (hv_platform/base.py request_line). No match → full frame,
+today's behavior. crop_frame() and remap_box() below are what live.py
+did before the daemons took the region; tools/ocr_bench.py still uses
+them to A/B crops and scales offline.
 
 Spec file, one per game (tools/profiles/anchors/<game>.json):
 

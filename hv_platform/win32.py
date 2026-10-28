@@ -20,6 +20,8 @@ import time
 from glob import glob
 from pathlib import Path
 
+from hv_platform.base import probe_regions, request_line
+
 SAMPLE_RATE = 48000
 CHANNELS = 2
 # hide child console windows (ffmpeg, OCR daemon) — without this, every
@@ -428,15 +430,16 @@ class OcrDaemon:
         self._spawn()
 
     def _spawn(self):
+        self.regions = None             # re-probed after every spawn
         self.proc = subprocess.Popen(
             [sys.executable, str(self.root / "tools" / "ocrd_win.py"),
              str(self.custom_words)],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             text=True, bufsize=1, creationflags=NO_WINDOW)
 
-    def recognize(self, image_path):
+    def recognize(self, image_path, roi=None):
         try:
-            self.proc.stdin.write(str(image_path) + "\n")
+            self.proc.stdin.write(request_line(image_path, roi))
             raw = self.proc.stdout.readline()
         except (BrokenPipeError, OSError):
             raw = ""
@@ -445,7 +448,10 @@ class OcrDaemon:
             self.kill()
             self._spawn()
             return None
-        return json.loads(raw)
+        return json.loads(raw)      # `null` (unreadable frame) → None
+
+    def supports_regions(self):
+        return probe_regions(self)
 
     def kill(self):
         if self.proc is not None and self.proc.poll() is None:

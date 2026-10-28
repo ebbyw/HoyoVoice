@@ -83,21 +83,39 @@ conversion once, in `tools/anchors.py`, and nowhere else.
 |---|---|---|---|
 | Vision-normalized | bottom-left | 0–1 | OCR daemons, classify, profiles, `shots/*.json` |
 | Image pixels | top-left | px | PIL/numpy, templates, NCC |
-| Crop-normalized | bottom-left | 0–1 *of the crop* | daemon output when handed a cropped frame (phase b) |
+| Region-relative | bottom-left | 0–1 *of the region* | INSIDE the daemons only: Vision's `boundingBox` under a `regionOfInterest`, RapidOCR's pixel boxes of a sliced array |
 
 - **Y flips between the first two.** `py = (1 − (y + h)) · H` for a top edge.
   The change gate's `_box()` is the reference implementation.
-- **The daemons normalize to whatever image they're handed.** Hand them a
-  crop and every returned box is normalized to the *crop*. The remap back is
-  `x_full = cx0 + x_crop · cw`, `y_full = cy0 + y_crop · ch` where
-  `(cx0, cy0, cw, ch)` is the crop rect in full-frame Vision-normalized
-  space; `w`, `h` scale by `cw`/`ch`. classify() must never see
-  crop-normalized coordinates — the remap happens in live.py at the OCR call
-  boundary, so everything downstream is untouched.
-- **No daemon protocol change in phase (a) or (b).** The line protocol is
-  `path in → JSON out`; a crop is just a different path (written to the state
-  dir like `live_frame.jpg` is). The protocol only changes if crops-by-rect
-  ever move in-process — not planned.
+- **The daemons answer in whole-frame coordinates, region or not.** Since
+  2026-10-27 the request line carries the region (`path<TAB>x y w h`,
+  Vision-normalized) and each daemon reads only that part of the frame and
+  remaps its own output before answering: `x_full = rx + x_region · rw`,
+  `y_full = ry + y_region · rh`, `w`/`h` scaled by `rw`/`rh`. Vision reports
+  `boundingBox` relative to the region (measured: a row at y=0.600 came back
+  at 0.914 under a 0.66-high region), so `tools/ocrd.swift` remaps;
+  `tools/ocrd_win.py` builds RapidOCR boxes in full-frame pixels from the
+  slice offset, and remaps the Windows engine's region-normalized lines with
+  `to_full()`. classify() and everything after it never see a
+  region-relative box, and live.py no longer remaps anything.
+- **The protocol changed once, for this.** Phases (a) and (b) kept
+  `path in → JSON out` and wrote the crop to `captures/live_crop.png`; that
+  was a full decode + 1.3 MB grayscale PNG write per fresh frame in live.py
+  and a PNG decode in the daemon, for the same recognizer call on the same
+  pixels (~10 ms and 7.7 MB/s of disk at 6 fps). `hv_platform/base.py
+  request_line()` builds the line; `tools/test_ocrd_protocol.py` pins the
+  parse, the y flip and the remap. A daemon that gets a malformed region
+  reads the whole frame — the fail-safe direction. A file that is not a
+  complete image gets `null` back (a lost frame; the old `[]` could not be
+  told from an empty region), and each daemon remaps through the pixel
+  rect it actually cut (both edges truncated, `roi_px`/`px_roi`), so the
+  remap is exact under the truncation as `crop_frame()`'s was.
+- **A daemon built before regions must not be sent one.** It takes the
+  whole line for a path and answers `[]` — indistinguishable from an empty
+  region. The client probes once per spawn with an empty request line
+  (`hv_platform/base.py probe_regions()`): `[{"protocol": 2}]` means
+  regions, `[]` means a pre-region build, which then gets whole frames and
+  a `[ocr] daemon predates region requests` line in the log.
 - **Resolution is an assumption, not a fact.** Everything is calibrated at
   1920×1080 (replay re-scales to 1920; capture negotiates it). Templates are
   cut from half-scale decodes of 1080p frames. anchors.py compares the
@@ -193,10 +211,12 @@ pending. The choice-prompt case stays covered by OCR text, as today.
 ### (b) ROI cropping — on by default since 2026-08-13
 
 `settings.anchor_roi` (default true; `false` restores full-frame OCR): when
-the matched anchor set implies a screen kind, crop the frame to that kind's
-ROI (from the spec file), hand the crop path to the daemon, remap boxes back
-to full-frame normalized space. Full-frame fallback when no anchor matches,
-plus the bounded crop-run above.
+the matched anchor set implies a screen kind, ask the daemon for that kind's
+ROI (from the spec file) on the request line; the daemon reads only that
+region and answers in full-frame normalized space. Full-frame fallback when
+no anchor matches, plus the bounded crop-run above. (Until 2026-10-27 the
+region was cut to a PNG in live.py and the daemon was handed that path — see
+the coordinate notes above for why that moved in-process.)
 
 The ROI is the union of every band the profile needs for that screen kind —
 plate, dialogue, choices, hint strip, UID corner — not just the dialogue
@@ -219,7 +239,10 @@ byte-identity was the wrong bar), the Windows `ocr_ms` half passed in the
   strip (0–0.10), dialogue (0.10–0.21), plate (0.204–0.28), comms plate
   band, choices (0.22–0.66 ceiling). Both are "the bottom two-thirds",
   which is where the ~35–40% detector-cut expectation comes from.
-- The crop is written as GRAYSCALE PNG (`captures/live_crop.png`,
+- *(Superseded 2026-10-27: the region now rides on the daemon request line
+  and no crop file is written. The notes below record what the PNG path
+  measured, because the pixels the daemons see are still the same ones.)*
+  The crop is written as GRAYSCALE PNG (`captures/live_crop.png`,
   `compress_level=0`): the frame is already one JPEG generation old, and
   a second lossy pass softens exactly the small glyphs the crop exists
   to read — while both recognizers read from luminance, so shipping RGB

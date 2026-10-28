@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """HoyoVoice OCR daemon (Windows) — protocol-compatible with tools/ocrd.
 
-Reads an image path per line on stdin, emits one single-line JSON array of
-{text, confidence, x, y, w, h} per line on stdout. Coordinates are
-normalized 0-1 with a BOTTOM-LEFT origin (Apple Vision convention) so
-classify.py works unchanged.
+Reads one request per line on stdin — an image path, optionally followed
+by a TAB and a region of interest "x y w h" — and emits one single-line
+JSON array of {text, confidence, x, y, w, h} per line on stdout.
+Coordinates are normalized 0-1 with a BOTTOM-LEFT origin (Apple Vision
+convention) so classify.py works unchanged, and the region is given in
+that same space. With a region only that part of the frame is flattened
+and recognized, and the boxes still come back normalized to the WHOLE
+frame: the caller never sees region-relative coordinates. (Before this,
+live.py cut the region to a PNG and handed that path over — a full
+decode and a 1.3MB write per fresh frame, then a PNG decode here, for
+the same pixels.)
 
 Engines (HOYOVOICE_OCR_ENGINE = auto | rapid | windows, default auto):
   rapid    RapidOCR (ONNX). Line boxes + real confidence scores — the
@@ -38,8 +45,80 @@ def directml_available():
         return False
 
 
+# Reply vocabulary, shared with tools/ocrd (the Apple Vision daemon):
+#   [ ... ]            blocks (possibly none: the image, or the region, held
+#                      no text)
+#   null               the file could not be read as a complete image (torn
+#                      mid-rewrite, missing) — a lost frame, not an empty one
+#   [{"protocol": 2}]  the answer to an empty request line: this daemon
+#                      understands regions. The client probes once; a daemon
+#                      built before regions answers [] and gets whole frames.
+PROTOCOL = [{"protocol": 2}]
+
+
 def out(blocks):
     print(json.dumps(blocks, sort_keys=True), flush=True)
+
+
+def parse_request(line):
+    """(path, roi) from one stdin line; roi is (x, y, w, h) Vision-
+    normalized or None. A malformed or empty region reads the whole
+    frame — the fail-safe direction, same as a torn frame."""
+    import math
+    path, _, rest = line.rstrip("\r\n").partition("\t")
+    roi = None
+    if rest:
+        try:
+            x, y, w, h = (float(v) for v in rest.split())
+        except ValueError:
+            return path, None
+        if not all(math.isfinite(v) for v in (x, y, w, h)):
+            return path, None       # nan clips to a partial region otherwise
+        x0, y0 = max(0.0, x), max(0.0, y)
+        x1, y1 = min(1.0, x + w), min(1.0, y + h)
+        if x1 > x0 and y1 > y0:
+            roi = (x0, y0, x1 - x0, y1 - y0)
+    return path, roi
+
+
+def roi_px(roi, W, H):
+    """A Vision-normalized region → (x0, y0, x1, y1) pixel rect with a
+    TOP-LEFT origin (the y flip), or None when it would be degenerate
+    (under 8px a side: nothing legible fits, and the engines choke on
+    near-empty input). Both edges truncate — the same rule as tools/ocrd —
+    and px_roi() is its exact inverse, so a remap through the pair is
+    exact under the truncation."""
+    if roi is None:
+        return None
+    x, y, w, h = roi
+    x0, x1 = max(0, int(x * W)), min(W, int((x + w) * W))
+    y0, y1 = max(0, int((1.0 - y - h) * H)), min(H, int((1.0 - y) * H))
+    if x1 - x0 < 8 or y1 - y0 < 8:
+        return None
+    return x0, y0, x1, y1
+
+
+def px_roi(box, W, H):
+    """The region a pixel rect actually covers, Vision-normalized — what a
+    box read from that rect must be remapped with (not the requested
+    floats, which the truncation in roi_px moved by up to a pixel)."""
+    x0, y0, x1, y1 = box
+    return (x0 / W, (H - y1) / H, (x1 - x0) / W, (y1 - y0) / H)
+
+
+def to_full(block, roi):
+    """A block normalized to a region → normalized to the whole frame.
+    Same arithmetic as tools/anchors.py remap_box, kept here because the
+    daemon has no tools/ on its path."""
+    if roi is None:
+        return block
+    rx, ry, rw, rh = roi
+    b = dict(block)
+    b["x"] = rx + block["x"] * rw
+    b["y"] = ry + block["y"] * rh
+    b["w"] = block["w"] * rw
+    b["h"] = block["h"] * rh
+    return b
 
 
 # Background flattening. Game subtitles are light text that can sit over a
@@ -55,8 +134,12 @@ def out(blocks):
 HP_RADIUS, HP_GAIN, HP_OFFSET = 12, 3.0, 40
 
 
-def _flatten_background(data):
-    """Bytes of an image → grayscale ndarray with the background removed.
+def _flatten_background(data, box=None):
+    """Bytes of an image → grayscale ndarray with the background removed;
+    of just `box` (top-left pixel rect) when given. Cropped BEFORE the
+    blur, so a region's pixels are exactly what the old PNG-crop path
+    produced (the blur saw the crop's own edges there too) — and the
+    blur is paid on the region, not the frame.
 
     In-place arithmetic on one int16 buffer: the expression form
     allocated five full-frame float intermediates (~40 MB per 1080p
@@ -68,6 +151,8 @@ def _flatten_background(data):
     import numpy as np
     with Image.open(io.BytesIO(data)) as img:
         g = img.convert("L")
+        if box is not None:
+            g = g.crop(box)
         bg = g.filter(ImageFilter.GaussianBlur(HP_RADIUS))
         a = np.asarray(g, dtype=np.int16)        # dtype conversion = a copy
         np.subtract(a, np.asarray(bg, dtype=np.int16), out=a)
@@ -210,6 +295,17 @@ class RapidEngine:
                       flush=True)
         return self.ocr(img, **self._cls_kw)
 
+    def _raw_crop(self, data, box):
+        """The unflattened region for the safety-net pass, as LUMINANCE
+        stacked to three channels: the crop file this replaced was a
+        grayscale PNG, so that pass has only ever seen gray for a region
+        read, and the thresholds were measured with region reads on. (A
+        whole-frame safety-net pass still gets the original colour bytes,
+        exactly as before.)"""
+        with self.Image.open(io.BytesIO(data)) as img:
+            g = self.np.asarray(img.convert("L").crop(box))
+        return self.np.stack([g] * 3, axis=-1)
+
     def _detect(self, flat):
         """One detector pass over the flattened frame — through the 2-D
         gray array once this machine's engine has proven it reads that
@@ -248,14 +344,18 @@ class RapidEngine:
                       "stack", file=sys.stderr, flush=True)
         return result
 
-    def recognize(self, path):
+    def recognize(self, path, roi=None):
         data = read_frame_bytes(path)
         if data is None:
-            return []
+            return None             # not a complete image: a lost frame
         with self.Image.open(io.BytesIO(data)) as img:
             W, H = img.size
+        box = roi_px(roi, W, H)
+        # the region's pixel origin, so boxes are built in FULL-frame
+        # pixels below and nothing region-relative ever leaves here
+        ox, oy = (box[0], box[1]) if box else (0, 0)
         # RapidOCR takes an ndarray directly, so no re-encode round trip
-        flat = _flatten_background(data)
+        flat = _flatten_background(data, box)
         result = self._detect(flat)
         if not result:
             # Safety net for screens the flattening filter hurts — but not
@@ -268,7 +368,8 @@ class RapidEngine:
             # can never latch the net shut — same medicine as the change
             # gate's MAX_SKIP_RUN.
             if self.empty_run % 4 == 0:
-                result, _ = self._call(data)
+                result, _ = self._call(data if box is None
+                                       else self._raw_crop(data, box))
             self.empty_run = 0 if result else self.empty_run + 1
         else:
             self.empty_run = 0
@@ -276,8 +377,8 @@ class RapidEngine:
         for box, text, score in result or []:
             xs = [p[0] for p in box]
             ys = [p[1] for p in box]
-            x0, x1 = min(xs), max(xs)
-            y0, y1 = min(ys), max(ys)        # pixel coords, top-left origin
+            x0, x1 = ox + min(xs), ox + max(xs)
+            y0, y1 = oy + min(ys), oy + max(ys)   # pixel, top-left origin
             blocks.append({
                 "text": text,
                 "confidence": float(score),
@@ -320,20 +421,21 @@ class WindowsEngine:
         self.loop = asyncio.new_event_loop()
 
     @staticmethod
-    def _flattened_png(data):
-        """This engine decodes from bytes, so re-encode after flattening.
-        Falls back to the original frame if anything goes wrong."""
+    def _flattened_png(data, box=None):
+        """This engine decodes from bytes, so re-encode after flattening
+        (of just `box` when given). Falls back to the original frame if
+        anything goes wrong — whole, so the caller must not remap then."""
         try:
             from PIL import Image
             buf = io.BytesIO()
             # compress_level=0: the buffer's only consumer is the decoder
             # two lines later — PIL's default level 6 spent ~46ms
             # compressing bytes nobody stores (level 0: ~6ms, lossless)
-            Image.fromarray(_flatten_background(data)).save(
+            Image.fromarray(_flatten_background(data, box)).save(
                 buf, format="PNG", compress_level=0)
-            return buf.getvalue()
+            return buf.getvalue(), box is not None
         except Exception:
-            return data
+            return data, False
 
     async def _decode_stream(self, data):
         """Decode from memory — reading the file directly races ffmpeg's
@@ -349,12 +451,18 @@ class WindowsEngine:
         stream.seek(0)
         return stream
 
-    async def _run(self, path):
+    async def _run(self, path, roi=None):
         img = self.imaging
         data = read_frame_bytes(path)
         if data is None:
-            return []
-        data = self._flattened_png(data)
+            return None             # not a complete image: a lost frame
+        box, size = None, None
+        if roi is not None:
+            from PIL import Image
+            with Image.open(io.BytesIO(data)) as im:
+                size = im.size
+                box = roi_px(roi, *size)
+        data, cropped = self._flattened_png(data, box)
         stream = await self._decode_stream(data)
         decoder = await img.BitmapDecoder.create_async(stream)
         w0, h0 = decoder.pixel_width, decoder.pixel_height
@@ -392,10 +500,16 @@ class WindowsEngine:
                 "y": 1.0 - y1 / H,           # → bottom-left origin
                 "h": (y1 - y0) / H,
             })
-        return blocks
+        # the bitmap was the region, so its boxes are region-normalized
+        # until this remap — through the pixel rect that was cut, not the
+        # requested floats; the whole-frame fallback above skips it
+        if not cropped:
+            return blocks
+        cut = px_roi(box, *size)
+        return [to_full(b, cut) for b in blocks]
 
-    def recognize(self, path):
-        return self.loop.run_until_complete(self._run(path))
+    def recognize(self, path, roi=None):
+        return self.loop.run_until_complete(self._run(path, roi))
 
 
 # auto mode: rapid must OCR a full frame this fast to keep up with the
@@ -469,12 +583,12 @@ def main():
     if note:
         print(note, file=sys.stderr, flush=True)
     for line in sys.stdin:
-        path = line.strip()
+        path, roi = parse_request(line)
         if not path:
-            out([])
+            out(PROTOCOL)           # the client's one-time capability probe
             continue
         try:
-            out(engine.recognize(path))
+            out(engine.recognize(path, roi))
         except BrokenPipeError:
             return                      # parent exited — quiet shutdown
         except Exception as e:

@@ -153,7 +153,7 @@ def read_frames(frames, game, scale, ocr, roi=None):
                                Image.Resampling.LANCZOS).save(path)
                     crop = (px[0] / W, (H - px[3]) / H,
                             (px[2] - px[0]) / W, (px[3] - px[1]) / H)
-            blocks = ocr.recognize(path)
+            blocks = ocr.recognize(path) or []   # None: unreadable frame
             if blocks is None:
                 blocks = []
             if crop is not None:
