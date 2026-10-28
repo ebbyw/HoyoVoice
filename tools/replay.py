@@ -77,7 +77,12 @@ def main():
     print(f"[replay] extracting {args.recording} -> {work}", flush=True)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", *cut,
                     "-i", args.recording,
-                    "-vf", f"fps={SAMPLE_FPS},scale=1920:-2",
+                    "-vf", f"fps={SAMPLE_FPS},scale=1920:-2:out_range=pc",
+                    # ffmpeg 9 refuses limited-range input to mjpeg instead
+                    # of auto-converting; expand to full range explicitly —
+                    # the gate's BRIGHT and the profiles' bands were measured
+                    # on the full-range JPEGs ffmpeg 7 produced by default
+                    "-color_range", "pc",
                     "-q:v", "3", str(frames / "f_%06d.jpg"), "-y"],
                    check=True)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", *cut,
