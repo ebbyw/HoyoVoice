@@ -129,7 +129,7 @@ python hoyovoice.py log
 
 - ⏺ then ⏹ after ~30 s with a few TTS lines. The MP4 must have: video, game audio, TTS at correct offsets, +8 dB TTS over bed.
 - This exercises the Windows-specific `finalize()` ('q' on stdin instead of SIGINT) — a corrupt/truncated MKV means that path failed.
-- The recording encoder is probed on the first ⏺ of the session: `h264_nvenc`, `h264_qsv`, `h264_amf` in that order, each tried once against the real hardware (eight synthetic frames to `-f null`), else libx264 veryfast. The console says which: `[recording] encoder: h264_nvenc`. A GPU encoder is about a core of CPU given back for the length of the recording; if the line says libx264 on a box with a GPU, the driver is the first suspect.
+- The recording encoder is probed on the first ⏺ of the session: `h264_nvenc`, `h264_qsv`, `h264_amf` in that order, each tried once against the real hardware (eight synthetic frames to `-f null`), else libx264 veryfast. The console says which: `[recording] encoder: h264_nvenc`. If that encoder then fails on the real stream, `[recording] h264_nvenc failed on the live stream — falling back to libx264` follows within two seconds and the recording continues on CPU; the frame feed must not stall through it (that was the 2026-10-30 bug). A GPU encoder is about a core of CPU given back for the length of the recording; if the line says libx264 on a box with a GPU, the driver is the first suspect.
 
 ## Known open items
 

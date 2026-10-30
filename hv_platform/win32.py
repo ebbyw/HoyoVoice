@@ -72,16 +72,34 @@ _ffmpeg_path = {"p": None}
 # the failure mode of guessing is a recording that never starts.
 HW_ENCODERS = ("h264_nvenc", "h264_qsv", "h264_amf")
 _record_encoder = {"c": None}
+# How long a freshly started recording ffmpeg must stay alive before its
+# encoder is believed to have opened (see VideoCapture.restart).
+ENCODER_OPEN_GRACE = 1.5
+
+
+# What the recording stream is encoded from, probe and real run alike.
+# 4:2:0 because the capture card delivers 4:2:2 (yuvj422p over MJPEG) and
+# the hardware encoders take 4:2:0 or 4:4:4 but not that: left to itself
+# ffmpeg negotiated 4:4:4 to avoid chroma loss, and NVENC answered "No
+# capable devices found" on a GPU that had just passed a 256x256 yuv420p
+# probe (2026-10-30 11:05 session). It is also what the Mac's videotoolbox
+# recordings already are, and what every player expects of an H.264 MP4.
+RECORD_PIX_FMT = "yuv420p"
 
 
 def _encoder_works(ffmpeg, codec, run=subprocess.run):
-    """Encode eight black frames with `codec` to nowhere. Exit 0 means the
-    encoder initialised against real hardware; anything else (no device,
-    driver too old, ffmpeg built without it) means no."""
+    """Encode eight black 1080p frames with `codec` to nowhere, in the
+    recording's own pixel format. Exit 0 means the encoder initialised
+    against real hardware for the shape it will actually be given;
+    anything else (no device, driver too old, ffmpeg built without it)
+    means no. 1080p rather than a thumbnail because NVENC checks
+    capabilities per device against the exact width, height and pixel
+    format, and a probe that asks for less than the recording will
+    proves less than the recording needs."""
     try:
         p = run([ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
-                 "-f", "lavfi", "-i", "color=black:s=256x256:r=30,"
-                 "format=yuv420p", "-frames:v", "8",
+                 "-f", "lavfi", "-i", "color=black:s=1920x1080:r=30",
+                 "-frames:v", "8", "-pix_fmt", RECORD_PIX_FMT,
                  "-c:v", codec, "-f", "null", "-"],
                 capture_output=True, timeout=20, creationflags=NO_WINDOW)
         return p.returncode == 0
@@ -250,10 +268,11 @@ class VideoCapture:
                "-i", f"video={self.devices['video']}",
                "-map", "0:v", "-vf", f"fps={self.fps},scale=1920:-2",
                "-update", "1", "-atomic_writing", "1", "-y", str(self.frame)]
+        codec = None
         if record_path:
             codec = record_encoder()
             cmd += ["-map", "0:v", "-s", "1920x1080", "-r", "30",
-                    "-c:v", codec]
+                    "-pix_fmt", RECORD_PIX_FMT, "-c:v", codec]
             if codec == "libx264":
                 cmd += ["-preset", "veryfast"]     # x264's own knob
             cmd += ["-b:v", "6M", "-y", str(record_path)]
@@ -261,6 +280,24 @@ class VideoCapture:
         self.proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
             creationflags=NO_WINDOW)
+        if codec is not None and codec != "libx264":
+            # The frame feed and the recording are ONE ffmpeg process: a
+            # recording encoder that fails to open takes the live frames
+            # down with it, and the stall watchdog then respawns into the
+            # same failure every ten seconds — a session on 2026-10-30
+            # read no dialogue for the length of a recording that way.
+            # An encoder that cannot open dies well inside a second, so
+            # wait that long; a process still running is a recording
+            # that started. One demotion per process: libx264 is the
+            # floor, and it is what every recording used before.
+            try:
+                self.proc.wait(timeout=ENCODER_OPEN_GRACE)
+            except subprocess.TimeoutExpired:
+                return                     # alive: encoder opened
+            print(f"[recording] {codec} failed on the live stream — "
+                  "falling back to libx264 for this session", flush=True)
+            _record_encoder["c"] = "libx264"
+            self.restart(record_path)
 
     def finalize(self, timeout=8.0):
         """No SIGINT on Windows — 'q' on stdin asks ffmpeg to finalize."""

@@ -78,6 +78,21 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   guessed encoder is a recording that never starts. The console says which
   was chosen (`[recording] encoder: …`); `tools/test_record_encoder.py`
   pins the order, the fallback and that the choice is made once.
+  The first real session (2026-10-30 11:05) found two holes in the first
+  cut: the probe encoded 256×256 yuv420p frames, which NVENC accepted,
+  and the recording then handed it the capture card's 1080p 4:2:2 stream,
+  for which ffmpeg negotiated 4:4:4 and NVENC answered "No capable
+  devices found" — and because the live frame feed and the recording are
+  one ffmpeg process, the encoder failing to open took the frames down
+  with it, the stall watchdog respawned into the same failure every ten
+  seconds, and no dialogue was read for the length of the recording. The
+  recording stream is now pinned to yuv420p (what the Mac's videotoolbox
+  recordings already are, and what every player expects of an H.264 MP4),
+  the probe encodes eight 1080p frames in that format, and a hardware
+  encoder whose ffmpeg dies within 1.5 s of starting is demoted to libx264
+  for the session with a `[recording] … failed on the live stream` line
+  and the capture restarted at once, so a recording can no longer silence
+  the reader.
 - **The OCR daemons read a region of the frame themselves; live.py no
   longer writes a crop file.** Since 0.11 a matched anchor had live.py cut
   the screen kind's ROI out of the frame as a grayscale PNG
