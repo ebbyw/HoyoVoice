@@ -9,6 +9,100 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Added
 
+- **Star Rail's Furbobocom event hub is read.** The furbo event (the
+  *Furbobo Weekly* presidential election) runs in an app of its own, and
+  nothing claimed any of its screens. The 2026-11-10 21:30 session log
+  (hoyovoice-20261110-213754, rec_20261110_213011) shows what that cost
+  over seven minutes: every bubble of the Clue Investigation thread
+  "skipped (unknown speaker, no story chrome)" with a neighbouring row as
+  its speaker ("N-Not me!" speaking "Gemibo", 21:30:30), the quiz answers
+  spoken as one line by a speaker called "March 7th" (21:33:02), the
+  group-chat popup read the same way (21:30:33–21:30:37), the furbo office
+  scenes read in the narrator's voice because their nameplate is a tab on
+  the box's left corner (21:31:30, 21:36:03), and the Press Affairs card
+  wall read as a nameplate and a two-option prompt (21:37:15).
+
+  Five screens now have detectors in the Star Rail profile, every number
+  measured off 35 frames of that recording OCR'd by the Vision daemon:
+
+  - *The Clue Investigation thread* — identified by the "Furbobocom" app
+    name over the page name top-left — is read through the chat reader
+    like the Messages app: each bubble in its sender's cast voice as it
+    arrives, the player's in theirs, by which column a row is ALIGNED to
+    (sender labels 0.250–0.252, incoming rows 0.263–0.265, player rows
+    right-aligned 0.738–0.742, the player's label 0.752–0.753). The grey
+    label font reads at Vision confidence 0.50, under the 0.8 floor every
+    other row keeps, so the label column alone is taken down to 0.5 —
+    which is also why the avatar misreads ("0.0", left of the pane) and a
+    half-clipped row's garbage stay out. Reply options are centred in the
+    orange band under the thread and are read under the player's name,
+    each its own item, as the Answer panel's are; the one thing that
+    shares their shape is a status card's caption ("Furbo is on the way
+    back…"), which reads as a lone option, once — a rare talk-over over a
+    dropped real option.
+  - *The group-chat popup* ("AAA Furbobo Weekly Wholesale Requests") is
+    a centred modal over the blurred hub, identified by its shape — a
+    wide title left-aligned at x 0.339–0.341, every block inside the
+    popup's width, a label on one of its columns — rather than the
+    group's name. Its player bubbles hang right but their text is
+    left-aligned inside the bubble and a wrapped bubble is as wide as the
+    column, so the player rows align on the LEFT (0.366–0.368), left of
+    the sender column (0.385–0.387), with the player's label right-aligned
+    to the avatar (0.597). The reply options share that label's right
+    edge exactly (0.5959–0.5974), so labels are also held to a width; the
+    options are read only while the popup's Scroll/Select hints are up,
+    and the hint row — centred like an option, and read as "Scroll
+    Select" on the first pass — sits below the body's floor.
+  - *The Clue Source clipping* the thread opens on (a news item: source
+    name and "Incoming Message" chip beside an avatar, a rule, prose) is
+    read by the narrator through the reading-panel reader, which joins
+    rows and dedupes per row. Its source name sits at x 0.2602, inside
+    the thread's incoming-row tolerance, so the first replay read it as
+    a message and the reward line and Forward button under the prose as
+    two reply options; the prose column at 0.2122–0.2151, where no
+    thread row ever starts, is what tells the two apart.
+  - *Investigation Results* shrinks the thread to the left half and
+    opens a Progress Report column on the right whose rows end at
+    0.7398 — ON the full pane's player column, so the first replay read
+    "Furbobo Weekly is" and "figurines!" as the player's bubbles. The
+    half-pane reads at its own columns (sender 0.1932, rows 0.2055,
+    player right 0.4869 — one frame pair each), with its options and the
+    "Investigation Concluded" notice, both centred, left out. The screen
+    animates in and the column's rows can be readable a frame before
+    its header is — the replay still read "Furbobo Weekly is" with the
+    header as the only marker — so two rows on the column's left edge
+    (0.629–0.634) mark the screen as well.
+  - *The furbo office scenes* are ordinary ✕-Continue dialogue with the
+    nameplate on the box's left corner (cx 0.274, cy 0.260, confidence
+    0.50). With the hint on screen and exactly one plate-shaped block in
+    the plate band's left reach (0.22–0.33, empty on every other dialogue
+    screen this game draws), that block is the speaker.
+
+  Two things carried over from the other chat panels had to be re-done
+  here. The thread scrolls UP under the pane's top edge, and a row caught
+  half under it reads as garbage ("oput mio unrer em", "wnat these numbers
+  mean. Mignt", top edges 0.7442–0.7472) that would prefix the rest of its
+  message and defeat the reader's tail suppression, which tests
+  containment; a row whose top edge crosses 0.740 (clean rows top out at
+  0.739) now drops the whole message it starts — always the oldest on
+  screen, already read when it was whole. The same goes for a message
+  with no label whose first row starts within a label's reach (0.045) of
+  that line: every bubble here carries its label, so one that has none
+  up there has scrolled its label under the edge, and the replay was
+  speaking those tails alone ("paws?", too short for the containment
+  test; 'Gemibo -2"', which the original had read as 'Gemibo - 2"').
+  The player's own bubbles read under the player's name rather than the
+  label's text, because a bubble read as "Ebby" while labelled and as
+  the player after its label scrolled off was spoken twice — short texts
+  dedupe on sender and text together. And the hub's other pages are
+  menus: with the app name on screen the dialogue classifier returns
+  nothing, so the Press Affairs cards can no longer become a speaker or a
+  prompt. Pinned by `tools/test_hsr_furbobocom.py` on 16 of those
+  frames; the full recording replayed end to end reads the thread, the
+  popup, the clipping and the office scenes in cast voices where the
+  previous build read the office scenes as the narrator and nothing
+  else.
+
 - **Genshin's character-trial guide is read aloud.** The paged panel a
   trial opens with — a looping clip on the left, a title ("Character
   Summary", "Elemental Skill: I") over a prose column on the right, a

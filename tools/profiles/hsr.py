@@ -169,6 +169,157 @@ class HSR(Profile):
     # last message of a quiet thread, which has nothing arriving after it
     # to push it up out of the way.
 
+    # --- Furbobocom (the furbo event hub) --------------------------------
+    # A third chat layout, and two more screens around it. Every number
+    # here is measured off rec_20261110_213011 at 1080p (21 frames OCR'd
+    # with the Vision daemon); re-measure from a saved frame before
+    # changing one.
+    #
+    # The hub is a full-screen app whose pages carry "Furbobocom" over the
+    # page name top-left ("Clue Investigation", "Press Affairs"). The grey
+    # app name reads at Vision confidence 0.50, the page name at 1.00, so
+    # the marker is the weaker one on purpose: it is the word that is the
+    # same on every page.
+    FURBO_HUB_MARKER = re.compile(r"furbob", re.I)
+    FURBO_HUB_REGION = {"x": (0.02, 0.20), "y": (0.92, 0.99)}
+    FURBO_LABEL_MIN_CONF = 0.5
+    # Clue Investigation: a thread pane under a progress bar. Sender labels
+    # sit beside the avatar, bubbles start a column to the right, and the
+    # player's bubbles hang on the right edge with their label beside the
+    # player's avatar — the same four alignments as the Messages app, at
+    # this panel's own columns:
+    #   sender label   left-aligned  0.2500-0.2515   (conf 0.50, grey)
+    #   incoming row   left-aligned  0.2625-0.2645
+    #   player row     right-aligned 0.7384-0.7417
+    #   player label   right-aligned 0.7515-0.7527
+    # As in the Messages app, a player bubble long enough to wrap is
+    # right-hung but its text is not: a second row would end short of
+    # the edge and be dropped. None was recorded; the popup below shows
+    # what such a bubble does there.
+    FURBO_CHAT_TITLE = re.compile(r"^clue investigation$", re.I)
+    FURBO_CHAT_TITLE_REGION = {"x": (0.02, 0.25), "y": (0.89, 0.95)}
+    # The pane: ceiling under the "Clue Source" tab and the "Furbo is
+    # busy…" bubble (cy 0.845-0.858); floor above the bottom hints, with
+    # the reply options (cy 0.128-0.295) inside it because they are read.
+    FURBO_BODY = {"x": (0.24, 0.80), "y": (0.08, 0.78)}
+    FURBO_SENDER_X = 0.2513
+    FURBO_INCOMING_X = 0.2637
+    FURBO_PLAYER_EDGES = (("right", 0.7400),)
+    FURBO_PLAYER_LABEL_RIGHT = 0.7521
+    # Reply options are drawn centred in an orange band under the thread
+    # (cx 0.505-0.507, cy ≤ 0.295); nothing else in the pane is centred
+    # except the caption of a status card ("Furbo is on the way back…",
+    # cy 0.226), which this reads as a lone option — in the player's
+    # voice, once. A rare talk-over beats dropping a real lone option.
+    FURBO_OPTION_Y = 0.31
+    # The thread scrolls UP under the pane's top edge (y 0.752), and a row
+    # caught half under it reads as garbage ("oput mio unrer em", top edge
+    # 0.7442) that would prefix the rest of its message and defeat the
+    # reader's tail suppression. Anything whose top edge crosses this
+    # line is the OLDEST message on screen, already read when it was
+    # whole, so the message it starts is dropped. Clean rows top out at
+    # 0.7366 (a label) and 0.6802 (text).
+    FURBO_CLIP_TOP = 0.740
+    # Every bubble in these panes carries its label, drawn this far above
+    # the bubble's first row (label bottom to row top: 0.022 in the pane,
+    # 0.018 in the popup, under a label 0.024 tall). A message with no
+    # label whose first row starts within that reach of the clip line is
+    # one whose label has scrolled under it — a message already read when
+    # it was whole, now coming back as its own tail. Containment in the
+    # reader catches most of those; it missed "paws?" (too short to
+    # test) and 'Gemibo -2"' (the original read 'Gemibo - 2"'), both
+    # spoken alone in the 2026-11-10 replay.
+    FURBO_LABEL_REACH = 0.045
+    # The group-chat popup ("AAA Furbobo Weekly Wholesale Requests"): a
+    # centred modal over the blurred hub, title and tagline left-aligned
+    # at x 0.339-0.341 (cy 0.792/0.765), everything else blurred away. The
+    # player's bubbles are right-hung but their TEXT is left-aligned
+    # inside the bubble, and a wrapped bubble is as wide as the column —
+    # so the player rows align on the LEFT, at 0.3661-0.3676, left of the
+    # sender column; the player label is right-aligned to the avatar.
+    #   player row     left-aligned  0.3661-0.3676 (a wrapped bubble)
+    #                  right-aligned 0.5843         (a one-row bubble)
+    #   sender label   left-aligned  0.3846-0.3866   (conf 0.50, grey)
+    #   incoming row   left-aligned  0.3952-0.3983
+    #   player label   right-aligned 0.5965-0.5976
+    # The right edge is INFERRED, not measured: no one-row player bubble
+    # was recorded. The bubble hangs at x 0.5948 and the full-screen pane
+    # pads its text 0.010 inside the bubble; the two wrapped rows that
+    # fill the column end at 0.5828 and 0.5843. Reply options are centred
+    # (left 0.4041, right 0.5959-0.5974 — 0.012 clear of that edge, and
+    # the same right edge as the player label, so labels are also held to
+    # LABEL_MAX_W) and show only with the Scroll/Select hints (cy 0.143).
+    FURBO_POPUP_HEADER = {"x": (0.33, 0.35), "y": (0.78, 0.805)}
+    FURBO_POPUP_HEADER_MIN_W = 0.15
+    FURBO_POPUP_X = (0.32, 0.68)
+    # floor above the Scroll/Select hint row (cy 0.143), which is centred
+    # like an option and was read as one ("Scroll Select"); the lowest
+    # real row is an option at cy 0.205
+    FURBO_POPUP_BODY = {"x": (0.32, 0.68), "y": (0.17, 0.76)}
+    FURBO_POPUP_SENDER_X = 0.3857
+    FURBO_POPUP_INCOMING_X = 0.3967
+    FURBO_POPUP_PLAYER_EDGES = (("left", 0.3668), ("right", 0.5843))
+    FURBO_POPUP_PLAYER_LABEL_RIGHT = 0.5972
+    FURBO_POPUP_OPTION_Y = 0.30
+    FURBO_POPUP_HINT_Y = (0.12, 0.16)
+    # clean rows top out at 0.739, clipped ones start at 0.7444
+    FURBO_POPUP_CLIP_TOP = 0.740
+    # Five times the widest measured spread (0.0017, the player rows in
+    # the full-screen pane); the closest pair of windows is the popup's
+    # sender/incoming columns, 0.011 apart.
+    FURBO_ALIGN_TOL = 0.005
+    # A label is short; the one thing that shares a label's alignment is a
+    # popup option wide enough to fill its button (w 0.19 — a short option
+    # is centred, nowhere near the label's edge). Wide enough for the
+    # double-act's name ("Bruce Furlee & Tiger Furlee", ~0.13).
+    FURBO_LABEL_MAX_W = 0.15
+    # The furbo office scenes: ordinary boxed dialogue with the '✕
+    # Continue' hint, but the nameplate is a tab on the box's LEFT corner
+    # (cx 0.274, cy 0.260, left edge 0.248-0.250, conf 0.50) — outside the
+    # centred plate band, so the line was surrendered to the narrator and
+    # Gemibo's and Joolyon's lines read in the narrator's voice (21:31:30,
+    # 21:36:03 on 2026-11-10). The rows under it are centred as usual.
+    FURBO_PLATE_X = (0.22, 0.33)
+    # The Clue Source article the pane opens on (a news clipping: source
+    # name and an "Incoming Message" chip beside an avatar, a rule, then
+    # the clipping's prose): read by the narrator through the reading
+    # panel's reader, which joins rows and dedupes per row. The source
+    # name sits at x 0.2602 — inside the thread's incoming-row tolerance,
+    # which is why the thread parser saw it as a message and the reward
+    # line under the prose ("Complete investigation to obtain ×1") and
+    # the Forward button as reply options. The prose column at 0.2122-
+    # 0.2151 is what tells the two apart: no thread row ever starts
+    # there (the avatar misreads at 0.2122-0.2137 carry no letters).
+    FURBO_ARTICLE_X = 0.2140
+    FURBO_ARTICLE_TITLE_X = 0.2602
+    FURBO_ARTICLE_CHIP = re.compile(r"^incoming message$", re.I)
+    # Investigation Results: the pane shrinks to the left half and a
+    # Progress Report column opens on the right (rows at x 0.629-0.634,
+    # right edges to 0.7398 — ON the full pane's player column, so
+    # "Furbobo Weekly is" and "figurines!" were read as the player's
+    # bubbles). The shrunken pane keeps the thread, at its own columns —
+    # one frame pair each (shots at 410 s and 414 s of the recording):
+    #   sender label   left-aligned  0.1932
+    #   incoming row   left-aligned  0.2048-0.2063
+    #   player row     right-aligned 0.4869
+    #   player label   right-aligned 0.4985
+    # Its reply options and the "Investigation Concluded" notice are both
+    # centred in the half-pane, so options are not read here.
+    FURBO_RESULTS_MARKER = re.compile(r"^investigation results$", re.I)
+    FURBO_RESULTS_MARKER_REGION = {"x": (0.60, 0.85), "y": (0.83, 0.88)}
+    # The report column is the second marker, because the screen
+    # animates in and the column's rows can be on screen a frame before
+    # its header is readable: the replay of rec_20261110_213011 still
+    # read "Furbobo Weekly is" with the header test alone. Two rows on
+    # the column's left edge (0.6294-0.6337) say the column is up; one
+    # could be a player bubble whose width happens to end there.
+    FURBO_REPORT_X = 0.6312
+    FURBO_RESULTS_BODY = {"x": (0.18, 0.56), "y": (0.08, 0.78)}
+    FURBO_RESULTS_SENDER_X = 0.1932
+    FURBO_RESULTS_INCOMING_X = 0.2055
+    FURBO_RESULTS_PLAYER_EDGES = (("right", 0.4869),)
+    FURBO_RESULTS_PLAYER_LABEL_RIGHT = 0.4985
+
     # ------------------------------------------------------------------
     # Chrome
     # ------------------------------------------------------------------
@@ -211,7 +362,21 @@ class HSR(Profile):
     # Screens
     # ------------------------------------------------------------------
     def classify(self, blocks, _no_plate=False):
+        # A Furbobocom page is a menu: the Press Affairs card wall reads
+        # as a nameplate and a choice list otherwise (a card's quip was
+        # spoken as a line and two more as a prompt, 21:37:15 on
+        # 2026-11-10). Its one conversation screen is a chat panel, read
+        # by classify_chat before this runs.
+        if (self._furbo_hub(blocks)
+                or self._classify_furbo_popup(blocks) is not None):
+            return {"speaker": None, "dialogue": "", "choices": [],
+                    "boxes": [], "conf": 1.0}
         state = super().classify(blocks, _no_plate)
+        if state["dialogue"] and not state["speaker"]:
+            plate = self._furbo_plate(blocks)
+            if plate is not None:
+                state["speaker"] = plate["text"].strip()
+                state["boxes"] = [plate] + state["boxes"]
         # A choice prompt needs either a speaker beside it or the game's
         # story chrome above it. This game's menus keep landing 1-2 blocks
         # in the choice band and reading them aloud as Trailblazer: the
@@ -282,7 +447,7 @@ class HSR(Profile):
         hints = any(b["text"].strip() in ("Scroll", "Back") and b["y"] < 0.08
                     for b in conf)
         if not (header and hints):
-            return None
+            return self._classify_furbo_article(blocks)
         body = [b for b in conf if in_region(b, self.QUICKREAD_BODY)]
         body.sort(key=lambda b: -b["y"])
         return [b["text"] for b in body]
@@ -491,4 +656,224 @@ class HSR(Profile):
         msgs = self._classify_answer_panel(conf)
         if msgs is None:
             msgs = self._classify_messages_app(conf)
+        if msgs is None:
+            msgs = self._classify_furbo_chat(blocks)
+        if msgs is None:
+            msgs = self._classify_furbo_popup(blocks)
         return msgs
+
+    # ------------------------------------------------------------------
+    # Furbobocom
+    # ------------------------------------------------------------------
+    def _furbo_hub(self, blocks):
+        """True when a Furbobocom page is up (the app name top-left)."""
+        return any(b["confidence"] >= self.FURBO_LABEL_MIN_CONF
+                   and in_region(b, self.FURBO_HUB_REGION)
+                   and self.FURBO_HUB_MARKER.search(b["text"])
+                   for b in blocks)
+
+    def _furbo_plate(self, blocks):
+        """The furbo office scene's left-corner nameplate, or None.
+
+        Only under the '✕ Continue' hint, which is what says this is a
+        story screen at all, and only when exactly one plate-shaped block
+        sits in the plate band's left reach: the band is empty there on
+        every other dialogue screen this game draws."""
+        if not self.trusts_dialogue(blocks):
+            return None
+        plates = [b for b in blocks
+                  if b["confidence"] >= self.FURBO_LABEL_MIN_CONF
+                  and b["text"].strip() not in self.IGNORE
+                  and re.search(r"[^\W\d_]", b["text"])
+                  and self.PLATE_Y[0] <= b["y"] + b["h"] / 2 <= self.PLATE_Y[1]
+                  and self.FURBO_PLATE_X[0] <= b["x"] + b["w"] / 2
+                  <= self.FURBO_PLATE_X[1]
+                  and b["w"] <= self.PLATE_MAX_W]
+        return plates[0] if len(plates) == 1 else None
+
+    def _furbo_thread(self, blocks, body, sender_x, incoming_x,
+                      player_edges, label_right, option_y, clip_top, options):
+        """[(sender, text), …] for a furbo thread pane.
+
+        Rows are sorted by what they are ALIGNED to, as in the Messages
+        app; `player_edges` lists the (side, x) a player row may be
+        aligned on — the right edge in the full-screen pane, either edge
+        in the popup.
+        Labels are taken down to FURBO_LABEL_MIN_CONF because the grey
+        label font reads at 0.50; message rows keep MIN_CONF, which is
+        also what drops the avatar misreads ("0.0") and a half-clipped
+        row's garbage. `options` turns the centred rows under `option_y`
+        into reply options, read under the player's name like the Answer
+        panel's — the Clue pane always, the popup only while its
+        Scroll/Select hints are up."""
+        pool = [b for b in blocks
+                if b["confidence"] >= self.FURBO_LABEL_MIN_CONF
+                and b["text"].strip() not in self.IGNORE
+                and in_region(b, body)]
+        pool.sort(key=lambda b: -(b["y"] + b["h"] / 2))
+        msgs, buf = [], []
+        sender = npc_sender = None
+        zone, last_y, clipped, labelled = "npc", 1.0, False, False
+
+        def starts_clipped(top):
+            return (top > clip_top
+                    or (not labelled and top > clip_top - self.FURBO_LABEL_REACH))
+
+        def flush():
+            if buf and not clipped:
+                msgs.append((sender, " ".join(buf)))
+            buf.clear()
+
+        def aligned(edge, to):
+            return abs(edge - to) <= self.FURBO_ALIGN_TOL
+
+        for b in pool:
+            text = b["text"].strip()
+            if (not re.search(r"\w", text)       # typing dots, cursor glyphs
+                    or self.CHAT_SYSTEM_ROW.search(text)):
+                continue
+            cy = b["y"] + b["h"] / 2
+            top = b["y"] + b["h"]
+            left, right = b["x"], b["x"] + b["w"]
+            label = (b["w"] <= self.FURBO_LABEL_MAX_W
+                     and re.search(r"[^\W\d_]", text))
+            if label and aligned(left, sender_x):
+                if top > clip_top:
+                    continue               # half under the edge: unreliable
+                flush()
+                sender = npc_sender = text
+                zone, clipped, labelled = "npc", False, True
+            elif label and aligned(right, label_right):
+                if top > clip_top:
+                    continue
+                # the player's label names the player, who is already
+                # cast as PLAYER_NAME; reading it as the sender made a
+                # bubble read twice — once under the label, once as
+                # PLAYER_NAME after the label scrolled off (short
+                # texts dedupe on sender+text)
+                flush()
+                sender, zone, clipped, labelled = (self.PLAYER_NAME, "player",
+                                                   False, True)
+            elif b["confidence"] < self.MIN_CONF:
+                continue
+            elif aligned(left, incoming_x):
+                if zone != "npc":
+                    flush()
+                    sender, zone, labelled = npc_sender, "npc", False
+                elif buf and last_y - cy > 2.2 * b["h"]:
+                    flush()
+                    labelled = False
+                if not buf:
+                    clipped = starts_clipped(top)
+                buf.append(text)
+            elif any(aligned(right if side == "right" else left, x)
+                     for side, x in player_edges):
+                if zone != "player":
+                    flush()
+                    sender, zone, labelled = self.PLAYER_NAME, "player", False
+                elif buf and last_y - cy > 2.2 * b["h"]:
+                    flush()
+                    labelled = False
+                if not buf:
+                    clipped = starts_clipped(top)
+                buf.append(text)
+            elif options and cy < option_y:
+                # centred: a reply option. Each is its own item; a wrapped
+                # option's rows are closer than the option pitch.
+                if zone != "option" or (buf and last_y - cy > 2.2 * b["h"]):
+                    flush()
+                    sender, zone, clipped = self.PLAYER_NAME, "option", False
+                buf.append(text)
+            else:
+                continue                   # centred caption, card chrome
+            last_y = cy
+        flush()
+        return msgs
+
+    def _furbo_clue_page(self, blocks):
+        return self._furbo_hub(blocks) and any(
+            in_region(b, self.FURBO_CHAT_TITLE_REGION)
+            and b["confidence"] >= self.MIN_CONF
+            and self.FURBO_CHAT_TITLE.match(b["text"].strip())
+            for b in blocks)
+
+    def _classify_furbo_article(self, blocks):
+        """The Clue Source clipping as reader rows, or None."""
+        if not self._furbo_clue_page(blocks):
+            return None
+        tol = self.FURBO_ALIGN_TOL
+        rows = [b for b in self.confident(blocks)
+                if in_region(b, self.FURBO_BODY)
+                and re.search(r"[^\W\d_]", b["text"])
+                and (abs(b["x"] - self.FURBO_ARTICLE_X) <= tol
+                     or abs(b["x"] - self.FURBO_ARTICLE_TITLE_X) <= tol)
+                and not self.FURBO_ARTICLE_CHIP.match(b["text"].strip())]
+        if not any(abs(b["x"] - self.FURBO_ARTICLE_X) <= tol for b in rows):
+            return None                # a thread, not a clipping
+        rows.sort(key=lambda b: -(b["y"] + b["h"] / 2))
+        return [b["text"] for b in rows]
+
+    def _classify_furbo_chat(self, blocks):
+        """The Clue Investigation pane: [(sender, text), …] or None."""
+        if not self._furbo_clue_page(blocks):
+            return None
+        conf = self.confident(blocks)
+        header = any(in_region(b, self.FURBO_RESULTS_MARKER_REGION)
+                     and self.FURBO_RESULTS_MARKER.match(b["text"].strip())
+                     for b in conf)
+        report = sum(1 for b in conf if in_region(b, self.FURBO_BODY)
+                     and abs(b["x"] - self.FURBO_REPORT_X) <= self.FURBO_ALIGN_TOL
+                     and re.search(r"[^\W\d_]", b["text"]))
+        if header or report >= 2:
+            return self._furbo_thread(
+                blocks, self.FURBO_RESULTS_BODY, self.FURBO_RESULTS_SENDER_X,
+                self.FURBO_RESULTS_INCOMING_X, self.FURBO_RESULTS_PLAYER_EDGES,
+                self.FURBO_RESULTS_PLAYER_LABEL_RIGHT, self.FURBO_OPTION_Y,
+                self.FURBO_CLIP_TOP, options=False)
+        return self._furbo_thread(
+            blocks, self.FURBO_BODY, self.FURBO_SENDER_X,
+            self.FURBO_INCOMING_X, self.FURBO_PLAYER_EDGES,
+            self.FURBO_PLAYER_LABEL_RIGHT, self.FURBO_OPTION_Y,
+            self.FURBO_CLIP_TOP, options=True)
+
+    def _classify_furbo_popup(self, blocks):
+        """The group-chat popup: [(sender, text), …] or None.
+
+        Identified by its shape, not the group's name: a wide title
+        left-aligned at the popup's own left margin, every confident block
+        above the UID strip inside the popup's width, and at least one
+        sender or player label on one of its columns. Any left-aligned
+        title at that spot with nothing labelled under it is some other
+        modal."""
+        conf = self.confident(blocks)
+        if not any(b["w"] >= self.FURBO_POPUP_HEADER_MIN_W
+                   and self.FURBO_POPUP_HEADER["x"][0] <= b["x"]
+                   <= self.FURBO_POPUP_HEADER["x"][1]
+                   and self.FURBO_POPUP_HEADER["y"][0]
+                   <= b["y"] + b["h"] / 2 <= self.FURBO_POPUP_HEADER["y"][1]
+                   for b in conf):
+            return None
+        for b in conf:
+            if b["y"] + b["h"] / 2 < 0.06:
+                continue                   # UID strip
+            if not (self.FURBO_POPUP_X[0] <= b["x"]
+                    and b["x"] + b["w"] <= self.FURBO_POPUP_X[1]):
+                return None
+        tol = self.FURBO_ALIGN_TOL
+        if not any(b["confidence"] >= self.FURBO_LABEL_MIN_CONF
+                   and b["w"] <= self.FURBO_LABEL_MAX_W
+                   and in_region(b, self.FURBO_POPUP_BODY)
+                   and (abs(b["x"] - self.FURBO_POPUP_SENDER_X) <= tol
+                        or abs(b["x"] + b["w"]
+                               - self.FURBO_POPUP_PLAYER_LABEL_RIGHT) <= tol)
+                   for b in blocks):
+            return None
+        hints = {b["text"].strip() for b in conf
+                 if self.FURBO_POPUP_HINT_Y[0] <= b["y"] + b["h"] / 2
+                 <= self.FURBO_POPUP_HINT_Y[1]}
+        return self._furbo_thread(
+            blocks, self.FURBO_POPUP_BODY, self.FURBO_POPUP_SENDER_X,
+            self.FURBO_POPUP_INCOMING_X, self.FURBO_POPUP_PLAYER_EDGES,
+            self.FURBO_POPUP_PLAYER_LABEL_RIGHT, self.FURBO_POPUP_OPTION_Y,
+            self.FURBO_POPUP_CLIP_TOP,
+            options={"Scroll", "Select"} <= hints)
