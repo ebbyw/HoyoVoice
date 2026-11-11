@@ -140,6 +140,17 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Changed
 
+- **The other chat and plate fixtures carry no game text either.** The
+  same word-for-word placeholder pass was run over the Messages-app
+  (`test_hsr_messages.py`), Answer-panel, Eye of Graeae chat, comms and
+  left-plate fixtures — about forty rows of bubbles and topic buttons
+  between them — and over the expectations that quote them, by the same
+  mapping, so the 5 files pin what they did. Names, the delivery notices
+  ("Message failed to send."), the system rows and the two- and
+  three-word bubbles stay, and every player UID is zeroed. The ghost-box
+  test was already written with invented prose and is untouched. The same
+  rule now holds for a new fixture: geometry verbatim, prose placeholder.
+
 - **The Furbobocom test fixtures carry no game text.** The 16 frames in
   `tools/test_hsr_furbobocom.py` were committed as the Vision daemon read
   them, which put some three hundred rows of the event's script — whole

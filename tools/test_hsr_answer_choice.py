@@ -4,7 +4,7 @@ A panel with an option pending swaps its Back hint for Select — and it can
 show Select for the whole conversation: every frame of rec_20260830_131155
 (7s, cutscene chat with Kuchiba) reads Scroll/Select, the detector demanded
 Scroll/Back, and nothing in the panel was read at all. The blocks here are
-that recording's shot #1, verbatim.
+that recording's shot #1, geometry, confidences, names and UI chrome verbatim, the game's prose replaced word for word by placeholder words of the same length.
 
 Two things are pinned: the Select variant is a chat screen (with the panel
 header required, since Select alone is menu furniture), and the option
@@ -30,15 +30,15 @@ SHOT_1 = [
      "x": 0.5953, "y": 0.7806, "w": 0.0630, "h": 0.0333},
     {"text": 'Kuchiba', "confidence": 0.9946,
      "x": 0.6568, "y": 0.7009, "w": 0.0500, "h": 0.0315},
-    {"text": "Everything's set. Ill be heading", "confidence": 0.9838,
+    {"text": "Engineering are. Not it measure", "confidence": 0.9838,
      "x": 0.6703, "y": 0.6519, "w": 0.1969, "h": 0.0352},
-    {"text": 'to the target location with the', "confidence": 0.9862,
+    {"text": 'an two wonder building play two', "confidence": 0.9862,
      "x": 0.6703, "y": 0.6185, "w": 0.1880, "h": 0.0278},
-    {"text": 'detective.', "confidence": 0.9805,
+    {"text": 'necessary.', "confidence": 0.9805,
      "x": 0.6698, "y": 0.5824, "w": 0.0651, "h": 0.0306},
     {"text": 'Kuchiba', "confidence": 0.9993,
      "x": 0.6578, "y": 0.5157, "w": 0.0484, "h": 0.0287},
-    {"text": 'You mean.. the "Life Sciences', "confidence": 0.9806,
+    {"text": 'Who good.. two "Life Sciences', "confidence": 0.9806,
      "x": 0.6703, "y": 0.4667, "w": 0.1901, "h": 0.0343},
     {"text": 'Institute"?', "confidence": 0.9957,
      "x": 0.6703, "y": 0.4324, "w": 0.0651, "h": 0.0306},
@@ -50,7 +50,7 @@ SHOT_1 = [
      "x": 0.8781, "y": 0.1296, "w": 0.0411, "h": 0.0324},
     {"text": 'X', "confidence": 0.9575,
      "x": 0.8651, "y": 0.1380, "w": 0.0073, "h": 0.0130},
-    {"text": 'UID:603150536', "confidence": 0.9900,
+    {"text": 'UID:000000000', "confidence": 0.9900,
      "x": 0.0177, "y": 0.0148, "w": 0.0677, "h": 0.0222},
 ]
 
@@ -59,9 +59,9 @@ def test_select_panel_reads_messages_and_choice():
     msgs = HSR.classify_chat(SHOT_1)
     assert msgs == [
         ("Kuchiba",
-         "Everything's set. Ill be heading to the target location with "
-         "the detective."),
-        ("Kuchiba", 'You mean.. the "Life Sciences Institute"?'),
+         "Engineering are. Not it measure an two wonder building play "
+         "two necessary."),
+        ("Kuchiba", 'Who good.. two "Life Sciences Institute"?'),
         (HSR.PLAYER_NAME, "That's right"),
     ], msgs
 

@@ -50,7 +50,7 @@ COMMS_FRAME = [
      "x": 0.8532, "y": 0.5633, "w": 0.0349, "h": 0.0155},
     {"text": "Furina", "confidence": 1,
      "x": 0.8532, "y": 0.4884, "w": 0.0349, "h": 0.0207},
-    {"text": "UD: 100000000", "confidence": 1,
+    {"text": "UD: 000000000", "confidence": 1,
      "x": 0.8750, "y": 0.0052, "w": 0.0959, "h": 0.0208},
 ]
 
@@ -83,7 +83,7 @@ BOARD_FRAME = [
      "x": 0.8150, "y": 0.0650, "w": 0.0480, "h": 0.0180},
     {"text": "Leave", "confidence": 1,
      "x": 0.9030, "y": 0.0670, "w": 0.0350, "h": 0.0180},
-    {"text": "UID: 100000000", "confidence": 1,
+    {"text": "UID: 000000000", "confidence": 1,
      "x": 0.8750, "y": 0.0050, "w": 0.0959, "h": 0.0208},
 ]
 
@@ -93,21 +93,21 @@ BOARD_FRAME = [
 # label and vetoed the sender. Shot #1343 (2026-08-23) verbatim: the frame
 # the "Compassion is something to be respected" line went unread on.
 REPLY_FRAME = [
-    {"text": "They've been carrying out this", "confidence": 0.9986,
+    {"text": "Should name anything way from", "confidence": 0.9986,
      "x": 0.6885, "y": 0.2722, "w": 0.1786, "h": 0.0306},
-    {"text": "\"ritual\" again and again.", "confidence": 0.9901,
+    {"text": '"minute" state get state.', "confidence": 0.9901,
      "x": 0.6859, "y": 0.2444, "w": 0.1417, "h": 0.0370},
     {"text": "Eye of Graeae", "confidence": 0.9721,
      "x": 0.3068, "y": 0.2167, "w": 0.0865, "h": 0.0296},
-    {"text": "Compassion is something to be respected, Miss Paimon.",
+    {"text": "Appearance us president an it attention, Miss Paimon.",
      "confidence": 0.9971,
      "x": 0.3063, "y": 0.1676, "w": 0.3859, "h": 0.0315},
-    {"text": "UID: 603275577", "confidence": 0.9941,
+    {"text": "UID: 000000000", "confidence": 0.9941,
      "x": 0.8745, "y": 0.0028, "w": 0.0953, "h": 0.0259},
 ]
 
 REPLY_WANT = ("Eye of Graeae",
-              "Compassion is something to be respected, Miss Paimon.")
+              "Appearance us president an it attention, Miss Paimon.")
 
 
 CASES = [
@@ -131,7 +131,7 @@ CASES = [
 # no plate of either shape.
 CLASSIFY_CASES = [
     ("reply bubble survives classify", REPLY_FRAME,
-     ['They\'ve been carrying out this "ritual" again and again.']),
+     ['Should name anything way from "minute" state get state.']),
     ("plateless option column still cleared",
      [b for b in REPLY_FRAME if b["text"].startswith(("They", "\"rit"))
       or "UID" in b["text"]], []),

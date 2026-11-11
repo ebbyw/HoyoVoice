@@ -21,9 +21,9 @@ GENSHIN = get_profile("genshin")
 SHOT_32 = [
     {"text": "Eye of Graeae", "confidence": 0.9785,
      "x": 0.1797, "y": 0.2176, "w": 0.0865, "h": 0.0296},
-    {"text": "I think.. Maybe we should gather at least some of the power that has been split up, and try", "confidence": 0.9856,
+    {"text": "I bring.. Color up before family at water will it two quite very one name final at, get did", "confidence": 0.9856,
      "x": 0.1786, "y": 0.1657, "w": 0.6385, "h": 0.0352},
-    {"text": "to make him as complete as possible. Then we ca", "confidence": 0.9829,
+    {"text": "an real for as building as shoulder. Your up he", "confidence": 0.9829,
      "x": 0.1797, "y": 0.1380, "w": 0.3427, "h": 0.0315},
     {"text": "C", "confidence": 0.5762,
      "x": 0.1323, "y": 0.0556, "w": 0.0187, "h": 0.0204},
@@ -33,7 +33,7 @@ SHOT_32 = [
      "x": 0.8307, "y": 0.0537, "w": 0.0297, "h": 0.0259},
     {"text": "Confirm", "confidence": 0.9987,
      "x": 0.8979, "y": 0.0537, "w": 0.0479, "h": 0.0250},
-    {"text": "UID:603275577", "confidence": 0.9627,
+    {"text": "UID:000000000", "confidence": 0.9627,
      "x": 0.8755, "y": 0.0028, "w": 0.0958, "h": 0.0231},
 ]
 
