@@ -9,6 +9,19 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Added
 
+- **📷 Screenshot, next to ⏺ Record.** A screen that didn't read is
+  usually one frame's question, and the only way to hand that frame over
+  was a recording — a take, a mux, tens of MB, and a scrub to the right
+  second. The button saves the current frame into the recordings folder as
+  `shot_<time>.jpg`, and it is listed with the recordings, newest first
+  across both. The file is the capture's own frame copied byte for byte
+  (1920 wide, what OCR reads), not a re-encode, so a classifier fix
+  measured on it measures the real input; the OCR blocks from the same read
+  are saved beside it as `shot_<time>.json`, the same dump
+  `captures/shots/<id>.json` carries, because pixels alone don't say which
+  band a row fell in. On Windows the copy retries across the instant the
+  capture swaps the frame file, the same window `/live.jpg` already covers.
+
 - **Star Rail's Furbobocom event hub is read.** The furbo event (the
   *Furbobo Weekly* presidential election) runs in an app of its own, and
   nothing claimed any of its screens. The 2026-11-10 21:30 session log

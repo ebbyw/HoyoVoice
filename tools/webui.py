@@ -144,7 +144,8 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <title>HoyoVoice</title><style>__STYLE__</style></head><body>
 <h1>HoyoVoice <span class="muted" style="font-size:12px;font-weight:normal">v__VERSION__</span>
 <button id="observeBtn" onclick="toggleObserve()">Pause</button>
-<button id="recordBtn" onclick="toggleRecord()">⏺ Record</button></h1>
+<button id="recordBtn" onclick="toggleRecord()">⏺ Record</button>
+<button onclick="post('/api/screenshot',{})" title="Save the current frame (full size, with its OCR blocks as .json) to the recordings folder">📷 Screenshot</button></h1>
 
 <div class="cols">
   <div>
@@ -188,7 +189,7 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
     </div>
     <a href="/live.jpg" target="_blank"><img id="preview" style="width:100%;border-radius:8px;border:1px solid #26272e"></a>
     <div id="previewOff" style="display:none;width:100%;aspect-ratio:16/9;border-radius:8px;border:1px solid #26272e;background:#0c0d10;color:#e0605e;align-items:center;justify-content:center;font-size:15px">feed paused</div>
-    <div style="margin-top:6px"><span class="muted">recordings save to</span>
+    <div style="margin-top:6px"><span class="muted">recordings + screenshots save to</span>
       <input id="recDir" size="24" autocomplete="off"><button onclick="setRecDir()">Set</button></div>
     <div id="recordings" class="muted" style="margin-top:6px">none yet</div>
   </div>
@@ -534,10 +535,13 @@ def _recordings(shared):
     if cached_key != rkey:
         cached_list = sorted(
             ({"name": p.name, "mb": round(p.stat().st_size / 1e6, 1)}
-             for ext in ("*.mp4", "*.mkv") for p in rd.glob(ext)
+             for ext in ("*.mp4", "*.mkv", "shot_*.jpg")
+             for p in rd.glob(ext)
              # hide the raw file only while it's still being written
              if p.name != raw),
-            key=lambda r: r["name"], reverse=True)
+            # by the timestamp after the prefix, so shots and takes interleave
+            # in the order they were made instead of grouping by kind
+            key=lambda r: r["name"].split("_", 1)[-1], reverse=True)
         _REC_CACHE = (rkey, cached_list)
     return cached_list
 
@@ -739,6 +743,11 @@ def start_webui(shared, port=DASHBOARD_PORT):
     @app.post("/api/record")
     def record():
         shared["commands"].put(("record", bool(request.get_json().get("on"))))
+        return jsonify(ok=True)
+
+    @app.post("/api/screenshot")
+    def screenshot():
+        shared["commands"].put(("screenshot",))
         return jsonify(ok=True)
 
     @app.get("/api/devices")
