@@ -621,6 +621,44 @@ def save_shot(eid):
         return False
 
 
+def take_screenshot():
+    """One full-size frame into the recordings folder, for when a clip is
+    more than the question needs ("why didn't this screen read?").
+
+    Copied byte-for-byte rather than re-encoded: the file IS the frame the
+    OCR engine reads (1920-wide, as the capture writes it), so a classifier
+    fix measured on it measures the real input. The OCR blocks ride along
+    as a .json — the same dump shots/<id>.json carries — because the
+    pixels alone can't say which band a row landed in."""
+    try:
+        d = REC_DIR["path"]
+        d.mkdir(parents=True, exist_ok=True)
+        stem = f"shot_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        out, n = d / f"{stem}.jpg", 1
+        while out.exists():          # two presses inside one second
+            n += 1
+            out = d / f"{stem}_{n}.jpg"
+        # on Windows the capture replaces the frame by rename, and opening
+        # it in that instant raises PermissionError (see /live.jpg)
+        for attempt in range(3):
+            try:
+                out.write_bytes(FRAME.read_bytes())
+                break
+            except PermissionError:
+                if attempt == 2:
+                    raise
+                time.sleep(0.05)
+        if latest_ocr["blocks"] is not None:
+            out.with_suffix(".json").write_text(json.dumps(
+                {"game": game.profile.name, "blocks": latest_ocr["blocks"]},
+                indent=1), encoding="utf-8")
+        add_event("screenshot saved", "spoken", None, out.name)
+        print(f"[screenshot] {out}", flush=True)
+    except OSError as e:
+        # FileNotFoundError before the capture's first frame lands
+        add_event(f"screenshot FAILED: {e}", "yield")
+
+
 def add_event(action, cls, speaker=None, text="", voice=None, speed=None,
               can_replay=False, shot=False, extend=False):
     """Append a log event — or, with `extend`, GROW the one just written.
@@ -2308,6 +2346,8 @@ def handle_commands(speech, recent_lines):
             print(f"[mute] {char} = {muted}", flush=True)
         elif cmd[0] == "record":
             record_request["want"] = cmd[1]
+        elif cmd[0] == "screenshot":
+            take_screenshot()
         elif cmd[0] == "setdevice":
             device_request["want"] = cmd[1]   # {"video": …, "audio": …}
         elif cmd[0] == "recdir":
