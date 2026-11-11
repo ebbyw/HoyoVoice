@@ -140,6 +140,26 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Changed
 
+- **The Furbobocom test fixtures carry no game text.** The 16 frames in
+  `tools/test_hsr_furbobocom.py` were committed as the Vision daemon read
+  them, which put some three hundred rows of the event's script — whole
+  chat bubbles, a clue clipping, the Furbo List bios — into a public repo,
+  against the standing decision that game text stays out of it (the
+  TextMap dumps and anchor PNGs were kept out for the same reason). The
+  prose is now replaced word for word by placeholder words of the same
+  length and capitalization, with the punctuation kept, so every row has
+  the same width, letter count and shape the classifier saw; names, UI
+  chrome ("Clue Investigation", "Scroll", "Investigation Results"), the
+  quiz dates and the three-word bubbles stay, since a name or a short
+  phrase is not what copyright protects. The same word maps to the same
+  placeholder everywhere, which is what lets the expectations in the
+  tests — the same lines concatenated across different wraps — follow by
+  the same mapping; all 18 still pass unchanged in what they pin. The
+  player's UID in the corner of every frame is zeroed as well. The one
+  assertion that went inert in the rewrite (the garbled first row of a
+  message sliding under the popup's title rule, which the real frame read
+  as "vino") now checks for the garble the placeholder row carries.
+
 - **A speaker the game usually voices no longer has every line
   synthesized on speculation.** Synthesis has always run on a thread while
   the VAD gate listens, so an unvoiced line plays the instant the verdict
