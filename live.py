@@ -846,6 +846,25 @@ def center_energy_voiced(mid_up, side_up, vad_peak, decisive_over=None):
     return side_up <= ENERGY_SIDE_FLAT and vad_peak >= 0.15
 
 
+def continues_spoken_line(ext_base, last_spoken_norm):
+    """Is this the remainder of a line we already read aloud?
+
+    Then the centre-energy layer may not skip it. The game voices a line
+    from its first word or not at all; it does not start halfway through a
+    line it left silent. So a burst at the remainder is the scene — a
+    paper rustle, a chime, music — and the layer, which measures energy
+    rather than speech, reads it as voiceover and cuts the line in half.
+    Across 590 remainders of spoken lines in 43 session logs, it did that
+    four times and the VAD six; the four are the letter in rec_20261112_
+    152020 ("Otherwise, don't blame me for bringing a van full of
+    muscle…", whose game track has no speech in it at all), two Paimon
+    remainders on 2026-11-10 (one on a 0.03s click) and one on 2026-08-23.
+    The VAD keeps its say, and so does the mid-play yield — which, when it
+    fires, clears last_spoken_norm, because then the game WAS voicing it.
+    """
+    return bool(ext_base) and ext_base == last_spoken_norm
+
+
 def decisive_cut(speaker):
     """The mid-over-side a burst must reach to answer for itself, in dB.
 
@@ -2707,6 +2726,9 @@ def main():
     last_mtime = 0.0
     last_frame_change = time.monotonic()
     yield_event_id = None
+    # normalized text of the line we last read aloud, cleared when a yield
+    # proves the game was voicing it after all — see continues_spoken_line()
+    last_spoken_norm = None
     playing_speaker = None      # whose line is on the speakers right now
     qr_absent = 99                      # Quick Read incremental-reading state
     qr_pages = {}                       # reader page → rows already read on it
@@ -2872,6 +2894,7 @@ def main():
                 # it is proof the gate's own verdict missed: the line was
                 # recorded as spoken a moment ago
                 note_scene_vo()
+                last_spoken_norm = None
                 if yield_event_id:
                     for e in events:
                         if e["id"] == yield_event_id:
@@ -3871,8 +3894,9 @@ def main():
             # which is the exact case this layer exists for.
             cut = decisive_cut(state["speaker"])
             decisive = mid_up - side_up >= cut
-            if not voiced and center_energy_voiced(mid_up, side_up, vad_peak,
-                                                   cut):
+            if (not voiced
+                    and not continues_spoken_line(ext_base, last_spoken_norm)
+                    and center_energy_voiced(mid_up, side_up, vad_peak, cut)):
                 deaf = model_deaf(state["speaker"])
                 if center_burst_corroborated(state["speaker"], vad_peak):
                     voiced = True
@@ -3931,6 +3955,7 @@ def main():
             speed = spec.get("speed")
             stats["spoken"] += 1
             last_handled_norm = new_norm
+            last_spoken_norm = new_norm
             yield_event_id = add_event(
                 screen_kind, "spoken", state["speaker"], speak_text,
                 voice, speed, can_replay=True, shot=True)

@@ -331,6 +331,25 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **The rest of a line we were reading could be skipped as voiced.** The
+  letter in the 2026-11-12 15:20 session (hoyovoice-20261112-152338,
+  rec_20261112_152020) was read to its first sentence ("Ms. Nihilux, you
+  have one standard day to pay off your debt.") and the rest — "Otherwise,
+  don't blame me for bringing a van full of muscle…" — was skipped as
+  voiceover on a centre-channel burst (mid+13.8 side+2.9, VAD peak 0.22).
+  The recording's new game track settles it: no speech anywhere in that
+  stretch. The game voices a line from its first word or not at all, so a
+  burst at the remainder of a line it left silent is the scene, and the
+  centre-energy layer — which measures energy, not speech — can no longer
+  skip it. Across 590 remainders of spoken lines in 43 session logs that
+  layer skipped four: this letter, two Paimon remainders on 2026-11-10
+  (one on a 0.03s click) and one on 2026-08-23. The VAD keeps its say on
+  remainders, and so does the mid-play yield, which also hands the layer
+  back if it fires — then the game *was* voicing the line. A sustain floor
+  was considered and rejected: real voiced bursts in the same logs run
+  from 0.03s up, so no cut separates them. `tools/test_center_energy.py`
+  pins the guard.
+
 - **The voiceover detector went deaf partway through a session.** In the
   2026-11-12 14:43 session (hoyovoice-20261112-145836, rec_20261112_145744)
   every Blade and Silver Wolf line was correctly left to the game for the
