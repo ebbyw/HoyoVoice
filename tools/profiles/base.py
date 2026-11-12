@@ -516,6 +516,13 @@ class Profile:
         """Message/group-chat panel. Returns [(sender, text), …] or None."""
         return None
 
+    def holds_reader(self, blocks):
+        """True for a modal the game draws OVER an open reading panel
+        without closing it (a reward popup at the end of a chat). The
+        panel-closed timer pauses while one is up instead of counting it
+        as the panel gone, so what is already queued still gets read."""
+        return False
+
     def reader_page(self, blocks):
         """Which page of a PAGED reading screen is up ('2/5'), or None.
         The reader dedupes within a page, so pages that repeat each

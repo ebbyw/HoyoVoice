@@ -3151,6 +3151,10 @@ def main():
                         read_queue.append((normalize_speaker(spk),
                                            fix_ocr_text(t)))
                 candidate, candidate_count = None, 0
+            elif not reader_closed and screens.holds_reader(blocks):
+                # a modal over the panel, not the panel closing: restart
+                # the close timer so it counts only time with neither up
+                qr_absent = 0
             else:
                 if qr_absent < 99:
                     qr_absent += 1

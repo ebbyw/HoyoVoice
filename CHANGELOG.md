@@ -22,6 +22,47 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   band a row fell in. On Windows the copy retries across the instant the
   capture swaps the frame file, the same window `/live.jpg` already covers.
 
+- **Star Rail's incoming-message popup is read.** The modal that opens
+  over the world when a contact writes mid-exploration ("Incoming Message
+  Notification" over a contact list, the thread beside it) is a fourth
+  chat layout, and nothing detected it. The 2026-11-12 13:15 session
+  (hoyovoice-20261112-131712, rec_20261112_131536) spoke one line in
+  ninety seconds of an eighteen-bubble thread: the player's first reply,
+  claimed by the Answer panel's looser detector with the player's own
+  label glued on ("Ebby Hi, Kafka" in the Trailblazer's voice, 13:16:10),
+  after the same reply had been logged twice as an unattributed choice
+  prompt. None of the contact's messages were read.
+
+  The popup now has its own detector, keyed on its title and tried before
+  the Answer panel. It sorts rows by what they are aligned to, like the
+  Messages app and the Furbobocom panes, at columns measured off 152
+  frames of that recording: sender labels, incoming rows, the player's
+  label (read as the player, never as text) and the player's bubbles,
+  whose text is left-aligned inside a right-hung bubble — so a one-row
+  reply aligns on the right and a wrapped one on the left. A row half
+  under the title rule comes back garbled at full confidence ("Just
+  warma cater ap wir you") and drops the message it starts. Reply options
+  are never read: the one picked comes straight back as the player's
+  bubble. They are centred, which is not enough to keep them off the
+  columns — a 34-character option ended at x 0.7399, on the player
+  column — so while the Select hint is up the pane's floor rises above
+  them. The contact list with no thread open is still reported as this
+  screen, which is what stops its reply buttons reaching the choice
+  classifier.
+
+  Finishing the conversation pays out an "Items Obtained" modal that
+  blanks the popup for 1.5 s while the last bubbles are still queued,
+  within half a second of the reader's panel-closed timeout. A new
+  profile hook, `holds_reader`, pauses that timer while such a modal is
+  up, and the popup reads nothing from the frame where it comes back
+  under it (its rows read garbled there).
+
+  Replayed, the thread reads all seventeen bubbles that were spoken before
+  the player closed the popup, each in its sender's voice. The last
+  ("Bye") was still queued when they closed it, because in the original
+  session nothing had been read and the player didn't wait — the reader
+  stops on close by design.
+
 - **Star Rail's Furbobocom event hub is read.** The furbo event (the
   *Furbobo Weekly* presidential election) runs in an app of its own, and
   nothing claimed any of its screens. The 2026-11-10 21:30 session log
