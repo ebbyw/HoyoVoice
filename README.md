@@ -257,7 +257,7 @@ Calibrating a screen type takes captures, not guesswork: every logged event save
 | `tools/anchors.py` | Game-chrome template matching + ROI cropping (`tools/profiles/anchors/`) |
 | `tools/textmap.py` | Snap a read line back to the game's own text (`settings.textmap`); also the dump checker CLI |
 | `tools/ocr_bench.py` | Measure the OCR: frame corpora (`extract`/`capture`) scored for stability, accuracy and stabilization policy |
-| `tools/vad.py` | Silero VAD onnx wrapper (torch-free) |
+| `tools/vad.py` | Silero VAD onnx wrapper (torch-free), with its memory capped at 8s |
 | `tools/webui.py` | Dashboard (Flask, single page) + `VERSION` |
 | `tools/replay.py` | Replay a recording through the real pipeline (see below) |
 | `tools/pronounce_names.py` | Character-name spoken forms + roster fetch; audits them against Kokoro's phonemizer |

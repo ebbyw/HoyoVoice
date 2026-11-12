@@ -39,7 +39,7 @@ from anchors import AnchorPack, decode_half  # noqa: E402
 from casting_filter import canonical_quotes, junk_speaker  # noqa: E402
 from pronounce_names import NPC_GENDERS  # noqa: E402
 from textmap import TextMap  # noqa: E402
-from vad import CHUNK, SileroVAD  # noqa: E402
+from vad import CHUNK, BoundedVAD  # noqa: E402
 import voicepack  # noqa: E402
 from webui import VOICE_CATALOG, start_webui  # noqa: E402
 from hv_platform import get_backend  # noqa: E402
@@ -744,7 +744,7 @@ def audio_thread():
     dashboard says NO AUDIO and every line is spoken ungated after the 5s
     grace, which looks like a gate verdict rather than a crash. A failed
     read rejoins at the live edge instead."""
-    vad = SileroVAD(ROOT / "tools" / "silero_vad.onnx")
+    vad = BoundedVAD(ROOT / "tools" / "silero_vad.onnx")
     held = {"fh": None}
     while True:
         try:
