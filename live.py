@@ -1597,6 +1597,28 @@ def option_tail(s):
     return normalize_text(" ".join(s.split()[1:]))
 
 
+def refire_blocked(key, fired_key, text_left):
+    """True if a settled (speaker, norm) key is the line that already went
+    through the gate, and must not go through it again.
+
+    The speaker only counts once the fired TEXT has left the screen. It is
+    there so two characters answering with one identical line both get read
+    — and the second of those is always re-typed, so its text leaves the
+    screen first. A nameplate that changes under text that never moved is
+    the plate read flickering instead ("Ebby" read as Cyrillic "ЕЬЬу",
+    2026-08-12 17:26), and with the speaker counted there, each flip fired
+    the static line again. window_verdict is same-character too, so the
+    window couldn't catch it either: the flipped read replaced the window,
+    the game had long finished its voiceover, and a line the player idled
+    on was spoken over and over."""
+    if fired_key is None or key[1] != fired_key[1]:
+        return False
+    if not text_left:
+        return True
+    return (similar_speaker(key[0], fired_key[0])
+            or not key[0] or not fired_key[0])
+
+
 def remember_line(recent_lines, speaker, norm, stack=False):
     """Put a line into the dedupe window. A DIALOGUE line replaces the
     window — "immediately before" is the contract (see DEDUP_WINDOW), and
@@ -2636,6 +2658,9 @@ def main():
     # from saying the same words — a real scene, two characters answering
     # with one identical line, and the second stayed silent.
     fired_key = None
+    # whether the fired line's TEXT has left the screen since it fired — see
+    # refire_blocked() for why the speaker only counts once it has
+    fired_text_left = False
     unstable_count = 0
     miss_streak = 0             # consecutive frames the detector lost the line
     last_raw_norm = None        # previous frame's UNCLIPPED read (growth check)
@@ -3451,6 +3476,7 @@ def main():
                     miss_streak += 1
                     if miss_streak > MISS_TOLERANCE:
                         candidate, candidate_count = None, 0
+                        fired_text_left = True
                     continue
             else:
                 # dialogue from an UNKNOWN speaker needs the game's story
@@ -3543,6 +3569,9 @@ def main():
                 candidate_count += 1
                 candidate_variants.append((state["dialogue"], conf))
             else:
+                if fired_key is not None and not same_line(key[1],
+                                                           fired_key[1]):
+                    fired_text_left = True
                 candidate_variants = deque([(state["dialogue"], conf)],
                                            maxlen=CANDIDATE_VARIANTS_MAX)
                 # if the text GREW from the previous candidate, the typewriter
@@ -3601,15 +3630,12 @@ def main():
             # +4 allowance disappears). With exact equality the count sails
             # past the new threshold and the line is never spoken at all.
             # fired_key then stops a re-fire — punctuation jitter normalizes
-            # to the same string, while a genuine extension differs. Same
-            # speaker rule as window_verdict: a plate that flickers out
-            # mid-line reads as unknown, and that is still the same line.
-            if candidate_count < required or (
-                    fired_key is not None and key[1] == fired_key[1]
-                    and (similar_speaker(key[0], fired_key[0])
-                         or not key[0] or not fired_key[0])):
+            # to the same string, while a genuine extension differs.
+            if candidate_count < required or refire_blocked(
+                    key, fired_key, fired_text_left):
                 continue
             fired_key = key
+            fired_text_left = False
             candidate_growing = False
             # Speak the BEST read of this line, not whichever frame happened
             # to trip the threshold. OCR emits micro-variants of the same

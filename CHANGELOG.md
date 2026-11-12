@@ -271,6 +271,22 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **A voiced line left on screen was spoken over and over.** Idling on a
+  line the game had already voiced, the app read it aloud again and again.
+  0.12.1 made the re-fire guard carry the speaker, so that two characters
+  answering with one identical line would both be read; the dedupe window
+  was already same-character only. Between them, nothing stopped the line
+  still on screen when its *nameplate* read changed — and plate reads do
+  flip between dissimilar strings with the text static ("Ebby", then
+  Cyrillic "ЕЬЬу" two seconds later, 2026-08-12 17:26). Each flip fired
+  the line, replaced the window, and met a gate that heard no voiceover,
+  because the game had finished it. The August logs, from before 0.12.1,
+  show no line spoken twice. The speaker now counts toward a re-fire only
+  once the fired text has left the screen — a new candidate with different
+  text, or the line lost past the miss tolerance — which the second
+  character's line always does, because it is re-typed.
+  `tools/test_refire_guard.py` pins both sides.
+
 - **Replay extracted zero frames under ffmpeg 9.** ffmpeg 9.0.2 refuses
   limited-range input to the mjpeg encoder ("Non full-range YUV is
   non-standard") where 7.x converted silently, and every recording is
