@@ -312,6 +312,36 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Fixed
 
+- **The voiceover detector went deaf partway through a session.** In the
+  2026-11-12 14:43 session (hoyovoice-20261112-145836, rec_20261112_145744)
+  every Blade and Silver Wolf line was correctly left to the game for the
+  first ten minutes; then, in the Furbobo Press, every Furbo line —
+  Furbulitzer, Joolyon, Furli, Paraprince — was read over the game's own
+  voiceover, twenty-odd lines at `gate=0.00` against centre bursts of up to
+  mid+23dB. The recording settles which half was wrong: Joolyon's line
+  plays from 11.2 to 13.8s, a fresh Silero scores it 0.59, and the live
+  session scored it 0.00.
+
+  Silero is a recurrent model meant to be reset between utterances, and
+  the app ran one instance unbroken for the whole session. On a voice it
+  only half-recognizes — the Furbos are processed and high-pitched, like
+  Paimon — the minutes of music behind the line decide the verdict: the
+  same Joolyon line scores anywhere from 0.00 to 0.77 after 3 to 15
+  minutes of unrelated game audio, while the Kokoro read of it right after
+  scores 1.00 every time. A plain periodic reset swaps that for a cold
+  start, and a freshly zeroed model is jumpy for its first second or two.
+  So two models now run half a period apart, each reset every 8s, and the
+  one that has been running longer answers: every probability has 4 to 8s
+  of history behind it. The two Joolyon lines score 0.90 and 0.99, the
+  same whatever came before. Over three older sessions — two quests with
+  no voice acting at all and a voiced Snezhnaya scene — the verdict of
+  every 1.8s window is unchanged, except one window each that the old
+  detector called voiced and this does not. A 16s period was tried and
+  rejected: it recovers the second line but leaves the first at 0.59.
+  Replay of the recording now skips both Joolyon lines; before, the
+  second was read and cut off mid-play. `tools/test_bounded_vad.py` pins
+  the 4–8s bound.
+
 - **A voiced line left on screen was spoken over and over.** Idling on a
   line the game had already voiced, the app read it aloud again and again.
   0.12.1 made the re-fire guard carry the speaker, so that two characters
