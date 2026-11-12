@@ -169,6 +169,73 @@ class HSR(Profile):
     # last message of a quiet thread, which has nothing arriving after it
     # to push it up out of the way.
 
+    # --- Incoming Message Notification (a message popup over the world) --
+    # A fourth chat layout: the modal that opens when a message arrives
+    # mid-exploration, contact list on the left under the title "Incoming
+    # Message Notification", the open thread on the right, reply options
+    # in a band under the thread. Nothing detected it, so the 2026-11-12
+    # 13:15 session (rec_20261112_131536, Windows box) spoke one line in
+    # ninety seconds of a ten-message thread: the player's first reply,
+    # read as dialogue with their own label glued on ("Ebby Hi, Kafka",
+    # 13:16:10), after the same reply had been logged twice as an
+    # unattributed choice prompt. Every number here is measured off that
+    # recording at 2 fps (152 frames OCR'd by the Vision daemon); re-
+    # measure from a saved frame before changing one.
+    #
+    # The title is the marker: it is the same on every conversation and
+    # sits where no other HSR screen draws text (cx 0.268, cy 0.776).
+    # Spaces are optional because RapidOCR drops them on the Windows box;
+    # "notification" is required because the Furbobocom clipping carries
+    # an "Incoming Message" chip of its own.
+    MSGNOTE_MARKER = re.compile(r"incoming\s*message\s*notification", re.I)
+    MSGNOTE_MARKER_REGION = {"x": (0.20, 0.34), "y": (0.76, 0.80)}
+    # The thread pane. Its x floor clears the contact list (right edges to
+    # 0.3735) and still holds a wrapped player row (left 0.4447); its
+    # ceiling sits under the conversation title (cy 0.787) and over the
+    # garbled half-hidden rows (cy to 0.752), which the thread parser has
+    # to SEE to know their message is clipped; its floor clears the hint
+    # row (cy 0.137).
+    MSGNOTE_BODY = {"x": (0.43, 0.80), "y": (0.16, 0.765)}
+    # While the Select hint is up the pane shrinks to make room for the
+    # reply options under it (thread rows end at cy 0.418, options start
+    # at cy 0.340). The options are centred, but centred text lands on a
+    # column by its width alone: "Pls don't abuse Blade's account..."
+    # ended at x 0.7399 — on the player column — and a long one would
+    # start on the incoming column. Options are never read here: the one
+    # picked comes straight back as the player's own bubble, so reading
+    # them would say every chosen line twice (the Messages app's rule).
+    MSGNOTE_SELECT_BODY = {"x": (0.43, 0.80), "y": (0.36, 0.765)}
+    MSGNOTE_HINT_Y = (0.12, 0.16)
+    # Columns, as in the other threads:
+    #   player row     left-aligned  0.4447-0.4477 (a wrapped bubble)
+    #                  right-aligned 0.7398-0.7413 (a one-row bubble)
+    #   sender label   left-aligned  0.4780-0.4797
+    #   incoming row   left-aligned  0.4875-0.4913
+    #   player label   right-aligned 0.7558-0.7579
+    # The player's bubble is right-hung with its text left-aligned inside,
+    # like the Furbobocom popup's, so a wrapped one aligns on the left.
+    # The closest pair of windows is the label and incoming columns,
+    # 0.011 apart; FURBO_ALIGN_TOL (0.005) keeps them apart.
+    MSGNOTE_SENDER_X = 0.4788
+    MSGNOTE_INCOMING_X = 0.4895
+    MSGNOTE_PLAYER_EDGES = (("left", 0.4462), ("right", 0.7405))
+    MSGNOTE_PLAYER_LABEL_RIGHT = 0.7562
+    # The thread scrolls up under the title rule. Clean rows top out at
+    # 0.7416 (a label); rows caught under it come back garbled at full
+    # confidence ("Just warma cater ap wir you", top edge 0.7597) and
+    # start at 0.7547.
+    MSGNOTE_CLIP_TOP = 0.748
+    # Finishing the conversation pays out: an "Items Obtained" modal
+    # (title cx 0.500, cy 0.831-0.836) blanks the whole popup for 1.5 s
+    # (75.5-77.0 in the recording) while the last bubbles are still
+    # queued — within half a second of READER_CLOSE_AFTER at 2 fps on
+    # the fast OCR path, and the frame where the popup comes back under
+    # it reads its rows garbled ("Stellarejadime Ill try sending…"). So
+    # the modal pauses the close timer and the popup reads nothing under
+    # it.
+    REWARD_TITLE = re.compile(r"^items\s*obtained$", re.I)
+    REWARD_TITLE_REGION = {"x": (0.45, 0.55), "y": (0.80, 0.87)}
+
     # --- Furbobocom (the furbo event hub) --------------------------------
     # A third chat layout, and two more screens around it. Every number
     # here is measured off rec_20261110_213011 at 1080p (21 frames OCR'd
@@ -644,8 +711,9 @@ class HSR(Profile):
         return msgs
 
     def classify_chat(self, blocks):
-        """Either of this game's two chat panels — the in-story Answer
-        screens or the phone Messages app. [(sender, text), …] or None.
+        """Any of this game's chat panels — the in-story Answer screens,
+        the phone Messages app, the Incoming Message Notification popup,
+        and the Furbobocom thread and popup. [(sender, text), …] or None.
 
         Tried in that order, and NOT with `or`: an Answer panel whose only
         message is still clipped returns an empty list, which means "a
@@ -653,7 +721,13 @@ class HSR(Profile):
         a detector that would answer None ("not a chat screen at all") and
         hand the frame back to the dialogue classifier."""
         conf = self.confident(blocks)
-        msgs = self._classify_answer_panel(conf)
+        # The notification popup goes first: its title is unambiguous,
+        # and the Answer panel's looser test claims its thread — the
+        # player's label landed in its message column and was spoken
+        # glued to the reply ("Ebby Hi, Kafka", 13:16:10 on 2026-11-12).
+        msgs = self._classify_message_notification(blocks)
+        if msgs is None:
+            msgs = self._classify_answer_panel(conf)
         if msgs is None:
             msgs = self._classify_messages_app(conf)
         if msgs is None:
@@ -661,6 +735,41 @@ class HSR(Profile):
         if msgs is None:
             msgs = self._classify_furbo_popup(blocks)
         return msgs
+
+    def _classify_message_notification(self, blocks):
+        """The Incoming Message Notification popup: [(sender, text), …]
+        or None.
+
+        An empty list while the contact list is up with no thread open
+        ("Please select a contact"): that is still this screen, and
+        handing it back to the dialogue classifier is what logged the
+        reply buttons as choice prompts. Labels come in at
+        FURBO_LABEL_MIN_CONF like the furbo panes'; this panel's labels
+        read at 1.00 on Vision, but nothing is lost by matching the other
+        threads."""
+        conf = self.confident(blocks)
+        if not any(in_region(b, self.MSGNOTE_MARKER_REGION)
+                   and self.MSGNOTE_MARKER.search(b["text"])
+                   for b in conf):
+            return None
+        if self.holds_reader(blocks):
+            return []                  # the reward modal garbles the rows
+        selecting = any(
+            "select" in b["text"].lower()
+            and self.MSGNOTE_HINT_Y[0] <= b["y"] + b["h"] / 2
+            <= self.MSGNOTE_HINT_Y[1]
+            for b in conf)
+        return self._furbo_thread(
+            blocks,
+            self.MSGNOTE_SELECT_BODY if selecting else self.MSGNOTE_BODY,
+            self.MSGNOTE_SENDER_X, self.MSGNOTE_INCOMING_X,
+            self.MSGNOTE_PLAYER_EDGES, self.MSGNOTE_PLAYER_LABEL_RIGHT,
+            0.0, self.MSGNOTE_CLIP_TOP, options=False)
+
+    def holds_reader(self, blocks):
+        return any(in_region(b, self.REWARD_TITLE_REGION)
+                   and self.REWARD_TITLE.match(b["text"].strip())
+                   for b in self.confident(blocks))
 
     # ------------------------------------------------------------------
     # Furbobocom

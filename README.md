@@ -98,6 +98,7 @@ Open **http://127.0.0.1:8470** — the app starts **paused**. Pick your video an
 | Trial guides (Genshin — the paged character-trial panel: "Character Summary", "Elemental Skill"…) | Each page's title then its text by the narrator, as you page through; a long page is read as you scroll it |
 | Message / group-chat panels | Each message in its sender's cast voice, incrementally as you scroll; system notices ("… started sharing location") read by the narrator |
 | Phone Messages app (Star Rail — the regular character chats) | Each message in its sender's cast voice as it arrives, your own replies in yours; the conversation list, the delivery notices and the unsent reply buttons are all silent |
+| Incoming message popup (Star Rail — the "Incoming Message Notification" modal that opens over the world when a contact writes) | Each message in its sender's cast voice as it arrives, your own replies in yours; the contact list and the reply options are silent — the one you pick is read once, as your bubble. A reward popup at the end of the chat doesn't cut off what is still queued |
 | Furbobocom (Star Rail — the furbo event hub: the Clue Investigation thread and its clue clippings, the group-chat popups, the results screen, and the furbo office scenes) | Thread bubbles in their sender's cast voice, yours in yours, the reply options under the player's name; a clue clipping by the narrator; the office scenes' corner nameplate is read as the speaker; the hub's other pages (Press Affairs, the Furbo List cards) are silent |
 | Info screens (Participant Details…) | Read top-to-bottom via the same reader |
 | Floating host bubbles (portrait, no nameplate) | Spoken as `settings.overlay_speaker` |
@@ -233,7 +234,7 @@ Reading a screen means knowing where that game draws its nameplate, its dialogue
 
 | Game | Status |
 |---|---|
-| Honkai: Star Rail | Complete — dialogue, narration, lore cards, loading screens, overlays, Quick Read, info screens, chat panels (the in-story "Answer" panel, the phone's Messages app, and the Furbobocom event hub's threads and popups) |
+| Honkai: Star Rail | Complete — dialogue, narration, lore cards, loading screens, overlays, Quick Read, info screens, chat panels (the in-story "Answer" panel, the phone's Messages app, the incoming-message popup, and the Furbobocom event hub's threads and popups) |
 | Genshin Impact | **All screens** — dialogue, choice prompts, full-screen narration, loading-screen tips, readable articles and books opened from the inventory archive, character-trial guides, and the Snezhnaya update's comms messages (left-anchored sender over the live HUD); all calibrated against real sessions. The archive books turned out to be the same reading panel the articles use — a 2026-08-09 session read a 60-page play script from it end to end |
 
 `settings.game` picks a profile: `hsr`, `genshin`, or `auto` (the default), which starts on Star Rail and switches when a sustained run of frames carries chrome unique to the other game — Star Rail's `✕ Continue` hint, Genshin's bottom-right UID. The dashboard has the same control, and shows which profile is actually being read in auto mode.
