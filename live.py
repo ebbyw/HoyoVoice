@@ -2162,6 +2162,60 @@ def concat_parts(parts):
     return Path(max(parts, key=lambda p: Path(p).stat().st_size))
 
 
+# Audio tracks of a saved recording, in order. The mix is first and the
+# default, so any player that plays one track plays what the session sounded
+# like. The other two exist for diagnosis: with our own speech mixed in, a
+# replay hears every line we read as if the game had voiced it, and a gate
+# change can only be compared against the old gate, never against what the
+# game actually played (2026-11-12, measuring the VAD on rec_20261112_145744).
+# tools/replay.py picks the "game" track by this title.
+RECORDING_TRACKS = ("mix", "game", "tts")
+
+
+def mux_command(raw, game_slice, clips, out, game_s):
+    """The ffmpeg call that writes a recording: video, then mix / game / tts.
+
+    With no clips there is nothing to mix, and the file carries the game
+    audio alone, titled "game" — a silent tts track and a mix identical to
+    the game would be two copies of nothing. Pure, so
+    tools/test_recording_tracks.py can pin the layout.
+    """
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error",
+           "-i", str(raw),
+           "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", str(game_slice)]
+    if not clips:
+        return cmd + ["-map", "0:v", "-map", "1:a",
+                      "-metadata:s:a:0", "title=game",
+                      "-metadata:s:a:0", "handler_name=game",
+                      "-c:v", "copy", "-c:a", "aac", "-y", str(out)]
+    for c in clips:
+        cmd += ["-i", c["file"]]
+    filters, labels = [], []
+    for i, c in enumerate(clips, 2):        # clip inputs start at index 2
+        trim = (f"atrim=0:{max(c['end'] - c['start'], 0.05):.3f},"
+                if c.get("end") is not None else "")
+        ms = int(c["start"] * 1000)
+        filters.append(f"[{i}:a]{trim}aresample=48000,"
+                       f"aformat=channel_layouts=stereo,"
+                       f"volume=2.5,alimiter=limit=0.95,"  # Kokoro is quiet
+                       f"adelay={ms}|{ms}[a{i}]")
+        labels.append(f"[a{i}]")
+    # the tts track runs the length of the game audio, so the three tracks
+    # line up end to end instead of the last one stopping at the final clip
+    filters.append("".join(labels)
+                   + f"amix=inputs={len(clips)}:normalize=0,"
+                   + f"apad=whole_dur={game_s:.3f},asplit[tts_mix][tts]")
+    filters.append("[1:a][tts_mix]amix=inputs=2:normalize=0:duration=first"
+                   "[mix]")
+    cmd += ["-filter_complex", ";".join(filters),
+            "-map", "0:v", "-map", "[mix]", "-map", "1:a", "-map", "[tts]"]
+    for k, title in enumerate(RECORDING_TRACKS):
+        cmd += [f"-metadata:s:a:{k}", f"title={title}",
+                f"-metadata:s:a:{k}", f"handler_name={title}",
+                f"-disposition:a:{k}", "default" if k == 0 else "0"]
+    return cmd + ["-c:v", "copy", "-c:a", "aac", "-y", str(out)]
+
+
 def mux_recording(parts, clips, out, s0, s1):
     """Combine: video (ffmpeg mkv segments) + game audio (byte-slices of the
     PCM stream between recording start/stop, minus any capture gaps) + TTS
@@ -2195,28 +2249,7 @@ def mux_recording(parts, clips, out, s0, s1):
           + (f" ({dropped:.1f}s cut across {len(gaps)} capture gap(s))"
              if gaps else "")
           + f"; muxing {len(clips)} TTS clips into {out}", flush=True)
-    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error",
-           "-i", str(raw),
-           "-f", "s16le", "-ar", "48000", "-ac", "2", "-i", str(GAME_SLICE)]
-    for c in clips:
-        cmd += ["-i", c["file"]]
-    filters, labels = [], []
-    for i, c in enumerate(clips, 2):        # clip inputs start at index 2
-        trim = (f"atrim=0:{max(c['end'] - c['start'], 0.05):.3f},"
-                if c.get("end") is not None else "")
-        ms = int(c["start"] * 1000)
-        filters.append(f"[{i}:a]{trim}aresample=48000,"
-                       f"aformat=channel_layouts=stereo,"
-                       f"volume=2.5,alimiter=limit=0.95,"  # Kokoro is quiet
-                       f"adelay={ms}|{ms}[a{i}]")
-        labels.append(f"[a{i}]")
-    if clips:
-        fc = (";".join(filters) + ";[1:a]" + "".join(labels)
-              + f"amix=inputs={len(clips) + 1}:normalize=0[out]")
-        cmd += ["-filter_complex", fc, "-map", "0:v", "-map", "[out]"]
-    else:
-        cmd += ["-map", "0:v", "-map", "1:a"]
-    cmd += ["-c:v", "copy", "-c:a", "aac", "-y", str(out)]
+    cmd = mux_command(raw, GAME_SLICE, clips, out, n / AUDIO_BYTES_PER_SEC)
     ok = subprocess.run(cmd, capture_output=True).returncode == 0
     if ok:
         for p in {str(raw), *(p["file"] for p in parts)}:

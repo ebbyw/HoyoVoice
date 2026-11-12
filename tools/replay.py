@@ -16,9 +16,11 @@ never touch real casting or dedupe state. Wall-clock paced: a 90s clip
 takes 90s.
 
 This is the debugging workhorse: any session recording becomes a
-reproducible test case. Caveat: the recording's audio bed includes any
-TTS the ORIGINAL session spoke (+8dB), so gate decisions immediately
-after an originally-spoken line hear that TTS as if it were game audio.
+reproducible test case. The audio bed is the recording's "game" track
+when it has one — the game alone, without the TTS the original session
+spoke. Recordings from before those tracks existed have only the mix, and
+there gate decisions right after an originally-spoken line hear that TTS
+as if it were game audio; replay says which bed it used.
 """
 import argparse
 import json
@@ -35,6 +37,26 @@ ROOT = Path(__file__).resolve().parent.parent
 # its module-level setup, so the literal is duplicated on purpose; a bump
 # there without one here silently desyncs replay timing
 SAMPLE_FPS = 6
+
+
+def game_track(recording):
+    """Index (among audio streams) of the track titled "game", else 0.
+
+    live.py's mux titles it through handler_name, which is where MP4 keeps
+    a stream title; "mix" is track 0 and the default.
+    """
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a",
+         "-show_entries", "stream_tags=handler_name", "-of", "json",
+         str(recording)], capture_output=True, text=True).stdout
+    try:
+        streams = json.loads(out)["streams"]
+    except (ValueError, KeyError):
+        return 0, False
+    for i, st in enumerate(streams):
+        if st.get("tags", {}).get("handler_name") == "game":
+            return i, True
+    return 0, False
 
 
 def main():
@@ -85,8 +107,12 @@ def main():
                     "-color_range", "pc",
                     "-q:v", "3", str(frames / "f_%06d.jpg"), "-y"],
                    check=True)
+    track, clean = game_track(args.recording)
+    print("[replay] audio bed: " + ("game track (no original TTS)" if clean
+          else "mixed track — the original session's TTS is in it"),
+          flush=True)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", *cut,
-                    "-i", args.recording, "-vn",
+                    "-i", args.recording, "-map", f"0:a:{track}",
                     "-ac", "2", "-ar", "48000",
                     "-f", "s16le", str(work / "audio.pcm"), "-y"],
                    check=True)
