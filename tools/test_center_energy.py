@@ -137,6 +137,25 @@ cut_check(ENERGY_DECISIVE_OVER_SIDE, "Paimon",
           "voice acting heard longer ago than the window does not license it")
 live.scene_vo.clear()
 
+# The remainder of a line we read aloud is out of this layer's reach: the
+# game voices a line from its first word or not at all. LIVE: the letter in
+# rec_20261112_152020 — first sentence read, then "Otherwise, don't blame
+# me…" skipped on mid+13.8 side+2.9 peak 0.22, with no speech on the game
+# track. The burst itself still passes the rule; the remainder guard is
+# what has to stop it.
+nihilux = "msnihiluxyouhaveonestandarddaytopayoffyourdebt"
+check(True, 13.8, 2.9, 0.22, "the burst alone does read as voiceover")
+if not live.continues_spoken_line(nihilux, nihilux):
+    fails.append("  remainder of a line we spoke must be out of the "
+                 "energy layer's reach")
+if live.continues_spoken_line(nihilux, None):
+    fails.append("  after a yield (last spoken cleared) the layer must apply "
+                 "again — the game was voicing that line")
+if live.continues_spoken_line(nihilux, "somethingelseentirely"):
+    fails.append("  a prefix we skipped as voiced is not a line we spoke")
+if live.continues_spoken_line(None, nihilux):
+    fails.append("  a whole new line is not a remainder")
+
 if fails:
     print(f"FAIL ({len(fails)})")
     print("\n".join(fails))
