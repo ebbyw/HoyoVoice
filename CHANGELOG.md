@@ -9,6 +9,25 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Added
 
+- **Recordings carry the game audio and HoyoVoice's reads as separate
+  tracks.** A recording was one mixed track, which made it a poor witness
+  for the one question it is most often asked — was this line voiced? —
+  because every line the session read is in the audio bed, and a replay
+  hears it as game voiceover. Measuring the VAD fix on rec_20261112_145744
+  meant working around exactly that: old recordings could only compare the
+  new detector against the old one, never against what the game played.
+  The MP4 now has three AAC tracks: **mix** first and the only default, so
+  any player that plays one track plays what the session sounded like;
+  then **game**, the capture alone; then **tts**, our reads alone, padded
+  to the game's length so the three line up end to end. Titles are written
+  as `handler_name`, which is where MP4 keeps them and what VLC shows.
+  `tools/replay.py` uses the game track when there is one and says which
+  bed it used; on a copy of that recording with a silent game track it
+  reads both Joolyon lines, which it skipped on the mixed one. A recording
+  with no reads in it keeps a single track, titled game. Each extra track
+  is about 1.2 MB a minute. `tools/test_recording_tracks.py` runs a real
+  mux and pins the order, titles, default flag and what each track holds.
+
 - **📷 Screenshot, next to ⏺ Record.** A screen that didn't read is
   usually one frame's question, and the only way to hand that frame over
   was a recording — a take, a mux, tens of MB, and a scrub to the right
