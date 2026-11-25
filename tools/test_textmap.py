@@ -226,6 +226,30 @@ def main():
             bad += 1
     print("ok    an unreadable map turns snapping off, quietly")
 
+    # Disk cache: second load hits cache, nickname or file change invalidates
+    # it, and a corrupt cache rebuilds cleanly.
+    import json
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as tmp:
+        mp = Path(tmp) / "map.json"
+        mp.write_text(json.dumps(MAP + ["#Hello, {NICKNAME} my dear friend!"]),
+                      encoding="utf-8")
+        tm1 = TextMap.load(mp, nickname="Ebby")
+        cp = TextMap._cache_path(mp)
+        assert cp.exists(), "load() should write the index cache"
+        tm2 = TextMap.load(mp, nickname="Ebby")
+        assert tm2 is not None and len(tm2) == len(tm1)
+        assert tm2.snap("Hello, Ebby my dear frien!") == "Hello, Ebby my dear friend!"
+        # nickname change invalidates the cache
+        tm3 = TextMap.load(mp, nickname="Lumine")
+        assert tm3.snap("Hello, Lumine my dear frien!") == "Hello, Lumine my dear friend!"
+        # corrupt cache file recovers cleanly
+        cp.write_bytes(b"not a pickle")
+        tm4 = TextMap.load(mp, nickname="Lumine")
+        assert tm4 is not None and len(tm4) == len(tm3)
+    print("ok    index cache round-trips, invalidates on change, and survives corruption")
+
     # and the lookup has to be affordable: it runs on every line that is
     # about to be spoken, beside a ~144ms OCR call
     big = TextMap([f"line number {i} about the {i % 97} crates of glasswork "

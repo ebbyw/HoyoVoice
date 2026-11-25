@@ -213,6 +213,49 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
 
 ### Changed
 
+- **Windows OCR decouples detection from recognition, handles light UI
+  panels, and caps detector input size.** `tools/ocrd_win.py` previously
+  handed the signed high-pass image (`(g - bg) * 3 + 40`) to both the
+  detector and the recognizer, which hurt accuracy two ways: on
+  `captures/frame_001.png` the 3× gain clipped 2.52× as many dialogue-band
+  pixels to 255 (thickening strokes and closing inter-word spaces before
+  `rec_en.onnx` read them), and on dark-text-on-light UI panels
+  (`captures/shots/527.jpg`, same polarity as Messages, Furbobocom cards
+  and parchment books) it collapsed contrast from 222 raw down to 58 while
+  a single bright badge blocked the empty-frame safety net. Detection now
+  runs on the flattened image (or the clean frame directly on full-frame
+  light panels — measured across 300 shots at `median >= 200, p25 >= 160`
+  against `<= 187 / <= 130` for the brightest outdoor dialogue) and
+  recognition crops directly from the clean unflattened RGB frame (with a
+  linear `[p2, p98]` stretch only for genuinely low-contrast bright-sky
+  crops, and automatic fallback to the combined call if an older
+  `rapidocr_onnxruntime` lacks `text_det`/`text_rec`). The detector also
+  caps its long edge at `det_limit_type="max", det_limit_side_len=1280`
+  (stopping RapidOCR's default `limit_type="min", 736` from running DBNet
+  at 2.09 MP on 1080p and upscaling 62–66% ROI crops to 1984–2112px wide),
+  supports `models/det_v5.onnx` / `HOYOVOICE_DET_MODEL`, estimates the
+  radius-12 blur at 1/4 scale (`28.0 → 18.7 ms`, mean diff `< 0.8/255`),
+  and `setup.ps1` uninstalls the CPU `onnxruntime` wheel before installing
+  `onnxruntime-directml`. `tools/ocr_bench.py` now uses `get_backend()`
+  instead of hardcoding macOS and reports per-frame latency so Windows OCR
+  changes can be measured directly on the Windows box.
+
+- **Post-OCR repair, TextMap snapping, and pipeline responsiveness.**
+  `repair_runons` now splits 3-way lowercase fusions (`thingandbring`) and
+  sentence-initial function-word fusions (`Theinformant`, `Ithink`) while
+  protecting known proper nouns and invented compounds (`Wishpower`), and
+  Windows gains a 1-edit unique-match proper-noun repair against cast
+  names and `custom_words` (matching Apple Vision's lexicon).
+  `TextMap.load()` caches its trigram index beside the dump (keyed on
+  mtime, size, nickname, and index parameters) to skip the ~9 s cold
+  rebuild on subsequent launches, and snapping now covers choice options,
+  chat bubbles, and reading-panel rows as well as dialogue. Reader-panel
+  chunk synthesis runs on a background thread so ~1 s CPU Kokoro synth on
+  Windows no longer stalls the main loop, and a 50 ms late-VO yield
+  watcher thread cuts playback promptly even while a slow OCR call is in
+  flight. Pinned by `tools/test_ocr_repair.py`, `tools/test_textmap.py`,
+  and `tools/test_ocrd_protocol.py`.
+
 - **The other chat and plate fixtures carry no game text either.** The
   same word-for-word placeholder pass was run over the Messages-app
   (`test_hsr_messages.py`), Answer-panel, Eye of Graeae chat, comms and
@@ -330,6 +373,33 @@ Versions 0.1.0 and 0.2.0 predate tagging; every section from 0.3.0 on has a matc
   warning in the log, from one that doesn't answer it.
 
 ### Fixed
+
+- **Live capture wrote heavily compressed JPEGs without `-q:v`.** Both
+  `hv_platform/win32.py` and `hv_platform/darwin.py` omitted `-q:v` when
+  writing `live_frame.jpg` (while `replay.py` and `sweep_frames.py` passed
+  `-q:v 3`), letting ffmpeg fall back to its default MJPEG rate control
+  (measured `36.29 dB` dialogue PSNR on `frame_001.png` vs `42.61 dB` at
+  `-q:v 2`, and quantization `[8, 50, 59, 68…]` in `live_frame.jpg`) —
+  whose 8×8 ringing `_flatten_background` then amplified 3× on Windows.
+  Live capture now passes `-q:v 2` on both platforms.
+
+- **Single-character OCR jitter on the firing frame dropped clean earlier
+  reads from variant voting.** `live.py`'s `jitter` branch collects
+  0.95-similar variants into `candidate_variants`, but the vote at fire
+  time filtered on exact `normalize_text` equality — so when a jittered
+  frame (`"I'u take it all…"`) tripped `candidate_count >= required`, the
+  clean earlier frame (`"I'll take it all…"`) was excluded from the vote.
+  `best_variant()` now votes across the 0.90-similar jitter cluster, and
+  `text_quality()` scores capitalized contractions (`I'u` vs `I'll`) as
+  words rather than proper nouns.
+
+- **The change gate's `MAX_SKIP_RUN` refresh paid two OCR calls instead of
+  one.** `ChangeGate.unchanged()` wiped `self.prev = self.key = None` on
+  its forced refresh frame (contradicting its own comment) and skipped
+  setting `last_gray`, forcing a second OCR on the next frame to
+  re-baseline and an extra JPEG decode for anchor matching. It now keeps
+  the baseline and `last_gray` current while still returning `False` for
+  the forced check.
 
 - **The rest of a line we were reading could be skipped as voiced.** The
   letter in the 2026-11-12 15:20 session (hoyovoice-20261112-152338,

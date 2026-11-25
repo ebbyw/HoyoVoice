@@ -822,7 +822,7 @@ def _tail_audio(vad, held):
 
 def speech_hits(since, threshold=None):
     threshold = VAD_THRESHOLD if threshold is None else threshold
-    return sum(1 for t, p in vad_history if t >= since and p >= threshold)
+    return sum(1 for t, p in list(vad_history) if t >= since and p >= threshold)
 
 
 def center_energy_voiced(mid_up, side_up, vad_peak, decisive_over=None):
@@ -982,7 +982,7 @@ def vad_evidence(since, soft=False):
     weak_threshold = VAD_SOFT_THRESHOLD if soft else VAD_WEAK_THRESHOLD
     strong = weak = 0
     peak = 0.0
-    for t, p in vad_history:
+    for t, p in list(vad_history):
         if t >= since:
             if p >= VAD_THRESHOLD:
                 strong += 1
@@ -1190,43 +1190,188 @@ try:
 except ImportError:                                   # pragma: no cover
     _zipf = None
 _RUNON_MIN_PART = 3.2     # both halves must be this common (zipf)
+# Stricter floor for 3-way splits ("thingandbring" → "thing and bring"):
+# three short words have many more cut combinations than two, so every piece
+# must be unmistakably common English.
+_RUNON_MIN_PART_3 = 3.8
+# Floor for the FIRST part of a sentence-initial capitalized split
+# ("Theinformant" → "The informant", "Ithink" → "I think"): high enough to
+# admit function words/pronouns/contractions while refusing invented compound
+# proper nouns like "Wishpower" or "Starlight" even when uncast.
+_RUNON_CAP_FIRST = 5.6
 # A token this common is left alone. Measured over the repo's own prose:
 # at 2.0 the splitter mangled real words with common affixes — "tolerantly"
 # (zipf 1.32) → "tolerant ly", "misreads" (1.68) → "mis reads". Genuine OCR
 # fusions ("mercyis", "thingandbring", "shaning") all score 0.00, so
 # dropping the bar to 1.0 keeps every true split and drops the damage.
 _RUNON_IS_WORD = 1.0
+_PROPER_CACHE = {"key": None, "words": frozenset(), "by_len": {}}
 
 
-def _split_runon(tok):
-    """['mercyis'] → ['mercy', 'is']; unsplittable tokens come back as-is."""
+def _lexicon_state():
+    """Known game proper nouns (characters, pronunciations, custom words,
+    NPC genders) — cached on settings content. Used both to protect proper
+    nouns from sentence-initial splitting and to repair 1-edit OCR slips
+    on Windows where the daemon ignores custom_words.txt."""
+    settings = VOICES.get("settings", {})
+    chars = tuple(VOICES.get("characters", ()))
+    pron = tuple(settings.get("pronunciations", ()))
+    cw = tuple(settings.get("custom_words", ()))
+    fixes = tuple(settings.get("text_fixes", {}).values())
+    key = (chars, pron, cw, fixes)
+    if _PROPER_CACHE["key"] != key:
+        lower = set()
+        proper = set()
+        for src in (chars, pron, cw, fixes, NPC_GENDERS.keys()):
+            for entry in src:
+                for w in re.findall(r"[A-Za-z]+", str(entry)):
+                    lower.add(w.lower())
+                    if len(w) >= 5 and w[0].isupper():
+                        proper.add(w)
+        by_len = {}
+        for w in proper:
+            by_len.setdefault(len(w), []).append(w)
+        _PROPER_CACHE["key"] = key
+        _PROPER_CACHE["words"] = frozenset(lower)
+        _PROPER_CACHE["by_len"] = by_len
+    return _PROPER_CACHE["words"], _PROPER_CACHE["by_len"]
+
+
+def _at_sentence_start(s, pos):
+    j = pos - 1
+    while j >= 0 and s[j] in " \t\"'“”‘’([{<*—-":
+        j -= 1
+    return j < 0 or s[j] in ".!?…:;"
+
+
+def _valid_piece(p):
+    return len(p) > 1 or p in "ai"
+
+
+def _split_runon(tok, min_first=_RUNON_MIN_PART):
+    """['mercyis'] → ['mercy', 'is'], ['thingandbring'] → ['thing', 'and',
+    'bring']; unsplittable tokens come back as-is."""
     if (_zipf is None or len(tok) < 4 or not tok.isalpha()
             or _zipf(tok.lower(), "en") >= _RUNON_IS_WORD):
         return [tok]
+    low = tok.lower()
     best = None
-    for i in range(1, len(tok)):
-        a, b = tok[:i], tok[i:]
-        if len(a) == 1 and a.lower() not in "ai":
+    for i in range(1, len(low)):
+        a, b = low[:i], low[i:]
+        if not (_valid_piece(a) and _valid_piece(b)):
             continue
-        if len(b) == 1 and b.lower() not in "ai":
-            continue
-        fa, fb = _zipf(a.lower(), "en"), _zipf(b.lower(), "en")
-        if fa >= _RUNON_MIN_PART and fb >= _RUNON_MIN_PART:
+        fa, fb = _zipf(a, "en"), _zipf(b, "en")
+        if fa >= min_first and fb >= _RUNON_MIN_PART:
             if best is None or min(fa, fb) > best[0]:
-                best = (min(fa, fb), a, b)
-    return [best[1], best[2]] if best else [tok]
+                best = (min(fa, fb), tok[:i], tok[i:])
+    if best:
+        return [best[1], best[2]]
+    if len(low) >= 7:
+        f1_floor = max(min_first, _RUNON_MIN_PART_3)
+        best3 = None
+        for i in range(1, len(low) - 1):
+            a = low[:i]
+            if not _valid_piece(a):
+                continue
+            fa = _zipf(a, "en")
+            if fa < f1_floor:
+                continue
+            for j in range(i + 1, len(low)):
+                b, c = low[i:j], low[j:]
+                if not (_valid_piece(b) and _valid_piece(c)):
+                    continue
+                fb, fc = _zipf(b, "en"), _zipf(c, "en")
+                if fb >= _RUNON_MIN_PART_3 and fc >= _RUNON_MIN_PART_3:
+                    score = min(fa, fb, fc)
+                    if best3 is None or score > best3[0]:
+                        best3 = (score, tok[:i], tok[i:j], tok[j:])
+        if best3:
+            return [best3[1], best3[2], best3[3]]
+    return [tok]
 
 
 def repair_runons(s):
-    out = []
+    if _zipf is None:
+        return s
+    protected, _ = _lexicon_state()
+    out, pos = [], 0
     for tok in re.split(r"(\W+)", s):
-        # Capitalised tokens are game proper nouns ("Wishpower", "Cindearth")
-        # — splitting those is worse than leaving a fused pair.
-        if tok[:1].isupper() or not tok.isalpha():
+        if not tok:
+            continue
+        if not tok.isalpha():
             out.append(tok)
+        elif tok[0].isupper():
+            # Mid-sentence capitals are proper nouns ("Wishpower", "Cindearth")
+            # — never split them. Sentence-initial capitals can be fused
+            # openers ("Theinformant", "Ithink"): split only when un-protected
+            # and led by a function-word-frequency piece.
+            if (_at_sentence_start(s, pos) and not tok.isupper()
+                    and tok.lower() not in protected):
+                parts = _split_runon(tok.lower(), min_first=_RUNON_CAP_FIRST)
+                if len(parts) > 1:
+                    parts[0] = parts[0].capitalize()
+                    out.append(" ".join(parts))
+                else:
+                    out.append(tok)
+            else:
+                out.append(tok)
         else:
             out.append(" ".join(_split_runon(tok)))
+        pos += len(tok)
     return "".join(out)
+
+
+def _edit_dist_1(a, b):
+    """True if lowercase strings a and b differ by exactly one edit
+    (substitution, insertion, deletion, or adjacent transposition)."""
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la == lb:
+        diffs = [i for i in range(la) if a[i] != b[i]]
+        if len(diffs) == 1:
+            return True
+        return (len(diffs) == 2 and diffs[1] == diffs[0] + 1
+                and a[diffs[0]] == b[diffs[1]]
+                and a[diffs[1]] == b[diffs[0]])
+    short, long = (a, b) if la < lb else (b, a)
+    i = j = 0
+    skipped = False
+    while i < len(short) and j < len(long):
+        if short[i] == long[j]:
+            i += 1
+            j += 1
+        elif skipped:
+            return False
+        else:
+            skipped = True
+            j += 1
+    return True
+
+
+def repair_lexicon(s):
+    """Snap 1-edit OCR slips on capitalized proper nouns to known game names
+    (Windows only, where RapidOCR ignores custom_words.txt). Only fires when
+    the token is not an English word and has a UNIQUE 1-edit match."""
+    if _zipf is None:
+        return s
+    _, by_len = _lexicon_state()
+    if not by_len:
+        return s
+
+    def repl(m):
+        tok = m.group(0)
+        low = tok.lower()
+        if _zipf(low, "en") >= _RUNON_IS_WORD:
+            return tok
+        n = len(tok)
+        cands = [w for k in (n - 1, n, n + 1) for w in by_len.get(k, ())]
+        if any(w.lower() == low for w in cands):
+            return tok
+        hits = [w for w in cands if _edit_dist_1(low, w.lower())]
+        return hits[0] if len(hits) == 1 else tok
+
+    return re.sub(r"\b[A-Z][a-z]{4,}\b", repl, s)
 
 
 def text_quality(s):
@@ -1238,9 +1383,36 @@ def text_quality(s):
     toks = re.findall(r"[A-Za-z']+", s)
     if not toks:
         return 0.0
-    good = sum(1 for w in toks
-               if w[:1].isupper() or _zipf(w.lower(), "en") >= _RUNON_IS_WORD)
+    protected, _ = _lexicon_state()
+
+    def is_good(w):
+        low = w.lower()
+        if "'" in w:
+            # Contractions starting with a capital ("I'u" vs "I'll") must be
+            # scored as words rather than passing as proper nouns; possessives
+            # of known cast names ("Paimon's") still pass.
+            return (w.split("'")[0].lower() in protected
+                    or _zipf(low, "en") >= _RUNON_IS_WORD)
+        return w[:1].isupper() or _zipf(low, "en") >= _RUNON_IS_WORD
+
+    good = sum(1 for w in toks if is_good(w))
     return good / len(toks)
+
+
+def best_variant(variants, target_norm):
+    """Pick the cleanest OCR read among variants of the same line.
+
+    Includes jitter reads (0.90 similarity — same cutoff as window_verdict),
+    not only byte-identical normalizations — otherwise a single-character
+    jitter on the firing frame ("I'u take it all…" after "I'll take it all…")
+    dropped the clean frame from the vote. Real-word fraction wins first;
+    engine confidence breaks ties (and decides on macOS where wordfreq is
+    absent)."""
+    pool = [v for v in variants
+            if same_line(normalize_text(v[0]), target_norm, 0.90)]
+    if len(pool) <= 1:
+        return pool[0][0] if pool else None
+    return max(pool, key=lambda v: (text_quality(v[0]), v[1]))[0]
 
 
 def repair_punctuation(s):
@@ -1281,6 +1453,7 @@ def fix_ocr_text(s):
     # user lexicon for proper nouns OCR keeps mangling ("lason" → "Iason")
     for wrong, right in VOICES.get("settings", {}).get("text_fixes", {}).items():
         s = re.sub(rf"\b{re.escape(wrong)}\b", right, s, flags=re.IGNORECASE)
+    s = repair_lexicon(s)
     return re.sub(r"  +", " ", s).strip()
 
 
@@ -1937,6 +2110,8 @@ class Speech:
         self.t_play = None
         self._qr = False
         self._effects = {}                # sound file → decoded 24k mono
+        self._synth_lock = threading.Lock()
+        self._play_lock = threading.RLock()
 
     @property
     def playing(self):
@@ -1959,15 +2134,23 @@ class Speech:
             mult -= 0.03
         return max(0.9, min(1.12, mult))
 
+    def _lock(self, name, reentrant=False):
+        lock = self.__dict__.get(name)
+        if lock is None:
+            lock = threading.RLock() if reentrant else threading.Lock()
+            self.__dict__[name] = lock
+        return lock
+
     def stop(self):
-        interrupted = self.player.stop()
-        self._qr = False
-        # if a recorded clip was cut short (yield/interrupt), trim it in the mix
-        if interrupted and recording["on"] and recording["clips"]:
-            last = recording["clips"][-1]
-            if last.get("end") is None:
-                last["end"] = time.monotonic() - recording["t0"]
-        self.t_play = None
+        with self._lock("_play_lock", reentrant=True):
+            interrupted = self.player.stop()
+            self._qr = False
+            # if a recorded clip was cut short (yield/interrupt), trim it in the mix
+            if interrupted and recording["on"] and recording["clips"]:
+                last = recording["clips"][-1]
+                if last.get("end") is None:
+                    last["end"] = time.monotonic() - recording["t0"]
+            self.t_play = None
 
     def effect(self, path):
         """A stage-direction sound, decoded once and resampled to the synth
@@ -2043,8 +2226,9 @@ class Speech:
                 # mark — has no phonemes, and both runtimes answer that
                 # with no audio; skip it rather than pay a model call for
                 # silence
-                pieces += [self.trim(self.tts.synth(s, voice, speed))
-                           for s in sentences(val) if _PRONOUNCEABLE.search(s)]
+                with self._lock("_synth_lock"):
+                    pieces += [self.trim(self.tts.synth(s, voice, speed))
+                               for s in sentences(val) if _PRONOUNCEABLE.search(s)]
         pieces = [p for p in pieces if p is not None and len(p)]
         audio = self.join(pieces)
         synth_ms = int((time.time() - t0) * 1000)
@@ -2055,21 +2239,22 @@ class Speech:
     def play(self, audio, qr=False):
         if audio is None or not len(audio):
             return
-        self.stop()
-        self._qr = qr
-        # trim Kokoro's silence padding: snappier starts, tight handoffs
-        audio = self.trim(audio)
-        self.sf.write(WAV, audio, 24000)
-        self.player.play(WAV, audio, 24000)
-        self.t_play = time.monotonic()
-        if recording["on"]:
-            CLIPS.mkdir(parents=True, exist_ok=True)
-            offset = self.t_play - recording["t0"]
-            clip = CLIPS / f"{len(recording['clips']):04d}.wav"
-            import shutil
-            shutil.copy(WAV, clip)
-            recording["clips"].append(
-                {"file": str(clip), "start": offset, "end": None})
+        with self._lock("_play_lock", reentrant=True):
+            self.stop()
+            self._qr = qr
+            # trim Kokoro's silence padding: snappier starts, tight handoffs
+            audio = self.trim(audio)
+            self.sf.write(WAV, audio, 24000)
+            self.player.play(WAV, audio, 24000)
+            self.t_play = time.monotonic()
+            if recording["on"]:
+                CLIPS.mkdir(parents=True, exist_ok=True)
+                offset = self.t_play - recording["t0"]
+                clip = CLIPS / f"{len(recording['clips']):04d}.wav"
+                import shutil
+                shutil.copy(WAV, clip)
+                recording["clips"].append(
+                    {"file": str(clip), "start": offset, "end": None})
 
     def say(self, text, voice, base_speed=1.0):
         audio, speed, synth_ms = self.synth(text, voice, base_speed)
@@ -2686,6 +2871,23 @@ def main():
                                  daemon=True).start()
         return textmaps[name]
 
+    def snap_text(name, text, log_guard=None):
+        """Snap `text` to the game's TextMap if loaded; returns the repaired
+        string or `text` unchanged. Logs and counts only word-level changes."""
+        tm = textmap_for(name)
+        if tm is None:
+            return text
+        snapped = tm.snap(text)
+        if not snapped:
+            return text
+        fixed = normalize_text(snapped)
+        if fixed != normalize_text(text) and not (
+                log_guard is not None and same_line(fixed, log_guard)):
+            print(f"[snap] {text[:80]}\n"
+                  f"    -> {snapped[:80]}", flush=True)
+            stats["snapped"] += 1
+        return snapped
+
     candidate, candidate_count = None, 0
     candidate_growing = False
     candidate_t0 = 0.0          # when the current line was FIRST seen on screen
@@ -2725,11 +2927,49 @@ def main():
     candidate_variants = deque(maxlen=CANDIDATE_VARIANTS_MAX)
     last_mtime = 0.0
     last_frame_change = time.monotonic()
-    yield_event_id = None
-    # normalized text of the line we last read aloud, cleared when a yield
-    # proves the game was voicing it after all — see continues_spoken_line()
-    last_spoken_norm = None
-    playing_speaker = None      # whose line is on the speakers right now
+    # Shared between the main loop and the 50ms late-VO yield watcher thread:
+    # on Windows, synchronous ocr.recognize() blocks the main loop for
+    # 300-550ms, during which late VO would otherwise talk over our playback.
+    yield_state = {"event_id": None, "last_spoken_norm": None,
+                   "speaker": None, "stop": threading.Event()}
+
+    def check_late_yield():
+        """Cut our own playback promptly if game VO starts while we speak.
+        Serialized with Speech._play_lock so the 50ms watcher thread and the
+        main loop can never race play()/stop()."""
+        with speech._play_lock:
+            if not (speech.playing and speech.t_play
+                    and not speech.qr_playing and LATE_YIELD):
+                return
+            spk = yield_state["speaker"]
+            yield_soft = usually_voiced(spk) if spk else False
+            yield_firm = bool(not yield_soft and spk and never_voiced(spk))
+            t_play = speech.t_play
+            if not is_voiced(t_play + 0.2, soft=yield_soft, firm=yield_firm):
+                return
+            s, w, pk = vad_evidence(t_play + 0.2, soft=yield_soft)
+            speech.stop()
+            stats["yielded"] += 1
+            note_scene_vo()
+            yield_state["last_spoken_norm"] = None
+            eid = yield_state["event_id"]
+            if eid:
+                for e in list(events):
+                    if e["id"] == eid:
+                        e["action"], e["cls"] = "yielded to VO", "yield"
+            print(f"[yielded to late VO — {time.monotonic() - t_play:.1f}s in,"
+                  f" peak {pk:.2f}, strong {s}, weak {w}"
+                  f"{', soft' if yield_soft else ''}"
+                  f"{', firm' if yield_firm else ''}]", flush=True)
+
+    def yield_watcher():
+        while not yield_state["stop"].wait(0.05):
+            try:
+                check_late_yield()
+            except Exception:
+                pass
+
+    threading.Thread(target=yield_watcher, daemon=True).start()
     qr_absent = 99                      # Quick Read incremental-reading state
     qr_pages = {}                       # reader page → rows already read on it
     qr_gone_t0 = 0.0                    # when the reader panel first vanished
@@ -2743,6 +2983,8 @@ def main():
     read_active = None                  # {chunks, spk, voice, speed, kind,
                                         #  text, logged}
     read_next = None                    # (audio, speed) synthesized ahead
+    read_synth = None                   # in-flight background chunk synth job
+    read_gen = 0                        # bumped on panel close to drop stale synth
     chat_senders = []                   # session canon: OCR jitters the tiny
                                         # sender labels (Ashveil/Ashvell/Ashval)
 
@@ -2854,57 +3096,9 @@ def main():
                     last_frame_change = time.monotonic()
                     print("[recording stopped — finalizing]", flush=True)
 
-            # Mid-play yield. Our TTS is NOT in the capture (it plays on the
-            # computer's speakers; the card hears only HDMI), so while we're
-            # talking, speech evidence in the feed is the game's voice.
-            #
-            # It reads that evidence at the SAME sensitivity as the decision
-            # to speak in the first place, which means the per-speaker prior:
-            # for a character the game has voiced before, the softest hint is
-            # enough to stand down. Forcing the soft thresholds on regardless
-            # was justified as "the worst false positive merely clips our own
-            # playback" — but the soft floor is a VAD probability of 0.12
-            # over three 32ms chunks, which Natlan's vocal music clears
-            # comfortably, and a scene with no voice acting in it at all lost
-            # four lines to it, each cut off mid-sentence with nothing
-            # audible taking over. Clipping our own playback IS the failure
-            # the whole feature exists to avoid.
-            yield_soft = (usually_voiced(playing_speaker)
-                          if playing_speaker else False)
-            # ...and the same prior pointed the other way. A character the
-            # game has never once been heard to voice is one whose lines the
-            # player is relying on us for, and in a scene with the voice
-            # acting off the VAD has nothing but music and effects to score:
-            # a Paimon line was cut 0.8s in on three 32ms chunks peaking at
-            # 0.66, in a session whose capture contained no game speech at
-            # all. Sustained speech may still take the line; a blip may not.
-            yield_firm = bool(not yield_soft and playing_speaker
-                              and never_voiced(playing_speaker))
-            if (speech.playing and speech.t_play
-                    and not speech.qr_playing
-                    and LATE_YIELD
-                    and is_voiced(speech.t_play + 0.2, soft=yield_soft,
-                                  firm=yield_firm)):
-                # read the evidence BEFORE stopping — stop() clears t_play
-                t_play = speech.t_play
-                s, w, pk = vad_evidence(t_play + 0.2, soft=yield_soft)
-                speech.stop()
-                stats["yielded"] += 1
-                # a yield is the scene proving it has voice acting in it, and
-                # it is proof the gate's own verdict missed: the line was
-                # recorded as spoken a moment ago
-                note_scene_vo()
-                last_spoken_norm = None
-                if yield_event_id:
-                    for e in events:
-                        if e["id"] == yield_event_id:
-                            e["action"], e["cls"] = "yielded to VO", "yield"
-                # what it heard, and how far in — a yield that cut a line
-                # short reads exactly like a correct one otherwise
-                print(f"[yielded to late VO — {time.monotonic() - t_play:.1f}s in,"
-                      f" peak {pk:.2f}, strong {s}, weak {w}"
-                      f"{', soft' if yield_soft else ''}"
-                      f"{', firm' if yield_firm else ''}]", flush=True)
+            # Mid-play yield (also polled every 50ms by yield_watcher so slow
+            # Windows OCR calls cannot delay cutting over late game VO).
+            check_late_yield()
 
             if not observing["on"]:
                 candidate, candidate_count = None, 0
@@ -3198,14 +3392,16 @@ def main():
                             new.append((spk, t))
                 if qr is not None:
                     if new:
-                        read_queue.append(
-                            (None, fix_ocr_text(" ".join(t for _, t in new))))
+                        rows = [snap_text(screens.name, fix_ocr_text(t))
+                                for _, t in new]
+                        read_queue.append((None, " ".join(rows)))
                 else:
                     # chat messages queue individually — each sender reads
                     # in their own cast (or auto-cast) voice
                     for spk, t in new:
-                        read_queue.append((normalize_speaker(spk),
-                                           fix_ocr_text(t)))
+                        read_queue.append(
+                            (normalize_speaker(spk),
+                             snap_text(screens.name, fix_ocr_text(t))))
                 candidate, candidate_count = None, 0
             elif not reader_closed and screens.holds_reader(blocks):
                 # a modal over the panel, not the panel closing: restart
@@ -3233,8 +3429,10 @@ def main():
                     # any audio synthesized ahead belong to the closed panel
                     if read_active is not None:
                         dropped += 1
+                    read_gen += 1
                     read_active = None
                     read_next = None
+                    read_synth = None
                     if speech.qr_playing:
                         print(f"[reader panel closed — stopping mid-read, "
                               f"{dropped} queued dropped]", flush=True)
@@ -3258,11 +3456,15 @@ def main():
             # pump the reading queue. An item is spoken in sentence chunks
             # (reader_chunks): the first chunk goes to the synthesizer
             # alone, so the voice starts after one sentence's synth rather
-            # than a whole page's, and the NEXT chunk synthesizes while the
-            # current one is still sounding, so a handoff costs a loop
-            # iteration, not a synth. Event, spoken count and dedupe all
-            # stay per ITEM — the chunks are a synthesis schedule, not new
-            # lines.
+            # than a whole page's, and the NEXT chunk synthesizes on a
+            # background thread while the current one is still sounding —
+            # keeping the main loop (OCR, panel-close, commands) responsive
+            # on Windows where CPU Kokoro takes ~1s per chunk.
+            if read_synth is not None and not read_synth["thread"].is_alive():
+                res = read_synth["result"]
+                if read_synth["gen"] == read_gen and res is not None:
+                    read_next = res
+                read_synth = None
             if read_queue and read_active is None:
                 spk, text = read_queue.popleft()
                 voice, base_speed = pick_voice(spk)
@@ -3273,14 +3475,24 @@ def main():
                              "chat notice" if chat is not None
                              else screens.READER_LABEL),
                     "logged": False}
-            if read_active is not None and read_next is None:
+            if (read_active is not None and read_next is None
+                    and read_synth is None):
                 if read_active["chunks"]:
                     chunk = read_active["chunks"].popleft()
-                    audio, speed, _ = speech.try_synth(
-                        read_active["spk"], chunk, read_active["voice"],
-                        read_active["speed"])
-                    if audio is not None and len(audio):
-                        read_next = (audio, speed)
+                    job = {"gen": read_gen, "result": None, "thread": None}
+
+                    def _synth_chunk(job=job, spk=read_active["spk"],
+                                     chunk=chunk, voice=read_active["voice"],
+                                     spd=read_active["speed"]):
+                        audio, speed, _ = speech.try_synth(
+                            spk, chunk, voice, spd)
+                        if audio is not None and len(audio):
+                            job["result"] = (audio, speed)
+
+                    t_s = threading.Thread(target=_synth_chunk, daemon=True)
+                    job["thread"] = t_s
+                    t_s.start()
+                    read_synth = job
                 elif not speech.qr_playing:
                     read_active = None      # last chunk has finished sounding
             if read_next is not None and not speech.playing:
@@ -3455,7 +3667,9 @@ def main():
                 # our own voice has been idle for a beat and the game's has
                 # stopped — the line under it may be voiced even when the
                 # option is not
-                text = fix_ocr_text(pending_choice["text"])
+                snapped_opts = [snap_text(screens.name, fix_ocr_text(opt))
+                                for opt in pending_choice["opts"]]
+                text = " … ".join(snapped_opts)
                 # The option is the player character's own words, and the
                 # game gives it no nameplate. Cast it under their name —
                 # Traveler, Trailblazer — so it gets a Casting row with a
@@ -3476,17 +3690,19 @@ def main():
                 # and a joined two-option norm matches neither. Stacked,
                 # not replacing: the dialogue line still on screen keeps
                 # its slot (see remember_line).
-                for opt in pending_choice["opts"]:
+                for opt in snapped_opts:
                     remember_line(recent_lines, spk,
-                                  normalize_text(fix_ocr_text(opt)),
+                                  normalize_text(opt),
                                   stack=True)
                 pending_choice = None
                 if audio is not None:       # else try_synth logged it
-                    speech.play(audio)      # not qr: a late VO should cut it
-                    stats["spoken"] += 1
-                    yield_event_id = add_event(
-                        "choice (read)", "spoken", spk, text, voice, speed,
-                        can_replay=True, shot=True)
+                    with speech._play_lock:
+                        speech.play(audio)  # not qr: a late VO should cut it
+                        stats["spoken"] += 1
+                        yield_state["speaker"] = spk
+                        yield_state["event_id"] = add_event(
+                            "choice (read)", "spoken", spk, text, voice, speed,
+                            can_replay=True, shot=True)
                     print(f"[choice → {voice}] {text[:70]}", flush=True)
             choice_prev = opts_norm
 
@@ -3698,20 +3914,12 @@ def main():
             fired_text_left = False
             candidate_growing = False
             # Speak the BEST read of this line, not whichever frame happened
-            # to trip the threshold. OCR emits micro-variants of the same
-            # line ("mercy is" vs "mercyis"); measured on a real capture, the
-            # correct one was a 2-of-29 minority, so majority voting would
-            # pick the wrong text. Score by how many tokens are real words.
-            same_norm = [v for v in candidate_variants
-                         if normalize_text(v[0]) == key[1]]
-            if len(same_norm) > 1:
-                # real-word fraction first (measured: the correct split was a
-                # 2-of-29 minority, so majority voting picks wrong); engine
-                # confidence breaks the ties word-count can't see
-                best = max(same_norm,
-                           key=lambda v: (text_quality(v[0]), v[1]))[0]
-                if best != state["dialogue"]:
-                    state["dialogue"] = best
+            # to trip the threshold. Includes 0.95-similar jitter variants so
+            # a clean earlier sighting beats a single-char jitter on the
+            # firing frame.
+            best = best_variant(candidate_variants, key[1])
+            if best and best != state["dialogue"]:
+                state["dialogue"] = best
 
             # Snap to the game's own line. Done HERE, once per stabilized
             # line rather than per frame: the lookup costs ~11ms against a
@@ -3722,27 +3930,8 @@ def main():
             # line is not just pronounced right, it MATCHES the next read
             # of itself, so the jitter that makes a line read twice stops
             # at the source.
-            textmap = textmap_for(screens.name)
-            if textmap is not None:
-                snapped = textmap.snap(state["dialogue"])
-                if snapped:
-                    # Logged when WORDS changed — a restored full stop
-                    # matters to sentence streaming but is not news — and
-                    # once per LINE, not once per stabilized read of it.
-                    # The line on screen stabilizes over and over as OCR
-                    # jitters, and each variant snaps to the same place: on
-                    # the very first session with a real map, one line
-                    # printed eight identical repairs while being spoken
-                    # once. Compared against the line last dealt with,
-                    # which is what the repeat-log guard below uses, and
-                    # for the same reason.
-                    fixed = normalize_text(snapped)
-                    if fixed != key[1] and not same_line(fixed,
-                                                         last_handled_norm):
-                        print(f"[snap] {state['dialogue'][:80]}\n"
-                              f"    -> {snapped[:80]}", flush=True)
-                        stats["snapped"] += 1
-                    state["dialogue"] = snapped
+            state["dialogue"] = snap_text(screens.name, state["dialogue"],
+                                          log_guard=last_handled_norm)
             new_norm = normalize_text(state["dialogue"])
 
             # Compare against the recent window. Three outcomes:
@@ -3878,7 +4067,7 @@ def main():
             mid_up, side_up, sustain = center_burst(t_stable)
             # center SFX (explosions, magic flashes) are mid-panned like VO —
             # demand at least faint speechiness so booms don't count
-            vad_peak = max((p for t, p in vad_history
+            vad_peak = max((p for t, p in list(vad_history)
                             if t >= max(t_stable - 1.2, gate_since)),
                            default=0.0)
             # A decisive burst answers for itself. Both other guards are
@@ -3895,7 +4084,8 @@ def main():
             cut = decisive_cut(state["speaker"])
             decisive = mid_up - side_up >= cut
             if (not voiced
-                    and not continues_spoken_line(ext_base, last_spoken_norm)
+                    and not continues_spoken_line(
+                        ext_base, yield_state["last_spoken_norm"])
                     and center_energy_voiced(mid_up, side_up, vad_peak, cut)):
                 deaf = model_deaf(state["speaker"])
                 if center_burst_corroborated(state["speaker"], vad_peak):
@@ -3951,16 +4141,17 @@ def main():
                 print(f"[synth failed — {err}] {speak_text[:60]}",
                       flush=True)
                 continue
-            speech.play(spec["audio"])
-            speed = spec.get("speed")
-            stats["spoken"] += 1
-            last_handled_norm = new_norm
-            last_spoken_norm = new_norm
-            yield_event_id = add_event(
-                screen_kind, "spoken", state["speaker"], speak_text,
-                voice, speed, can_replay=True, shot=True)
-            playing_speaker = state["speaker"]
-            gate_max = max((p for t, p in vad_history
+            with speech._play_lock:
+                speech.play(spec["audio"])
+                speed = spec.get("speed")
+                stats["spoken"] += 1
+                last_handled_norm = new_norm
+                yield_state["last_spoken_norm"] = new_norm
+                yield_state["speaker"] = state["speaker"]
+                yield_state["event_id"] = add_event(
+                    screen_kind, "spoken", state["speaker"], speak_text,
+                    voice, speed, can_replay=True, shot=True)
+            gate_max = max((p for t, p in list(vad_history)
                             if t >= gate_since), default=-1.0)
             tag = "" if screen_kind == "spoken" else f"{screen_kind}: "
             said = tts_text(speak_text)
@@ -3970,6 +4161,7 @@ def main():
                   + (f"\n  ↳ synth heard: {said}" if said != speak_text else ""),
                   flush=True)
     finally:
+        yield_state["stop"].set()
         speech.stop()
         # let an in-flight swap finish first: killing mid-swap leaves the
         # worker to respawn ffmpeg AFTER we quit, and an orphaned capture
