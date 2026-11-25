@@ -156,12 +156,13 @@ class ChangeGate:
         self.last_gray = None
         if not (self.enabled and blocks):
             return False
-        if self.run >= MAX_SKIP_RUN:
-            # deferred long enough — look at the screen for real, and keep
-            # the baseline so the next frame can still be compared
+        forced = self.run >= MAX_SKIP_RUN
+        if forced:
+            # deferred long enough — look at the screen for real, but decode
+            # and keep the baseline current so (1) match_anchors still reuses
+            # last_gray without a second decode, and (2) the very next static
+            # frame gates cleanly instead of paying a second OCR to re-baseline
             self.run = 0
-            self.prev = self.key = None
-            return False
         try:
             with open(path, "rb") as f:
                 data = f.read()
@@ -180,9 +181,9 @@ class ChangeGate:
         crops = [g[y0:y1, x0:x1] for (x0, y0, x1, y1) in boxes]
         prev_boxes, prev_crops = self.key, self.prev
         self.key, self.prev = boxes, crops
-        if not boxes or prev_boxes != boxes:
+        if forced or not boxes or prev_boxes != boxes:
             self.run = 0
-            return False          # first frame, or the layout moved
+            return False          # forced check, first frame, or layout moved
         judged = 0
         for prev, cur in zip(prev_crops, crops):
             verdict = self._box_verdict(prev, cur)

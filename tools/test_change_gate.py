@@ -216,6 +216,18 @@ def run():
     assert max(runs) <= 12, f"gate skipped {max(runs)} frames in a row"
     assert check_ocr >= 4, \
         f"a frozen screen must still be re-read; only {check_ocr} OCR calls"
+    # After a MAX_SKIP_RUN forced OCR on a static screen, the baseline is kept
+    # current so the very next frame gates immediately (1 forced OCR per 13
+    # frames, not 2 per 14) and last_gray is populated for anchor matching.
+    g10b = ChangeGate()
+    assert not g10b.unchanged(frame, BLOCKS)
+    for _ in range(12):
+        assert g10b.unchanged(frame, BLOCKS)
+    assert not g10b.unchanged(frame, BLOCKS)     # forced check
+    assert g10b.last_gray is not None, \
+        "forced check must still populate last_gray for anchor matching"
+    assert g10b.unchanged(frame, BLOCKS), \
+        "next static frame after forced check must gate without a second OCR"
 
     # 12. a box holding no text in either frame (dark HUD corner) neither
     #     gates nor blocks on its own — but a frame where EVERY box is

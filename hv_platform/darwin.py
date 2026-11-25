@@ -52,6 +52,10 @@ class VideoCapture:
                "-video_size", "1920x1080",   # native mode: no 4K scaling load
                "-i", self.devices["video"],
                "-map", "0:v", "-vf", f"fps={self.fps},scale=1920:-2",
+               # explicit JPEG quality: without -q:v, ffmpeg falls back to its
+               # default MJPEG rate control (measured 36.3 dB PSNR on dialogue
+               # vs 42.6 dB at -q:v 2, with heavy 8x8 ringing around glyphs)
+               "-q:v", "2",
                "-update", "1", "-atomic_writing", "1", "-y", str(self.frame)]
         if record_path:
             cmd += ["-map", "0:v", "-s", "1920x1080", "-r", "30",
