@@ -60,16 +60,22 @@ if (-not (Test-Path ".venv")) { & $py -m venv .venv }
 & .venv\Scripts\python.exe -m pip install --upgrade pip -q
 # kokoro-onnx bundles espeak-ng via espeakng-loader - no system install needed
 & .venv\Scripts\python.exe -m pip install -q `
-    kokoro-onnx onnxruntime sounddevice soundfile pillow numpy `
+    kokoro-onnx sounddevice soundfile pillow numpy `
     flask vaderSentiment rapidocr-onnxruntime winsdk wordfreq
-# DirectML: GPU-accelerated OCR (any modern GPU). Optional - the daemon
-# falls back to CPU, then to the built-in Windows engine, without it.
+# DirectML: GPU-accelerated OCR (any modern GPU). onnxruntime and
+# onnxruntime-directml share the same package directory, so uninstall the
+# CPU wheel pulled in by deps before installing DirectML; fall back to CPU
+# only if DirectML fails.
 Write-Host "== installing DirectML (GPU OCR acceleration, optional)"
+& .venv\Scripts\python.exe -m pip uninstall -y -q onnxruntime 2>$null
 & .venv\Scripts\python.exe -m pip install -q onnxruntime-directml
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "   (DirectML unavailable on this machine - continuing on CPU)"
+    Write-Host "   (DirectML unavailable on this machine - installing CPU onnxruntime)"
+    & .venv\Scripts\python.exe -m pip install -q onnxruntime
 }
 $global:LASTEXITCODE = 0
+$dml = & .venv\Scripts\python.exe -c "import onnxruntime as ort; print('DmlExecutionProvider' in ort.get_available_providers())" 2>$null
+Write-Host "   DirectML active: $dml"
 
 # Every model below is fetched from a pinned URL and checked against a
 # SHA-256 the maintainer computed from that exact file. These files are

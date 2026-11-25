@@ -129,9 +129,63 @@ def to_full(block, roi):
 # on ANY background — measured 30/37 on the same frames, and the full line
 # is read instead of a truncated one. Signed (not absolute) difference:
 # taking abs() picks up faint UI edges that break the "no chrome" test used
-# to spot lore cards. Dark-text-on-light is therefore not enhanced; game
-# dialogue is always light on dark.
+# to spot lore cards.
+#
+# Two limits of feeding that flattened image straight to BOTH det and rec:
+#   1. HP_GAIN=3.0 clips antialiased glyph edges to 255 — measured 2.52x
+#      more pure-white pixels in the dialogue band on captures/frame_001.png,
+#      thickening strokes and closing inter-word spaces right before the
+#      recognizer runs. Decoupling det (on flat) from rec (cropped from the
+#      clean unflattened frame) keeps bright-sky detection without the bloat.
+#   2. Dark-text-on-light panels (HSR Messages, Furbobocom cards, daytime
+#      loading screens, parchment books) are crushed from ~222 contrast raw
+#      down to ~58 flattened (measured on captures/shots/527.jpg), and a
+#      single white badge/UID prevents the empty-frame safety net from firing.
+#      Measured across 300 real shots: light UI panels sit at median>=224,
+#      p25>=178 while the brightest outdoor dialogue sits at median<=187,
+#      p25<=130. When a full-frame read clears LIGHT_PANEL_*, detect on the
+#      clean frame first instead.
 HP_RADIUS, HP_GAIN, HP_OFFSET = 12, 3.0, 40
+LIGHT_PANEL_MEDIAN = 200
+LIGHT_PANEL_P25 = 160
+# Default detector size cap: rapidocr_onnxruntime defaults to limit_type="min",
+# limit_side_len=736, which runs DBNet at full 1920x1088 (2.09 MP) and
+# UPSCALES cropped ROIs (1920x670 -> 2112x736). Capping the long edge at 1280
+# cuts detector area 2.2x-3x while rec still crops from full 1080p pixels.
+DEFAULT_DET_LIMIT_TYPE = "max"
+DEFAULT_DET_LIMIT_SIDE_LEN = 1280
+# Minimum recognition confidence kept by the decoupled det->rec path. Sits
+# below Genshin's PLATE_MIN_CONF (0.3) so stylized nameplates still reach the
+# profile while pure garbage is dropped.
+DECOUPLED_MIN_SCORE = 0.25
+
+
+def _flatten_gray(g):
+    """PIL mode-'L' image → uint8 ndarray with smooth background removed.
+
+    Estimates the radius-12 low-frequency background at 1/4 scale (radius 3)
+    when the image is large enough: ~4x faster blur with mean pixel diff
+    < 0.8/255 against full-res GaussianBlur(12).
+
+    In-place arithmetic on one int16 buffer: the expression form allocated
+    five full-frame float intermediates (~40 MB per 1080p frame at 6 fps).
+    Every intermediate is an exact integer — the difference spans [-255, 255],
+    ×3 spans [-765, 765], +40, clip to 0-255."""
+    from PIL import Image, ImageFilter
+    import numpy as np
+    w, h = g.size
+    if w >= 32 and h >= 32:
+        bg = (g.resize((w // 4, h // 4), Image.Resampling.BILINEAR)
+               .filter(ImageFilter.GaussianBlur(HP_RADIUS / 4.0))
+               .resize((w, h), Image.Resampling.BILINEAR))
+    else:
+        bg = g.filter(ImageFilter.GaussianBlur(HP_RADIUS))
+    a = np.asarray(g, dtype=np.int16)            # dtype conversion = a copy
+    np.subtract(a, np.asarray(bg, dtype=np.int16), out=a)
+    np.multiply(a, int(HP_GAIN), out=a)
+    np.add(a, HP_OFFSET, out=a)
+    np.clip(a, 0, 255, out=a)
+    return a.astype(np.uint8)
 
 
 def _flatten_background(data, box=None):
@@ -139,27 +193,47 @@ def _flatten_background(data, box=None):
     of just `box` (top-left pixel rect) when given. Cropped BEFORE the
     blur, so a region's pixels are exactly what the old PNG-crop path
     produced (the blur saw the crop's own edges there too) — and the
-    blur is paid on the region, not the frame.
-
-    In-place arithmetic on one int16 buffer: the expression form
-    allocated five full-frame float intermediates (~40 MB per 1080p
-    frame at 6 fps). Every intermediate is an exact integer — the
-    difference spans [-255, 255], ×3 spans [-765, 765], +40, clip to
-    0-255 — so int16 is bit-identical to the float path (verified with
-    array_equal on a real frame) at half the allocation."""
-    from PIL import Image, ImageFilter
-    import numpy as np
+    blur is paid on the region, not the frame."""
+    from PIL import Image
     with Image.open(io.BytesIO(data)) as img:
         g = img.convert("L")
         if box is not None:
             g = g.crop(box)
-        bg = g.filter(ImageFilter.GaussianBlur(HP_RADIUS))
-        a = np.asarray(g, dtype=np.int16)        # dtype conversion = a copy
-        np.subtract(a, np.asarray(bg, dtype=np.int16), out=a)
-    np.multiply(a, int(HP_GAIN), out=a)
-    np.add(a, HP_OFFSET, out=a)
-    np.clip(a, 0, 255, out=a)
-    return a.astype(np.uint8)
+        return _flatten_gray(g)
+
+
+def _is_light_panel(raw_gray, np):
+    """True when the frame is a light-background UI panel (dark text on
+    white/cream) that signed light-on-dark flattening would crush."""
+    # Subsample stride 4: median/p25 over ~130k pixels is identical to 2M
+    # pixels to within <1 count and takes <0.5 ms instead of ~8 ms.
+    sample = raw_gray[::4, ::4]
+    return (float(np.median(sample)) >= LIGHT_PANEL_MEDIAN
+            and float(np.percentile(sample, 25)) >= LIGHT_PANEL_P25)
+
+
+def _crop_for_rec(raw_bgr, box_pts, np):
+    """Slice one horizontal text-line crop from the clean unflattened frame.
+
+    Pads by 2px so tight DBNet boxes don't clip ascenders or edge serifs.
+    Only stretches contrast on genuinely low-contrast crops (e.g. white text
+    over a bright sky), linearly over [p2, p98] without hard-clipping
+    antialiased edges."""
+    H, W = raw_bgr.shape[:2]
+    xs = [p[0] for p in box_pts]
+    ys = [p[1] for p in box_pts]
+    x0 = max(0, int(min(xs)) - 2)
+    y0 = max(0, int(min(ys)) - 2)
+    x1 = min(W, int(max(xs)) + 3)
+    y1 = min(H, int(max(ys)) + 3)
+    if x1 - x0 < 2 or y1 - y0 < 2:
+        return None
+    crop = raw_bgr[y0:y1, x0:x1]
+    lo, hi = np.percentile(crop, (2, 98))
+    if 0 < hi - lo < 80:
+        scaled = (crop.astype(np.float32) - lo) * (255.0 / (hi - lo))
+        return np.clip(scaled, 0, 255).astype(np.uint8)
+    return crop
 
 
 def _complete_image(data):
@@ -225,6 +299,57 @@ def _rec_override():
     return {"rec_model_path": model, "rec_keys_path": keys}
 
 
+def _det_override():
+    """Optional detection-model swap → {} or RapidOCR kwargs.
+
+    Resolution order: HOYOVOICE_DET_MODEL env var, else models/det_v5.onnx
+    in the repo root. Allows dropping in a PP-OCRv5 detector without code
+    changes while keeping the bundled detector as the zero-config default."""
+    model = os.environ.get("HOYOVOICE_DET_MODEL")
+    if not model:
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        model = os.path.join(root, "models", "det_v5.onnx")
+        if not os.path.exists(model):
+            return {}
+    elif not os.path.exists(model):
+        print(f"[ocrd_win] det override ignored — missing {model}",
+              file=sys.stderr, flush=True)
+        return {}
+    return {"det_model_path": model}
+
+
+def _det_tuning():
+    """Detector sizing kwargs: cap the long edge at 1280 by default so
+    1080p frames don't run DBNet at 2 MP and cropped ROIs aren't upscaled
+    past 2000px wide by rapidocr's limit_type='min' default."""
+    limit_type = os.environ.get("HOYOVOICE_DET_LIMIT_TYPE",
+                                DEFAULT_DET_LIMIT_TYPE)
+    try:
+        side = int(os.environ.get("HOYOVOICE_DET_LIMIT_SIDE_LEN",
+                                  str(DEFAULT_DET_LIMIT_SIDE_LEN)))
+    except ValueError:
+        side = DEFAULT_DET_LIMIT_SIDE_LEN
+    kw = {"det_limit_type": limit_type, "det_limit_side_len": side}
+    unclip = os.environ.get("HOYOVOICE_DET_UNCLIP_RATIO")
+    if unclip:
+        try:
+            kw["det_unclip_ratio"] = float(unclip)
+        except ValueError:
+            pass
+    return kw
+
+
+def _init_rapid(RapidOCR, base_kw, tune_kw):
+    """Instantiate RapidOCR with tuning kwargs, falling back to base_kw if
+    an older package version doesn't accept a tuning key."""
+    try:
+        return RapidOCR(**base_kw, **tune_kw)
+    except TypeError:
+        print("[ocrd_win] engine rejected det tuning kwargs — using defaults",
+              file=sys.stderr, flush=True)
+        return RapidOCR(**base_kw)
+
+
 class RapidEngine:
     """RapidOCR (ONNX). Uses DirectML when available — on a gaming PC this
     is the difference between ~4s and a fraction of a second per frame,
@@ -250,11 +375,18 @@ class RapidEngine:
         self.gray_ok = None
         self.gray_trials = 0
         self._cls_kw = None       # decided on the first engine call
+        self._decoupled = os.environ.get("HOYOVOICE_OCR_DECOUPLED", "1") != "0"
         kw = _rec_override()
-        if kw:
+        kw.update(_det_override())
+        if "rec_model_path" in kw:
             print(f"[ocrd_win] rec model: "
                   f"{os.path.basename(kw['rec_model_path'])}",
                   file=sys.stderr, flush=True)
+        if "det_model_path" in kw:
+            print(f"[ocrd_win] det model: "
+                  f"{os.path.basename(kw['det_model_path'])}",
+                  file=sys.stderr, flush=True)
+        tune = _det_tuning()
         # cls (the per-row angle classifier) is disabled at every call
         # below: game UI text is always drawn upright, so the classifier
         # can only ever hurt — and on DirectML it does, intermittently
@@ -266,13 +398,15 @@ class RapidEngine:
         # No cls_use_dml either: the session would be built and never run.
         if directml_available():
             try:
-                self.ocr = RapidOCR(det_use_dml=True, rec_use_dml=True, **kw)
+                self.ocr = _init_rapid(
+                    RapidOCR,
+                    dict(det_use_dml=True, rec_use_dml=True, **kw), tune)
                 self.mode = "directml"
                 return
             except Exception as e:
                 print(f"[ocrd_win] DirectML init failed ({e}) — using CPU",
                       file=sys.stderr, flush=True)
-        self.ocr = RapidOCR(**kw)
+        self.ocr = _init_rapid(RapidOCR, kw, tune)
 
     # Texty frames the 2-D gray result must match the stacked result on,
     # identically, before the stack copy is dropped. Three, not one: a
@@ -294,17 +428,6 @@ class RapidEngine:
                       "angle classifier stays on", file=sys.stderr,
                       flush=True)
         return self.ocr(img, **self._cls_kw)
-
-    def _raw_crop(self, data, box):
-        """The unflattened region for the safety-net pass, as LUMINANCE
-        stacked to three channels: the crop file this replaced was a
-        grayscale PNG, so that pass has only ever seen gray for a region
-        read, and the thresholds were measured with region reads on. (A
-        whole-frame safety-net pass still gets the original colour bytes,
-        exactly as before.)"""
-        with self.Image.open(io.BytesIO(data)) as img:
-            g = self.np.asarray(img.convert("L").crop(box))
-        return self.np.stack([g] * 3, axis=-1)
 
     def _detect(self, flat):
         """One detector pass over the flattened frame — through the 2-D
@@ -344,39 +467,117 @@ class RapidEngine:
                       "stack", file=sys.stderr, flush=True)
         return result
 
+    def _can_decouple(self):
+        """True when the underlying RapidOCR instance exposes text_det and
+        text_rec so detection (flattened) can be decoupled from recognition
+        (clean unflattened crops)."""
+        return (getattr(self, "_decoupled", False)
+                and callable(getattr(self.ocr, "text_det", None))
+                and callable(getattr(self.ocr, "text_rec", None)))
+
+    def _run_decoupled(self, det_img, raw_bgr):
+        """Run text_det on det_img, then crop each detected line from the
+        clean unflattened raw_bgr for text_rec. Avoids feeding 2.5x bloated
+        high-pass strokes to the recognizer while keeping bright-sky
+        detection intact. Returns None on unexpected API mismatch so the
+        caller falls back to the classic combined call."""
+        np = self.np
+        try:
+            det_in = (det_img if det_img.ndim == 3
+                      else np.stack([det_img] * 3, axis=-1))
+            dt_out = self.ocr.text_det(det_in)
+            dt_boxes = dt_out[0] if isinstance(dt_out, tuple) else dt_out
+            if hasattr(dt_boxes, "boxes"):
+                dt_boxes = dt_boxes.boxes
+            if dt_boxes is None or len(dt_boxes) == 0:
+                return []
+            # Reading order: top-to-bottom, left-to-right (matches RapidOCR's
+            # sorted_boxes so downstream order stays consistent).
+            boxes = sorted(dt_boxes,
+                           key=lambda b: (round(float(min(p[1] for p in b)) / 10),
+                                          float(min(p[0] for p in b))))
+            crops, kept_boxes = [], []
+            for b in boxes:
+                c = _crop_for_rec(raw_bgr, b, np)
+                if c is not None:
+                    crops.append(c)
+                    kept_boxes.append(b)
+            if not crops:
+                return []
+            rec_out = self.ocr.text_rec(crops)
+            rec_res = rec_out[0] if isinstance(rec_out, tuple) else rec_out
+            out = []
+            for b, item in zip(kept_boxes, rec_res or []):
+                text, score = item[0], float(item[1])
+                if text and score >= DECOUPLED_MIN_SCORE:
+                    out.append((b, text, score))
+            return out
+        except (AttributeError, TypeError, IndexError) as e:
+            self._decoupled = False
+            print(f"[ocrd_win] decoupled det/rec unavailable ({e}) — "
+                  "using combined OCR pass", file=sys.stderr, flush=True)
+            return None
+
     def recognize(self, path, roi=None):
         data = read_frame_bytes(path)
         if data is None:
             return None             # not a complete image: a lost frame
+        np = self.np
+        # Decode the frame ONCE into both RGB (for clean rec crops) and L
+        # (for flattening and light-panel polarity detection).
         with self.Image.open(io.BytesIO(data)) as img:
             W, H = img.size
-        box = roi_px(roi, W, H)
+            box = roi_px(roi, W, H)
+            cropped = img.crop(box) if box is not None else img
+            g = cropped.convert("L")
+            raw_gray = np.asarray(g)
+            # Only pay RGB conversion when decoupled rec will actually crop it
+            raw_bgr = (np.asarray(cropped.convert("RGB"))[..., ::-1]
+                       if self._can_decouple() else None)
+            flat = _flatten_gray(g)
         # the region's pixel origin, so boxes are built in FULL-frame
         # pixels below and nothing region-relative ever leaves here
         ox, oy = (box[0], box[1]) if box else (0, 0)
-        # RapidOCR takes an ndarray directly, so no re-encode round trip
-        flat = _flatten_background(data, box)
-        result = self._detect(flat)
-        if not result:
-            # Safety net for screens the flattening filter hurts — but not
-            # on every frame. Textless frames arrive in long runs (loading,
-            # fades, overworld at night), and an unconditional second pass
-            # doubled the per-frame cost exactly there. Throttle it to every
-            # 4th empty frame: a filter-hurt screen is still seen within 3
-            # frames (~0.5s at 6fps sampling, under the 2-read stabilization
-            # it needs anyway), and the bound means a persistent empty run
-            # can never latch the net shut — same medicine as the change
-            # gate's MAX_SKIP_RUN.
-            if self.empty_run % 4 == 0:
-                result, _ = self._call(data if box is None
-                                       else self._raw_crop(data, box))
-            self.empty_run = 0 if result else self.empty_run + 1
+        # Light-background UI panels (dark text on white/cream) lose 4x
+        # contrast under signed light-on-dark flattening. Detect on the clean
+        # frame first when the whole frame is bright (dialogue anchors always
+        # pass a box and are light-on-dark).
+        light = box is None and _is_light_panel(raw_gray, np)
+        if raw_bgr is not None:
+            primary = raw_bgr if light else flat
+            result = self._run_decoupled(primary, raw_bgr)
+            if result is None:
+                # Decoupled path disabled itself on API mismatch — fall back
+                result = self._detect(flat)
+            elif not result:
+                if self.empty_run % 4 == 0:
+                    alt = flat if light else raw_bgr
+                    result = self._run_decoupled(alt, raw_bgr) or []
+                self.empty_run = 0 if result else self.empty_run + 1
+            else:
+                self.empty_run = 0
         else:
-            self.empty_run = 0
+            if light:
+                result, _ = self._call(data)
+            else:
+                result = self._detect(flat)
+            if not result:
+                # Safety net for screens the primary pass hurts — throttled
+                # to every 4th empty frame so textless runs don't pay 2x.
+                if self.empty_run % 4 == 0:
+                    if light:
+                        result = self._detect(flat)
+                    else:
+                        result, _ = self._call(
+                            data if box is None
+                            else np.stack([raw_gray] * 3, axis=-1))
+                self.empty_run = 0 if result else self.empty_run + 1
+            else:
+                self.empty_run = 0
         blocks = []
-        for box, text, score in result or []:
-            xs = [p[0] for p in box]
-            ys = [p[1] for p in box]
+        for pts, text, score in result or []:
+            xs = [p[0] for p in pts]
+            ys = [p[1] for p in pts]
             x0, x1 = ox + min(xs), ox + max(xs)
             y0, y1 = oy + min(ys), oy + max(ys)   # pixel, top-left origin
             blocks.append({

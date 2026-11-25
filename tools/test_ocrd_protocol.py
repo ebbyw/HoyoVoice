@@ -230,6 +230,92 @@ def test_flatten_crops_before_blur():
     assert np.array_equal(crop, ocrd_win._flatten_background(buf2.getvalue()))
 
 
+class _DecoupledOcr:
+    """Stub RapidOCR exposing text_det and text_rec separately."""
+    def __init__(self, det_seen, rec_seen):
+        self.det_seen = det_seen
+        self.rec_seen = rec_seen
+
+    def text_det(self, img):
+        self.det_seen.append(img.copy())
+        return np.array([[[100, 50], [220, 50], [220, 80], [100, 80]]],
+                        dtype=np.float32), 0.01
+
+    def text_rec(self, crops):
+        self.rec_seen.extend(c.copy() for c in crops)
+        return [("Hello world", 0.96) for _ in crops], 0.01
+
+    def __call__(self, img, **kw):
+        raise AssertionError("combined call should not run when decoupled")
+
+
+def test_decoupled_det_flat_rec_clean_and_light_panel():
+    det_seen, rec_seen = [], []
+    e = ocrd_win.RapidEngine.__new__(ocrd_win.RapidEngine)
+    e.Image, e.np = Image, np
+    e.gray_ok, e.gray_trials, e._cls_kw = True, 3, {"use_cls": False}
+    e.mode, e.empty_run, e._decoupled = "cpu", 0, True
+    e.ocr = _DecoupledOcr(det_seen, rec_seen)
+    with tempfile.TemporaryDirectory() as tmp:
+        # 1. Dark dialogue frame with colored text patch at (100..220, 50..80)
+        dark = Image.new("RGB", (640, 360), (20, 20, 20))
+        for x in range(110, 210):
+            for y in range(55, 75):
+                dark.putpixel((x, y), (240, 180, 40))   # gold nameplate
+        p_dark = Path(tmp) / "dark.png"
+        dark.save(p_dark)
+        blocks = e.recognize(p_dark)
+        assert len(blocks) == 1 and blocks[0]["text"] == "Hello world"
+        # det saw the flattened gray image (background lifted to HP_OFFSET=40)
+        assert int(det_seen[0][0, 0, 0]) == ocrd_win.HP_OFFSET
+        # rec saw the clean unflattened BGR crop (gold RGB 240,180,40 -> BGR 40,180,240)
+        crop = rec_seen[0]
+        assert crop.ndim == 3 and crop.shape[2] == 3
+        center_px = crop[crop.shape[0] // 2, crop.shape[1] // 2]
+        assert int(center_px[2]) > 200 and int(center_px[0]) < 80
+
+        # 2. Light UI panel (dark text on cream/white) -> det gets clean raw
+        light = Image.new("RGB", (640, 360), (240, 240, 235))
+        for x in range(110, 210):
+            for y in range(55, 75):
+                light.putpixel((x, y), (30, 30, 30))
+        p_light = Path(tmp) / "light.png"
+        light.save(p_light)
+        blocks2 = e.recognize(p_light)
+        assert len(blocks2) == 1
+        # det saw unflattened light background (~235-240), NOT flattened 40
+        assert int(det_seen[1][0, 0, 0]) >= 230
+
+
+def test_init_rapid_falls_back_on_unsupported_det_tuning():
+    calls = []
+
+    def fake_rapid(**kw):
+        calls.append(kw)
+        if "det_limit_type" in kw:
+            raise TypeError("unexpected keyword argument 'det_limit_type'")
+        return "ok"
+
+    out = ocrd_win._init_rapid(fake_rapid, {"det_use_dml": True},
+                               {"det_limit_type": "max",
+                                "det_limit_side_len": 1280})
+    assert out == "ok" and len(calls) == 2 and calls[1] == {"det_use_dml": True}
+
+
+def test_crop_for_rec_stretches_low_contrast_only():
+    # High-contrast crop is returned untouched
+    hi = np.full((30, 100, 3), 20, dtype=np.uint8)
+    hi[5:25, 10:90] = 240
+    pts = [[10, 5], [90, 5], [90, 25], [10, 25]]
+    c_hi = ocrd_win._crop_for_rec(hi, pts, np)
+    assert c_hi.min() == 20 and c_hi.max() == 240
+    # Low-contrast bright-sky crop (220 vs 250) is linearly stretched
+    lo = np.full((30, 100, 3), 220, dtype=np.uint8)
+    lo[8:22, 20:80] = 250
+    c_lo = ocrd_win._crop_for_rec(lo, pts, np)
+    assert int(c_lo.min()) == 0 and int(c_lo.max()) == 255
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
