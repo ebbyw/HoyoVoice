@@ -121,6 +121,9 @@ def test_recording_pins_yuv420p_for_every_encoder():
     i = rec.index("-c:v")
     assert rec[i - 2:i] == ["-pix_fmt", "yuv420p"] and rec[i + 1] == "h264_nvenc"
     assert "-pix_fmt" not in plain and "-c:v" not in plain
+    # live JPEG frame must carry explicit quality (-q:v) on both platforms
+    assert plain[plain.index("-q:v") + 1] == "2"
+    assert rec[rec.index("-q:v") + 1] == "2"
 
 
 def test_dead_hardware_encoder_falls_back_to_x264_once():

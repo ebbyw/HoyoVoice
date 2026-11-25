@@ -88,11 +88,17 @@ costs four of the seven repairs to remove two wrong lines; not worth it.
 """
 import difflib
 import json
+import os
+import pickle
 import re
 import zlib
 from array import array
 from collections import Counter
 from pathlib import Path
+
+# Bump whenever the index layout or entry normalization changes so stale
+# on-disk caches rebuild automatically.
+CACHE_VERSION = 1
 
 # A misread can lose or gain this share of a line's length before it stops
 # being a candidate. Two dialogue rows fused into one lose about a third.
@@ -370,11 +376,71 @@ class TextMap:
         return len(self.entries)
 
     @classmethod
-    def load(cls, path, **kw):
+    def _cache_path(cls, p):
+        return p.with_name(f".{p.name}.hvcache")
+
+    @classmethod
+    def _cache_meta(cls, st, kw):
+        return {
+            "v": CACHE_VERSION,
+            "mtime_ns": st.st_mtime_ns,
+            "size": st.st_size,
+            "nickname": kw.get("nickname") or "",
+            "min_score": kw.get("min_score", MIN_SCORE),
+            "min_margin": kw.get("min_margin", MIN_MARGIN),
+            "params": (MIN_CHARS, MAX_CHARS, BUCKET, SAMPLE),
+        }
+
+    @classmethod
+    def _load_cache(cls, cache_path, meta):
+        try:
+            with open(cache_path, "rb") as fh:
+                saved_meta, entries, buckets = pickle.load(fh)
+            if saved_meta != meta:
+                return None
+            tm = cls.__new__(cls)
+            tm.min_score = meta["min_score"]
+            tm.min_margin = meta["min_margin"]
+            tm.entries = entries
+            tm.buckets = buckets
+            return tm
+        except Exception:
+            return None
+
+    @classmethod
+    def _save_cache(cls, cache_path, meta, tm):
+        tmp = cache_path.with_name(f"{cache_path.name}.{os.getpid()}.tmp")
+        try:
+            with open(tmp, "wb") as fh:
+                pickle.dump((meta, tm.entries, tm.buckets), fh,
+                            protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(tmp, cache_path)
+        except OSError:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    @classmethod
+    def load(cls, path, cache=True, **kw):
         """Read a map file. Returns None if the path is unusable — a
         missing or malformed map must leave the app reading exactly as it
-        does without one, never crash it at startup."""
+        does without one, never crash it at startup.
+
+        Caches the built trigram index beside the dump (keyed on mtime, size,
+        nickname and index parameters) so subsequent launches skip the ~9s
+        JSON parse + trigram rebuild."""
         p = Path(path).expanduser()
+        try:
+            st = p.stat()
+        except OSError:
+            return None
+        cache_path = cls._cache_path(p) if cache and p.is_file() else None
+        meta = cls._cache_meta(st, kw) if cache_path is not None else None
+        if cache_path is not None:
+            cached = cls._load_cache(cache_path, meta)
+            if cached is not None:
+                return cached
         try:
             raw = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -392,7 +458,10 @@ class TextMap:
         lines = [x for x in lines if isinstance(x, str)]
         if not lines:
             return None
-        return cls(lines, **kw)
+        tm = cls(lines, **kw)
+        if cache_path is not None:
+            cls._save_cache(cache_path, meta, tm)
+        return tm
 
     def candidates(self, k):
         """Entry positions worth scoring, best trigram overlap first."""

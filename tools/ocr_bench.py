@@ -165,12 +165,12 @@ def read_frames(frames, game, scale, ocr, roi=None):
 
 def make_ocr():
     sys.path.insert(0, str(ROOT))
-    from hv_platform import darwin
+    from hv_platform import get_backend
     words = ROOT / "captures" / "custom_words.txt"
     if not words.exists():
         words.parent.mkdir(parents=True, exist_ok=True)
         words.write_text("", encoding="utf-8")
-    return darwin.create_ocr(ROOT, words)
+    return get_backend().create_ocr(ROOT, words)
 
 
 # -------------------------------------------------------------- stability
@@ -205,14 +205,23 @@ def corpus_frames(where):
 
 
 def stability(args):
+    import time
     frames = corpus_frames(args.corpus)
     if not frames:
         sys.exit(f"no frames in {args.corpus}")
     ocr = make_ocr()
     try:
         for scale in args.scale:
-            reads = list(read_frames(frames, args.game, scale, ocr,
-                                     args.roi))
+            reads, times = [], []
+            it = read_frames(frames, args.game, scale, ocr, args.roi)
+            while True:
+                t0 = time.perf_counter()
+                try:
+                    item = next(it)
+                except StopIteration:
+                    break
+                times.append((time.perf_counter() - t0) * 1000)
+                reads.append(item)
             groups = runs_of(reads)
             total = sum(len(g) for g in groups)
             odd = []
@@ -220,8 +229,12 @@ def stability(args):
                 best, _ = Counter(t for _, t in g).most_common(1)[0]
                 odd += [(f, t, best) for f, t in g if t != best]
             pct = 100 * len(odd) / total if total else 0
+            st = sorted(times)
+            timing = (f", {sum(st) / len(st):.0f}ms avg / "
+                      f"p95 {st[int(0.95 * (len(st) - 1))]:.0f}ms"
+                      if st else "")
             print(f"\nscale ×{scale}: {len(groups)} runs, {total} frames, "
-                  f"{len(odd)} disagree with their run ({pct:.1f}%)")
+                  f"{len(odd)} disagree with their run ({pct:.1f}%){timing}")
             for f, got, best in odd[:args.show]:
                 print(f"   {f.name}\n     read  {got[:96]}\n"
                       f"     modal {best[:96]}")
@@ -282,6 +295,7 @@ def policy(args):
 
 # --------------------------------------------------------------- accuracy
 def accuracy(args):
+    import time
     corpus = Path(args.corpus)
     truth_path = corpus / "truth.json"
     if not truth_path.exists():
@@ -296,9 +310,15 @@ def accuracy(args):
     try:
         for scale in args.scale:
             exact = 0
-            errs = []
-            for f, got, _ in read_frames(frames, args.game, scale, ocr,
-                                         args.roi):
+            errs, times = [], []
+            it = read_frames(frames, args.game, scale, ocr, args.roi)
+            while True:
+                t0 = time.perf_counter()
+                try:
+                    f, got, _ = next(it)
+                except StopIteration:
+                    break
+                times.append((time.perf_counter() - t0) * 1000)
                 want = truth[f.name]
                 if norm(got) == norm(want):
                     exact += 1
@@ -306,8 +326,13 @@ def accuracy(args):
                     errs.append((f, got, want, cer(got, want)))
             n = len(frames)
             mean_cer = sum(e[3] for e in errs) / n if n else 0
+            st = sorted(times)
+            timing = (f", {sum(st) / len(st):.0f}ms avg / "
+                      f"p95 {st[int(0.95 * (len(st) - 1))]:.0f}ms"
+                      if st else "")
             print(f"\nscale ×{scale}: {exact}/{n} exact "
-                  f"({100 * exact / n:.0f}%), mean CER {100 * mean_cer:.2f}%")
+                  f"({100 * exact / n:.0f}%), mean CER {100 * mean_cer:.2f}%"
+                  f"{timing}")
             for f, got, want, c in sorted(errs, key=lambda e: -e[3])[:args.show]:
                 print(f"   {f.name}  CER {100 * c:.0f}%\n"
                       f"     read {got[:96]}\n     true {want[:96]}")

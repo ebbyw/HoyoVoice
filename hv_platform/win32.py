@@ -267,6 +267,11 @@ class VideoCapture:
                "-framerate", "30", "-video_size", "1920x1080",
                "-i", f"video={self.devices['video']}",
                "-map", "0:v", "-vf", f"fps={self.fps},scale=1920:-2",
+               # explicit JPEG quality: without -q:v, ffmpeg falls back to its
+               # default MJPEG rate control (measured 36.3 dB PSNR on dialogue
+               # vs 42.6 dB at -q:v 2), and _flatten_background's 3x gain
+               # multiplies 8x8 mosquito ringing around small game glyphs
+               "-q:v", "2",
                "-update", "1", "-atomic_writing", "1", "-y", str(self.frame)]
         codec = None
         if record_path:
